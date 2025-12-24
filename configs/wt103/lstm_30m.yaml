@@ -1,3 +1,4 @@
+model_name: lstm
 dataset_name: wikitext
 dataset_config: wikitext-103-raw-v1
 train_split: train
@@ -25,6 +26,7 @@ min_lr: 3e-5
 seed: 42
 save_dir: checkpoints
 run_tag: wt103_lstm_30m
+save_each_epoch: true
 resume_path: ""
-restart_after_epoch: false
+restart_after_epoch: true
 restart_done: false

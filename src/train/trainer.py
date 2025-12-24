@@ -20,6 +20,12 @@ def _cfg_get(cfg: Any, key: str, default=None):
     return getattr(cfg, key, default)
 
 
+class RestartEpoch(RuntimeError):
+    def __init__(self, resume_path: str):
+        super().__init__(f"Restart requested from {resume_path}")
+        self.resume_path = resume_path
+
+
 def train_model(
     model: torch.nn.Module,
     cfg: Any,
@@ -94,6 +100,14 @@ def train_model(
         if val_ppl < best_val:
             best_val = val_ppl
             save_checkpoint(best_path, model, optimizer, scheduler, epoch, global_step, cfg, best_val)
+
+        if _cfg_get(cfg, "save_each_epoch", False):
+            epoch_path = os.path.join(save_dir, f"epoch_{epoch:02d}_{run_tag}.pt")
+            save_checkpoint(epoch_path, model, optimizer, scheduler, epoch, global_step, cfg, best_val)
+
+        if _cfg_get(cfg, "restart_after_epoch", False) and epoch < epochs:
+            log_line(f"[Restart] Exiting after epoch {epoch} and restarting from {last_path}")
+            raise RestartEpoch(last_path)
 
     metrics = {"val_ppl": best_val}
     if test_ids is not None:

@@ -22,12 +22,13 @@ def build_scheduler(
         return None
 
     epochs = total_epochs if total_epochs is not None else _cfg_get(cfg, "epochs", 1)
+    epochs = int(epochs)
     steps_per_epoch = max(1, steps_per_epoch)
     total_steps = max(1, epochs * steps_per_epoch)
-    warmup_epochs = _cfg_get(cfg, "warmup_epochs", 0)
+    warmup_epochs = float(_cfg_get(cfg, "warmup_epochs", 0))
     warmup_steps = max(1, int(warmup_epochs * steps_per_epoch))
-    base_lr = _cfg_get(cfg, "lr", 3e-4)
-    min_lr = _cfg_get(cfg, "min_lr", 0.0)
+    base_lr = float(_cfg_get(cfg, "lr", 3e-4))
+    min_lr = float(_cfg_get(cfg, "min_lr", 0.0))
 
     def lr_lambda(step: int) -> float:
         if step < warmup_steps:

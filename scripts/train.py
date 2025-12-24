@@ -2,6 +2,7 @@
 """Train a model from a config."""
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -29,6 +30,7 @@ def main() -> None:
     ensure_repo_root_on_path()
     from src.data import build_tokenizer
     from src.train import train_model
+    from src.train.trainer import RestartEpoch
     from src.utils import get_device, set_seed
 
     cfg_path = Path(args.config).expanduser().resolve()
@@ -50,7 +52,22 @@ def main() -> None:
 
     param_count = count_params(model)
     print(f"Model: {model_name} | Params: {param_count/1e6:.2f}M", flush=True)
-    metrics = train_model(model, cfg, train_ids, val_ids, test_ids=test_ids, device=device)
+    try:
+        metrics = train_model(model, cfg, train_ids, val_ids, test_ids=test_ids, device=device)
+    except RestartEpoch as exc:
+        clean_args = []
+        skip_next = False
+        for arg in sys.argv[1:]:
+            if skip_next:
+                skip_next = False
+                continue
+            if arg == "--resume":
+                skip_next = True
+                continue
+            clean_args.append(arg)
+        restart_args = [sys.executable, sys.argv[0]] + clean_args + ["--resume", exc.resume_path]
+        print(f"[Restart] Relaunching: {' '.join(restart_args)}", flush=True)
+        os.execv(sys.executable, restart_args)
     metrics["provenance"] = build_provenance(cfg, str(device), param_count, sys.argv)
 
     run_dir = resolve_run_dir(cfg, model_name)

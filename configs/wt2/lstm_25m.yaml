@@ -1,4 +1,5 @@
 # Params (approx): total 28.59M; recurrent 25.2M; embed+proj 3.5M.
+model_name: lstm
 dataset_name: wikitext
 dataset_config: wikitext-2-raw-v1
 train_split: train
@@ -26,6 +27,7 @@ min_lr: 2e-5
 seed: 42
 save_dir: checkpoints
 run_tag: wt2_lstm_25m
+save_each_epoch: true
 resume_path: ""
 restart_after_epoch: false
 restart_done: false
