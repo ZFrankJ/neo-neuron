@@ -1,0 +1,38 @@
+# Params (approx): total 9.7M; recurrent 6.3M; embed+proj 3.5M.
+dataset_name: wikitext
+dataset_config: wikitext-2-raw-v1
+train_split: train
+val_split: validation
+test_split: test
+
+d_model: 1024
+d_embed: 64
+n_layers: 3
+dropout: 0.1
+tie_embeddings: true
+cell_type: mode_c
+exp_factor: 8.0
+neg_quad: 8.0
+exp_clip: 60.0
+eps: 1e-6
+use_checkpoint: false
+use_compile: false
+vocab_size: 50257
+
+block_size: 256
+batch_size: 20
+epochs: 24
+lr: 2e-4
+weight_decay: 1e-2
+grad_clip: 1.0
+
+cosine: true
+warmup_epochs: 1
+min_lr: 2e-5
+
+seed: 42
+save_dir: checkpoints
+run_tag: wt2_neo_6m
+resume_path: ""
+restart_after_epoch: false
+restart_done: false

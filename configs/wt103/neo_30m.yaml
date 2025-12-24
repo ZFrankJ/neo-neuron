@@ -1,0 +1,38 @@
+dataset_name: wikitext
+dataset_config: wikitext-103-raw-v1
+train_split: train
+val_split: validation
+test_split: test
+
+d_model: 571
+d_embed: 571
+n_layers: 2
+dropout: 0.1
+tie_embeddings: true
+cell_type: mode_c
+exp_factor: 1.0
+neg_quad: 1.0
+exp_clip: 6.0
+eps: 1e-4
+use_checkpoint: true
+use_compile: false
+vocab_size: 50257
+
+block_size: 256
+batch_size: 16
+epochs: 10
+lr: 3e-4
+weight_decay: 1e-2
+grad_clip: 1.0
+
+cosine: true
+warmup_epochs: 2
+min_lr: 3e-5
+
+seed: 42
+save_dir: checkpoints
+run_tag: wt103_neo_30m
+mem_report_interval: 200
+resume_path: ""
+restart_after_epoch: false
+restart_done: false

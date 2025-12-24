@@ -17,10 +17,10 @@ logs/
 ############################
 # Dataset & token caches
 ############################
-data/
-**/data/
-.cache/
-datasets/
+/data/
+/datasets/
+/.cache/
+/.tokenized/
 
 ############################
 # Python

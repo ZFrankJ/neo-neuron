@@ -1,0 +1,7 @@
+torch>=2.1
+datasets
+transformers
+numpy
+psutil
+matplotlib
+thop
