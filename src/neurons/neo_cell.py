@@ -5,7 +5,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 
-from .activations import three_state_activation
+from .activations import fused_cortical_step, three_state_activation
 
 
 class BaseCorticalNeuron(nn.Module):
@@ -68,9 +68,7 @@ class CorticalNeuronModeC(BaseCorticalNeuron):
         s_prev = self._resolve_prev_state(x, prev_state, reset)
         fg = self.fg_linear(x)
         f_x, g_out = fg.chunk(2, dim=-1)
-        hidden_state = f_x + s_prev
-        state = three_state_activation(hidden_state, exp_clip=self.exp_clip)
-        output = state * g_out
+        output, state = fused_cortical_step(f_x, s_prev, g_out, self.exp_clip)
 
         if prev_state is None:
             self.prev_state = state.detach()
