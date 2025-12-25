@@ -58,13 +58,13 @@ def main() -> None:
     if seed is not None:
         set_seed(int(seed))
 
-    tokenizer = build_tokenizer()
-    train_ids, val_ids, test_ids = build_data(cfg, tokenizer)
-
     model = build_model(cfg, model_name)
 
     param_count = count_params(model)
     print(f"Model: {model_name} | Params: {param_count/1e6:.2f}M", flush=True)
+
+    tokenizer = build_tokenizer()
+    train_ids, val_ids, test_ids = build_data(cfg, tokenizer)
     try:
         metrics = train_model(model, cfg, train_ids, val_ids, test_ids=test_ids, device=device)
     except RestartEpoch as exc:

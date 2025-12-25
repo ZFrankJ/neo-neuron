@@ -3,12 +3,13 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export TOKENIZERS_PARALLELISM=false
+export PYTHONUNBUFFERED=1
 
 run_train() {
   local cfg_path="$1"
   local log_path
   log_path="$(mktemp -t neo_repro_log.XXXXXX.txt)"
-  python3 scripts/train.py --config "$cfg_path" | tee "$log_path"
+  python3 -u scripts/train.py --config "$cfg_path" 2>&1 | tee "$log_path" >&2
   local run_dir
   run_dir="$(sed -n 's/^Run artifacts saved to //p' "$log_path" | tail -n1)"
   rm -f "$log_path"

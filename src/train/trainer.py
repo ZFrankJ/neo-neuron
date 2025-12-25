@@ -61,9 +61,12 @@ def _param_breakdown(model: torch.nn.Module) -> Tuple[int, Dict[str, int]]:
     return total, {}
 
 
-def _log_model_info(model: torch.nn.Module) -> None:
+def _log_model_info(model: torch.nn.Module, cfg: Optional[Any] = None) -> None:
     total, breakdown = _param_breakdown(model)
+    model_tag = _cfg_get(cfg, "model_name", None) if cfg is not None else None
     log_line("== Model Info ==")
+    if model_tag:
+        log_line(f"Model tag: {model_tag}")
     log_line(f"Model: {model.__class__.__name__}")
     log_line(f"Total params: {total / 1e6:.2f}M")
     if breakdown:
@@ -129,7 +132,7 @@ def train_model(
     model.to(device)
     log_line(f"Using device: {device}")
 
-    _log_model_info(model)
+    _log_model_info(model, cfg)
 
     if _cfg_get(cfg, "use_compile", False) and hasattr(torch, "compile"):
         model = torch.compile(model)  # type: ignore[assignment]
