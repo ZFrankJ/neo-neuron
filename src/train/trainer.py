@@ -1,5 +1,6 @@
 """Unified training loop for Neo models."""
 
+import json
 import os
 from typing import Any, Dict, Optional, Tuple
 
@@ -68,6 +69,18 @@ def _log_model_info(model: torch.nn.Module) -> None:
     if breakdown:
         parts = [f"{key}={val / 1e6:.2f}M" for key, val in breakdown.items()]
         log_line("Breakdown: " + " | ".join(parts))
+
+
+def _write_progress(run_dir: Optional[str], payload: Dict[str, float]) -> None:
+    if not run_dir:
+        return
+    os.makedirs(run_dir, exist_ok=True)
+    progress_path = os.path.join(run_dir, "progress.json")
+    history_path = os.path.join(run_dir, "history.jsonl")
+    with open(progress_path, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle, indent=2, sort_keys=True)
+    with open(history_path, "a", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload) + "\n")
 
 
 def _is_recurrent_model(model: torch.nn.Module) -> bool:
@@ -154,6 +167,8 @@ def train_model(
     if train_regime not in ("random", "streaming"):
         raise ValueError(f"Unsupported train_regime '{train_regime}'.")
 
+    run_dir = _cfg_get(cfg, "run_dir", None)
+
     for epoch in range(start_epoch, epochs + 1):
         model.train()
         epoch_loss = 0.0
@@ -219,8 +234,9 @@ def train_model(
             maybe_report_memory(global_step, mem_interval)
 
         val_ppl = eval_perplexity(model, val_ids, cfg, device)
+        train_ce = epoch_loss / steps_per_epoch
         log_line(
-            f"Epoch {epoch:02d}/{epochs} | Train CE: {epoch_loss/steps_per_epoch:.4f} | Val PPL: {val_ppl:.2f}"
+            f"Epoch {epoch:02d}/{epochs} | Train CE: {train_ce:.4f} | Val PPL: {val_ppl:.2f}"
         )
 
         save_checkpoint(last_path, model, optimizer, scheduler, epoch, global_step, cfg, best_val)
@@ -231,6 +247,17 @@ def train_model(
         if _cfg_get(cfg, "save_each_epoch", False):
             epoch_path = os.path.join(save_dir, f"epoch_{epoch:02d}_{run_tag}.pt")
             save_checkpoint(epoch_path, model, optimizer, scheduler, epoch, global_step, cfg, best_val)
+
+        _write_progress(
+            run_dir,
+            {
+                "epoch": epoch,
+                "train_ce": train_ce,
+                "val_ppl": val_ppl,
+                "best_val_ppl": best_val,
+                "global_step": global_step,
+            },
+        )
 
         if _cfg_get(cfg, "restart_after_epoch", False) and epoch < epochs:
             log_line(f"[Restart] Exiting after epoch {epoch} and restarting from {last_path}")
