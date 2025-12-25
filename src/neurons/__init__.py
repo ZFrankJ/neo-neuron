@@ -1,6 +1,6 @@
 """Cortical neuron building blocks."""
 
-from .activations import cortical_piecewise_activation
+from .activations import three_state_activation
 from .neo_cell import BaseCorticalNeuron, CorticalNeuronModeC
 from .neo_stack import CorticalRecurrentStack
 
@@ -8,5 +8,5 @@ __all__ = [
     "BaseCorticalNeuron",
     "CorticalNeuronModeC",
     "CorticalRecurrentStack",
-    "cortical_piecewise_activation",
+    "three_state_activation",
 ]
