@@ -1,5 +1,6 @@
 """Logging helpers."""
 
+import gc
 from typing import Optional
 
 import torch
@@ -30,3 +31,18 @@ def maybe_report_memory(step: int, interval: Optional[int]) -> None:
         return
     if step % interval == 0:
         mem_report(tag=f"step {step}")
+
+
+def clear_memory() -> None:
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    if torch.backends.mps.is_available():
+        torch.mps.empty_cache()
+
+
+def maybe_clear_memory(step: int, interval: Optional[int]) -> None:
+    if interval is None or interval <= 0:
+        return
+    if step % interval == 0:
+        clear_memory()

@@ -1,13 +1,15 @@
-model_name: lstm
+model_name: transformer
 dataset_name: wikitext
 dataset_config: wikitext-103-raw-v1
 train_split: train
 val_split: validation
 test_split: test
 
-d_model: 512
-d_embed: 512
-n_layers: 2
+d_model: 256
+d_embed: 256
+n_layers: 4
+n_heads: 4
+ff_mult: 11
 dropout: 0.1
 tie_embeddings: true
 vocab_size: 50257
@@ -29,7 +31,9 @@ min_lr: 3e-5
 
 seed: 42
 save_dir: checkpoints
-run_tag: wt103_lstm_30m
+run_tag: wt103_transformer_20m
+mem_report_interval: 1000
+mem_clear_interval: 200
 save_each_epoch: true
 resume_path: ""
 restart_after_epoch: true

@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from ..data.batching import get_batch
 from .checkpointing import load_checkpoint, save_checkpoint
 from .eval import eval_perplexity, evaluate_metrics, init_state_for_model
-from .logging import log_line, maybe_report_memory
+from .logging import log_line, maybe_report_memory, maybe_clear_memory
 from .optim import build_optimizer
 from .schedulers import build_scheduler
 
@@ -164,6 +164,7 @@ def train_model(
     epochs = int(_cfg_get(cfg, "epochs", 1))
     grad_clip = float(_cfg_get(cfg, "grad_clip", 1.0))
     mem_interval = _cfg_get(cfg, "mem_report_interval", None)
+    mem_clear_interval = _cfg_get(cfg, "mem_clear_interval", None)
 
     train_regime = str(_cfg_get(cfg, "train_regime", "random")).lower()
     stream_state = bool(_cfg_get(cfg, "stream_state", False))
@@ -174,7 +175,7 @@ def train_model(
 
     for epoch in range(start_epoch, epochs + 1):
         model.train()
-        epoch_loss = 0.0
+        epoch_loss = torch.zeros((), device=device)
         if train_regime == "random":
             step_iter = range(steps_per_epoch)
             state = None
@@ -199,7 +200,7 @@ def train_model(
                 state = None
 
             if tbptt_len > 0 and tbptt_len < x.size(0) and _is_recurrent_model(model):
-                batch_loss = 0.0
+                batch_loss = torch.zeros((), device=device)
                 chunks = 0
                 for start in range(0, x.size(0), tbptt_len):
                     end = min(x.size(0), start + tbptt_len)
@@ -209,7 +210,7 @@ def train_model(
                         y[start:end].reshape(-1),
                     )
                     loss.backward()
-                    batch_loss += loss.item()
+                    batch_loss += loss.detach()
                     chunks += 1
                     state = _detach_state(state)
                 epoch_loss += batch_loss / max(1, chunks)
@@ -222,7 +223,7 @@ def train_model(
                     y.reshape(-1),
                 )
                 loss.backward()
-                epoch_loss += loss.item()
+                epoch_loss += loss.detach()
                 if _is_recurrent_model(model) and stream_state:
                     state = _detach_state(state_out)
                 else:
@@ -235,9 +236,10 @@ def train_model(
 
             global_step += 1
             maybe_report_memory(global_step, mem_interval)
+            maybe_clear_memory(global_step, mem_clear_interval)
 
         val_ppl = eval_perplexity(model, val_ids, cfg, device)
-        train_ce = epoch_loss / steps_per_epoch
+        train_ce = float(epoch_loss / steps_per_epoch)
         log_line(
             f"Epoch {epoch:02d}/{epochs} | Train CE: {train_ce:.4f} | Val PPL: {val_ppl:.2f}"
         )

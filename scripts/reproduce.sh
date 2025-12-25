@@ -82,16 +82,16 @@ probe_wt103() {
 cd "$ROOT_DIR"
 
 # WT-103
-run_dir_wt103_neo="$(run_train configs/wt103/neo_30m.yaml)"
-eval_best configs/wt103/neo_30m.yaml
-probe_wt103 configs/wt103/neo_30m.yaml "$run_dir_wt103_neo"
+run_dir_wt103_neo="$(run_train configs/wt103/neo_20m.yaml)"
+eval_best configs/wt103/neo_20m.yaml
+probe_wt103 configs/wt103/neo_20m.yaml "$run_dir_wt103_neo"
 
-run_dir_wt103_lstm="$(run_train configs/wt103/lstm_30m.yaml)"
-eval_best configs/wt103/lstm_30m.yaml
-probe_wt103 configs/wt103/lstm_30m.yaml "$run_dir_wt103_lstm"
+run_dir_wt103_lstm="$(run_train configs/wt103/lstm_20m.yaml)"
+eval_best configs/wt103/lstm_20m.yaml
+probe_wt103 configs/wt103/lstm_20m.yaml "$run_dir_wt103_lstm"
 
-run_dir_wt103_tfm="$(run_train configs/wt103/transformer_30m.yaml)"
-eval_best configs/wt103/transformer_30m.yaml
+run_dir_wt103_tfm="$(run_train configs/wt103/transformer_20m.yaml)"
+eval_best configs/wt103/transformer_20m.yaml
 
 # WT-2
 run_dir_wt2_neo="$(run_train configs/wt2/neo_6m.yaml)"

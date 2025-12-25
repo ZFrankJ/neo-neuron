@@ -9,9 +9,9 @@ CFG_LIST=(
   "${ROOT_DIR}/configs/wt2/neo_6m.yaml"
 #  "${ROOT_DIR}/configs/wt2/lstm_6m.yaml"
 #  "${ROOT_DIR}/configs/wt2/lstm_25m.yaml"
-#  "${ROOT_DIR}/configs/wt103/lstm_30m.yaml"
-#  "${ROOT_DIR}/configs/wt103/neo_30m.yaml"
-#  "${ROOT_DIR}/configs/wt103/transformer_30m.yaml"
+#  "${ROOT_DIR}/configs/wt103/lstm_20m.yaml"
+#  "${ROOT_DIR}/configs/wt103/neo_20m.yaml"
+#  "${ROOT_DIR}/configs/wt103/transformer_20m.yaml"
 )
 
 cd "$ROOT_DIR"
