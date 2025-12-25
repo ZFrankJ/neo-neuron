@@ -1,14 +1,14 @@
 """Unified training loop for Neo models."""
 
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
 
 from ..data.batching import get_batch
 from .checkpointing import load_checkpoint, save_checkpoint
-from .eval import eval_perplexity, init_state_for_model
+from .eval import eval_perplexity, evaluate_metrics, init_state_for_model
 from .logging import log_line, maybe_report_memory
 from .optim import build_optimizer
 from .schedulers import build_scheduler
@@ -18,6 +18,56 @@ def _cfg_get(cfg: Any, key: str, default=None):
     if isinstance(cfg, dict):
         return cfg.get(key, default)
     return getattr(cfg, key, default)
+
+
+def _count_params(module: Optional[torch.nn.Module]) -> int:
+    if module is None:
+        return 0
+    return sum(p.numel() for p in module.parameters() if p.requires_grad)
+
+
+def _param_breakdown(model: torch.nn.Module) -> Tuple[int, Dict[str, int]]:
+    total = _count_params(model)
+    if hasattr(model, "lstm"):
+        emb = model.emb.weight.numel()
+        recurrent = _count_params(model.lstm)
+        proj = _count_params(model.in_proj) + _count_params(model.out_proj)
+        head = 0
+        if getattr(model, "output_bias", None) is not None:
+            head += model.output_bias.numel()
+        if getattr(model, "head", None) is not None:
+            head += _count_params(model.head)
+        return total, {"embeddings": emb, "recurrent": recurrent, "proj_head": proj + head}
+    if hasattr(model, "recurrent"):
+        emb = model.emb.weight.numel()
+        recurrent = _count_params(model.recurrent)
+        proj = _count_params(model.in_proj) + _count_params(model.out_proj)
+        head = 0
+        if getattr(model, "output_bias", None) is not None:
+            head += model.output_bias.numel()
+        if getattr(model, "head", None) is not None:
+            head += _count_params(model.head)
+        return total, {"embeddings": emb, "recurrent": recurrent, "proj_head": proj + head}
+    if hasattr(model, "blocks"):
+        emb = model.emb.weight.numel() + model.pos_emb.weight.numel()
+        core = _count_params(model.blocks) + _count_params(model.ln_f)
+        head = 0
+        if getattr(model, "output_bias", None) is not None:
+            head += model.output_bias.numel()
+        if getattr(model, "head", None) is not None:
+            head += _count_params(model.head)
+        return total, {"embeddings": emb, "transformer": core, "head": head}
+    return total, {}
+
+
+def _log_model_info(model: torch.nn.Module) -> None:
+    total, breakdown = _param_breakdown(model)
+    log_line("== Model Info ==")
+    log_line(f"Model: {model.__class__.__name__}")
+    log_line(f"Total params: {total / 1e6:.2f}M")
+    if breakdown:
+        parts = [f"{key}={val / 1e6:.2f}M" for key, val in breakdown.items()]
+        log_line("Breakdown: " + " | ".join(parts))
 
 
 class RestartEpoch(RuntimeError):
@@ -36,6 +86,9 @@ def train_model(
 ) -> Dict[str, float]:
     device = device or (torch.device("mps") if torch.backends.mps.is_available() else torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"))
     model.to(device)
+    log_line(f"Using device: {device}")
+
+    _log_model_info(model)
 
     if _cfg_get(cfg, "use_compile", False) and hasattr(torch, "compile"):
         model = torch.compile(model)  # type: ignore[assignment]
@@ -111,8 +164,18 @@ def train_model(
 
     metrics = {"val_ppl": best_val}
     if test_ids is not None:
-        test_ppl = eval_perplexity(model, test_ids, cfg, device)
-        metrics["test_ppl"] = test_ppl
-        log_line(f"Test PPL: {test_ppl:.2f}")
+        eval_metrics = evaluate_metrics(model, test_ids, cfg, device)
+        metrics["test_ppl"] = eval_metrics["ppl"]
+        if eval_metrics.get("gflops_per_token") is not None:
+            metrics["gflops_per_token"] = eval_metrics["gflops_per_token"]
+        if eval_metrics.get("act_sparsity") is not None:
+            metrics["act_sparsity"] = eval_metrics["act_sparsity"]
+        log_line(f"Test PPL: {eval_metrics['ppl']:.2f}")
+        if eval_metrics.get("gflops_per_token") is not None:
+            log_line(f"Measured GFLOPs/token (THOP): {eval_metrics['gflops_per_token']:.3f}")
+        else:
+            log_line("Measured GFLOPs/token (THOP): unavailable")
+        if eval_metrics.get("act_sparsity") is not None:
+            log_line(f"Activation sparsity: {eval_metrics['act_sparsity']:.4f}")
 
     return metrics

@@ -5,7 +5,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 
-from .activations import cortical_piecewise_activation
+from .activations import three_state_activation
 
 
 class BaseCorticalNeuron(nn.Module):
@@ -56,7 +56,7 @@ class BaseCorticalNeuron(nn.Module):
         return self.prev_state  # type: ignore[return-value]
 
     def _activate(self, x: torch.Tensor) -> torch.Tensor:
-        return cortical_piecewise_activation(x, exp_clip=self.exp_clip)
+        return three_state_activation(x, exp_clip=self.exp_clip)
 
 
 class CorticalNeuronModeC(BaseCorticalNeuron):
@@ -69,7 +69,7 @@ class CorticalNeuronModeC(BaseCorticalNeuron):
         fg = self.fg_linear(x)
         f_x, g_out = fg.chunk(2, dim=-1)
         hidden_state = f_x + s_prev
-        state = cortical_piecewise_activation(hidden_state, exp_clip=self.exp_clip)
+        state = three_state_activation(hidden_state, exp_clip=self.exp_clip)
         output = state * g_out
 
         if prev_state is None:

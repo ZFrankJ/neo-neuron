@@ -61,7 +61,7 @@ class CorticalRecurrentStack(nn.Module):
 
                 use_ckpt = self.training and self.use_checkpoint and h.requires_grad and ps is not None
                 if use_ckpt:
-                    h, ns = checkpoint(step, h, ps)
+                    h, ns = checkpoint(step, h, ps, use_reentrant=False)
                 else:
                     h, ns = step(h, ps)
 

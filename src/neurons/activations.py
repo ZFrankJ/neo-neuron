@@ -3,7 +3,7 @@
 import torch
 
 
-def cortical_piecewise_activation(x: torch.Tensor, exp_clip: float) -> torch.Tensor:
+def three_state_activation(x: torch.Tensor, exp_clip: float) -> torch.Tensor:
     x2 = x * x
     pos_part = torch.tanh(x)
     exp_arg = torch.clamp(x, min=-exp_clip, max=0.0)

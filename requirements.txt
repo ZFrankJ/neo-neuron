@@ -1,6 +1,7 @@
 torch>=2.1
 datasets
 transformers
+pyyaml
 numpy
 psutil
 matplotlib

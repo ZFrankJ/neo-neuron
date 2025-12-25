@@ -17,7 +17,7 @@ def main() -> None:
 
     ensure_repo_root_on_path()
     from src.data import build_tokenizer
-    from src.train import eval_perplexity
+    from src.train.eval import evaluate_metrics
     from src.train import load_checkpoint
     from src.utils import get_device, set_seed
 
@@ -38,8 +38,14 @@ def main() -> None:
     model.to(device)
 
     ids = val_ids if args.split == "val" else test_ids
-    ppl = eval_perplexity(model, ids, cfg, device)
-    print(f"{args.split} PPL: {ppl:.2f}")
+    metrics = evaluate_metrics(model, ids, cfg, device)
+    print(f"{args.split} PPL: {metrics['ppl']:.2f}")
+    if metrics.get("gflops_per_token") is not None:
+        print(f"Measured GFLOPs/token (THOP): {metrics['gflops_per_token']:.3f}")
+    else:
+        print("Measured GFLOPs/token (THOP): unavailable")
+    if metrics.get("act_sparsity") is not None:
+        print(f"Activation sparsity: {metrics['act_sparsity']:.4f}")
 
 
 if __name__ == "__main__":
