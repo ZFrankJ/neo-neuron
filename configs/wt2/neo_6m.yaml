@@ -27,6 +27,10 @@ lr: 2e-4
 weight_decay: 1e-2
 grad_clip: 1.0
 
+tbptt_len: 128
+train_regime: random
+stream_state: false
+
 cosine: true
 warmup_epochs: 2
 min_lr: 2e-5

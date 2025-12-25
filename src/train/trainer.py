@@ -70,6 +70,34 @@ def _log_model_info(model: torch.nn.Module) -> None:
         log_line("Breakdown: " + " | ".join(parts))
 
 
+def _is_recurrent_model(model: torch.nn.Module) -> bool:
+    return hasattr(model, "recurrent") or hasattr(model, "lstm")
+
+
+def _detach_state(state):
+    if state is None:
+        return None
+    if isinstance(state, tuple):
+        return tuple(s.detach() for s in state)
+    return state.detach()
+
+
+def _streaming_batches(ids: torch.Tensor, block_size: int, batch_size: int, device: torch.device):
+    n_tokens = ids.size(0)
+    step = block_size * batch_size
+    for start in range(0, n_tokens - (block_size + 1), step):
+        cur_B = min(batch_size, (n_tokens - (start + block_size + 1)) // block_size)
+        if cur_B <= 0:
+            break
+        x = torch.stack(
+            [ids[start + i * block_size : start + i * block_size + block_size] for i in range(cur_B)]
+        ).to(device)
+        y = torch.stack(
+            [ids[start + i * block_size + 1 : start + i * block_size + block_size + 1] for i in range(cur_B)]
+        ).to(device)
+        yield x.t().contiguous(), y.t().contiguous(), cur_B
+
+
 class RestartEpoch(RuntimeError):
     def __init__(self, resume_path: str):
         super().__init__(f"Restart requested from {resume_path}")
@@ -94,7 +122,9 @@ def train_model(
         model = torch.compile(model)  # type: ignore[assignment]
 
     optimizer = build_optimizer(model, cfg)
-    steps_per_epoch = max(1, train_ids.size(0) // (int(_cfg_get(cfg, "batch_size", 1)) * int(_cfg_get(cfg, "block_size", 1))))
+    batch_size = int(_cfg_get(cfg, "batch_size", 1))
+    block_size = int(_cfg_get(cfg, "block_size", 1))
+    steps_per_epoch = max(1, train_ids.size(0) // (batch_size * block_size))
     scheduler = build_scheduler(optimizer, cfg, steps_per_epoch)
 
     save_dir = _cfg_get(cfg, "save_dir", "checkpoints")
@@ -119,29 +149,73 @@ def train_model(
     grad_clip = float(_cfg_get(cfg, "grad_clip", 1.0))
     mem_interval = _cfg_get(cfg, "mem_report_interval", None)
 
+    train_regime = str(_cfg_get(cfg, "train_regime", "random")).lower()
+    stream_state = bool(_cfg_get(cfg, "stream_state", False))
+    if train_regime not in ("random", "streaming"):
+        raise ValueError(f"Unsupported train_regime '{train_regime}'.")
+
     for epoch in range(start_epoch, epochs + 1):
         model.train()
         epoch_loss = 0.0
-        for _ in range(steps_per_epoch):
-            x, y = get_batch(
-                train_ids,
-                int(_cfg_get(cfg, "batch_size", 1)),
-                int(_cfg_get(cfg, "block_size", 1)),
-                device,
-            )
-            state = init_state_for_model(model, x.size(1), device)
-            logits, _ = model(x, state)
-            loss = F.cross_entropy(logits.reshape(-1, int(_cfg_get(cfg, "vocab_size", 0))), y.reshape(-1))
+        if train_regime == "random":
+            step_iter = range(steps_per_epoch)
+            state = None
+        else:
+            step_iter = _streaming_batches(train_ids, block_size, batch_size, device)
+            state = None
 
+        for step in step_iter:
+            if train_regime == "random":
+                x, y = get_batch(train_ids, batch_size, block_size, device)
+                cur_B = x.size(1)
+            else:
+                x, y, cur_B = step
+
+            tbptt_len = int(_cfg_get(cfg, "tbptt_len", 0))
             optimizer.zero_grad(set_to_none=True)
-            loss.backward()
+
+            if _is_recurrent_model(model):
+                if not stream_state or state is None or (hasattr(state, "size") and state.size(1) != cur_B):
+                    state = init_state_for_model(model, cur_B, device)
+            else:
+                state = None
+
+            if tbptt_len > 0 and tbptt_len < x.size(0) and _is_recurrent_model(model):
+                batch_loss = 0.0
+                chunks = 0
+                for start in range(0, x.size(0), tbptt_len):
+                    end = min(x.size(0), start + tbptt_len)
+                    logits, state = model(x[start:end], state)
+                    loss = F.cross_entropy(
+                        logits.reshape(-1, int(_cfg_get(cfg, "vocab_size", 0))),
+                        y[start:end].reshape(-1),
+                    )
+                    loss.backward()
+                    batch_loss += loss.item()
+                    chunks += 1
+                    state = _detach_state(state)
+                epoch_loss += batch_loss / max(1, chunks)
+                if not stream_state:
+                    state = None
+            else:
+                logits, state_out = model(x, state)
+                loss = F.cross_entropy(
+                    logits.reshape(-1, int(_cfg_get(cfg, "vocab_size", 0))),
+                    y.reshape(-1),
+                )
+                loss.backward()
+                epoch_loss += loss.item()
+                if _is_recurrent_model(model) and stream_state:
+                    state = _detach_state(state_out)
+                else:
+                    state = None
+
             torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
             optimizer.step()
             if scheduler is not None:
                 scheduler.step()
 
             global_step += 1
-            epoch_loss += loss.item()
             maybe_report_memory(global_step, mem_interval)
 
         val_ppl = eval_perplexity(model, val_ids, cfg, device)
