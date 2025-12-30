@@ -22,10 +22,7 @@ def test_probe_neo_traces():
         tie_embeddings=True,
         cell_type="mode_c",
         cell_kwargs={
-            "exp_factor": 1.0,
-            "neg_quad": 1.0,
             "exp_clip": 6.0,
-            "eps": 1e-4,
         },
         use_checkpoint=False,
     )

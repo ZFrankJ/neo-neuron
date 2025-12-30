@@ -96,10 +96,7 @@ def build_model(cfg: Dict[str, Any], model_name: str):
 
     if model_name == "neo":
         cell_kwargs = {
-            "exp_factor": float(cfg.get("exp_factor", cfg.get("cell_exp_factor", 1.0))),
-            "neg_quad": float(cfg.get("neg_quad", cfg.get("cell_neg_quad", 1.0))),
             "exp_clip": float(cfg.get("exp_clip", cfg.get("cell_exp_clip", 6.0))),
-            "eps": float(cfg.get("eps", cfg.get("cell_eps", 1e-4))),
         }
         return NeoLM(
             vocab_size=vocab_size,
