@@ -7,3 +7,5 @@
 # Neo Neuron: a new parameter-efficient recurrent cell
 
 This repo is for demonstrating a new recurrent neuron founded by me. 
+
+## This repo is currently still in progress, please wait for training completed and results handled.
