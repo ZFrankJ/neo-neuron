@@ -5,13 +5,13 @@ train_split: train
 val_split: validation
 test_split: test
 
-d_model: 1268
+d_model: 1024
 d_embed: 256
-n_layers: 2
+n_layers: 3
 dropout: 0.1
 tie_embeddings: true
 cell_type: mode_c
-exp_clip: 16.0
+exp_clip: 30.0
 use_checkpoint: true
 use_compile: false
 vocab_size: 50257
@@ -19,7 +19,7 @@ vocab_size: 50257
 block_size: 256
 batch_size: 16
 epochs: 10
-lr: 3e-4
+lr: 2e-4
 weight_decay: 1e-2
 grad_clip: 1.0
 
@@ -29,7 +29,7 @@ stream_state: false
 
 cosine: true
 warmup_epochs: 2
-min_lr: 3e-5
+min_lr: 2e-5
 
 seed: 42
 save_dir: checkpoints
