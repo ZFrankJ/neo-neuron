@@ -5,15 +5,15 @@ train_split: train
 val_split: validation
 test_split: test
 
-d_model: 522
+d_model: 649
 d_embed: 256
-n_layers: 3
+n_layers: 2
 dropout: 0.1
 tie_embeddings: true
 vocab_size: 50257
 
-block_size: 256
-batch_size: 16
+block_size: 512
+batch_size: 20
 epochs: 10
 lr: 2e-4
 weight_decay: 1e-2
