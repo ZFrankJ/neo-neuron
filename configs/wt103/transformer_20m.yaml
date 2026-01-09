@@ -14,7 +14,7 @@ dropout: 0.1
 tie_embeddings: true
 vocab_size: 50257
 
-block_size: 512
+block_size: 256
 batch_size: 20
 epochs: 10
 lr: 2e-4

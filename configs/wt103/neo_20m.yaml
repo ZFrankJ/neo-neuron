@@ -15,7 +15,7 @@ use_checkpoint: true
 use_compile: false
 vocab_size: 50257
 
-block_size: 512
+block_size: 256
 batch_size: 20
 epochs: 10
 lr: 2e-4
