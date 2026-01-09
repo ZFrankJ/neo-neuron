@@ -3,10 +3,10 @@
 import torch
 
 
-def three_state_activation(x: torch.Tensor, exp_clip: float) -> torch.Tensor:
+def three_state_activation(x: torch.Tensor) -> torch.Tensor:
     x2 = x * x
     pos_part = torch.tanh(x)
-    exp_arg = torch.clamp(x, min=-exp_clip, max=0.0)
+    exp_arg = torch.clamp(x, max=0.0)
     neg_poly = (x * x2) / 6.0 - x2 + x
     neg_part = neg_poly * torch.exp(exp_arg)
     return torch.where(x >= 0, pos_part, neg_part)
@@ -16,12 +16,11 @@ def _fused_cortical_step(
     f_x: torch.Tensor,
     s_prev: torch.Tensor,
     g_out: torch.Tensor,
-    exp_clip: float,
 ):
     hidden = f_x + s_prev
     x2 = hidden * hidden
     pos_part = torch.tanh(hidden)
-    exp_arg = torch.clamp(hidden, min=-exp_clip, max=0.0)
+    exp_arg = torch.clamp(hidden, max=0.0)
     neg_poly = (hidden * x2) / 6.0 - x2 + hidden
     neg_part = neg_poly * torch.exp(exp_arg)
     state = torch.where(hidden >= 0, pos_part, neg_part)

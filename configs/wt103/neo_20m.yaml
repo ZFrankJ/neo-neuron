@@ -11,7 +11,6 @@ n_layers: 2
 dropout: 0.1
 tie_embeddings: true
 cell_type: mode_c
-exp_clip: 30.0
 use_checkpoint: true
 use_compile: false
 vocab_size: 50257

@@ -13,12 +13,10 @@ class BaseCorticalNeuron(nn.Module):
         self,
         input_dim: int,
         output_dim: int,
-        exp_clip: float,
     ):
         super().__init__()
         self.input_dim = int(input_dim)
         self.output_dim = int(output_dim)
-        self.exp_clip = float(exp_clip)
         self.prev_state: Optional[torch.Tensor] = None
 
     @torch.no_grad()
@@ -50,19 +48,19 @@ class BaseCorticalNeuron(nn.Module):
         return self.prev_state  # type: ignore[return-value]
 
     def _activate(self, x: torch.Tensor) -> torch.Tensor:
-        return three_state_activation(x, exp_clip=self.exp_clip)
+        return three_state_activation(x)
 
 
 class CorticalNeuronModeC(BaseCorticalNeuron):
-    def __init__(self, input_dim, output_dim, exp_clip):
-        super().__init__(input_dim, output_dim, exp_clip)
+    def __init__(self, input_dim, output_dim):
+        super().__init__(input_dim, output_dim)
         self.fg_linear = nn.Linear(input_dim, 2 * output_dim)
 
     def forward(self, x, prev_state=None, reset=False):
         s_prev = self._resolve_prev_state(x, prev_state, reset)
         fg = self.fg_linear(x)
         f_x, g_out = fg.chunk(2, dim=-1)
-        output, state = fused_cortical_step(f_x, s_prev, g_out, self.exp_clip)
+        output, state = fused_cortical_step(f_x, s_prev, g_out)
 
         if prev_state is None:
             self.prev_state = state.detach()
