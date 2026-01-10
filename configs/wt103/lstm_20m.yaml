@@ -15,7 +15,7 @@ vocab_size: 50257
 block_size: 256
 batch_size: 20
 epochs: 10
-lr: 2e-4
+lr: 3e-4
 weight_decay: 1e-2
 grad_clip: 1.0
 
@@ -25,7 +25,7 @@ stream_state: false
 
 cosine: true
 warmup_epochs: 2
-min_lr: 2e-5
+min_lr: 3e-5
 
 seed: 42
 save_dir: checkpoints
