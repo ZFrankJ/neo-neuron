@@ -4,6 +4,7 @@
 import argparse
 import os
 import sys
+import warnings
 from pathlib import Path
 
 from _common import (
@@ -21,6 +22,11 @@ from _common import (
 
 
 def main() -> None:
+    warnings.filterwarnings(
+        "ignore",
+        message=r"resource_tracker: There appear to be .* leaked semaphore objects.*",
+        category=UserWarning,
+    )
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(line_buffering=True)
     if hasattr(sys.stderr, "reconfigure"):
