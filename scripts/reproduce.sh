@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export TOKENIZERS_PARALLELISM=false
 export PYTHONUNBUFFERED=1
+export PYTHONWARNINGS="ignore::UserWarning:multiprocessing.resource_tracker"
 
 run_train() {
   local cfg_path="$1"

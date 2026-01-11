@@ -24,8 +24,8 @@ from _common import (
 def main() -> None:
     warnings.filterwarnings(
         "ignore",
-        message=r"resource_tracker: There appear to be .* leaked semaphore objects.*",
         category=UserWarning,
+        module="multiprocessing.resource_tracker",
     )
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(line_buffering=True)
