@@ -45,6 +45,7 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=0, help="Random seed")
     parser.add_argument("--start", type=int, default=0, help="Start offset in validation set")
     parser.add_argument("--device", default=None, help="cpu | cuda | mps | auto")
+    parser.add_argument("--save-plots", action="store_true", help="Save plots without displaying them")
     args = parser.parse_args()
 
     ensure_repo_root_on_path()
@@ -92,10 +93,11 @@ def main() -> None:
     torch.save(records, out_dir / "records.pt")
     save_json(out_dir / "summary.json", summary)
 
-    if model_name == "neo":
-        plot_neo_records(records, args.seq_len, str(out_dir))
-    else:
-        plot_lstm_records(records, args.seq_len, str(out_dir))
+    if args.save_plots:
+        if model_name == "neo":
+            plot_neo_records(records, args.seq_len, str(out_dir))
+        else:
+            plot_lstm_records(records, args.seq_len, str(out_dir))
 
 
 if __name__ == "__main__":

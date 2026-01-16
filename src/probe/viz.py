@@ -4,6 +4,8 @@ import os
 from typing import Dict
 
 try:
+    import matplotlib
+    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 except Exception as exc:  # pragma: no cover - optional dependency
     raise RuntimeError(
