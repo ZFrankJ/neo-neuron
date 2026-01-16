@@ -14,8 +14,8 @@ vocab_size: 50257
 
 block_size: 256
 batch_size: 20
-epochs: 10
-lr: 3e-4
+epochs: 12
+lr: 2e-4
 weight_decay: 1e-2
 grad_clip: 1.0
 
