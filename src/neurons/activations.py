@@ -16,8 +16,9 @@ def _fused_cortical_step(
     f_x: torch.Tensor,
     s_prev: torch.Tensor,
     g_out: torch.Tensor,
+    alpha: torch.Tensor,
 ):
-    hidden = f_x + s_prev
+    hidden = (f_x / alpha) + s_prev
     x2 = hidden * hidden
     pos_part = torch.tanh(hidden)
     exp_arg = torch.clamp(hidden, max=0.0)

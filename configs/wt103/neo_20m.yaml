@@ -5,12 +5,17 @@ train_split: train
 val_split: validation
 test_split: test
 
-d_model: 1268
+d_model: 1267
 d_embed: 256
 n_layers: 2
 dropout: 0.1
 tie_embeddings: true
 cell_type: mode_c
+alpha_init: 1e-1
+alpha_trainable: true
+alpha_min: 1e-2
+alpha_max: 1e0
+alpha_lr_frac: 0.1
 use_checkpoint: true
 use_compile: false
 vocab_size: 50257

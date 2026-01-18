@@ -95,7 +95,12 @@ def build_model(cfg: Dict[str, Any], model_name: str):
         )
 
     if model_name == "neo":
-        cell_kwargs = {}
+        cell_kwargs = {
+            "alpha_init": float(cfg.get("alpha_init", 1e-1)),
+            "alpha_trainable": bool(cfg.get("alpha_trainable", True)),
+            "alpha_min": float(cfg.get("alpha_min", 1e-2)),
+            "alpha_max": float(cfg.get("alpha_max", 1e0)),
+        }
         return NeoLM(
             vocab_size=vocab_size,
             d_model=d_model,
