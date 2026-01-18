@@ -20,7 +20,7 @@ def test_probe_neo_traces():
         n_layers=2,
         dropout=0.0,
         tie_embeddings=True,
-        cell_type="mode_c",
+        cell_type="cortical",
         cell_kwargs={
         },
         use_checkpoint=False,

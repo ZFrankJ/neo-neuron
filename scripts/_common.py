@@ -108,7 +108,7 @@ def build_model(cfg: Dict[str, Any], model_name: str):
             n_layers=n_layers,
             dropout=dropout,
             tie_embeddings=tie_embeddings,
-            cell_type=str(cfg.get("cell_type", "mode_c")),
+            cell_type=str(cfg.get("cell_type", "cortical")),
             cell_kwargs=cell_kwargs,
             use_checkpoint=bool(cfg.get("use_checkpoint", False)),
         )

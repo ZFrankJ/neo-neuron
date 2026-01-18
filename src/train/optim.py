@@ -84,6 +84,9 @@ def _build_weight_decay_groups(
         if _is_alpha_name(name):
             alpha_params.append(param)
             continue
+        if name == "output_bias" or name.endswith(".output_bias"):
+            no_decay.append(param)
+            continue
         leaf = name.split(".")[-1]
         if name.endswith(".bias") or leaf.startswith("bias_"):
             no_decay.append(param)
@@ -150,6 +153,9 @@ def build_optimizer(model: torch.nn.Module, cfg: Any) -> torch.optim.Optimizer:
             continue
         if _is_alpha_name(name):
             alpha_params.append(param)
+            continue
+        if name == "output_bias" or name.endswith(".output_bias"):
+            no_decay.append(param)
             continue
         leaf = name.split(".")[-1]
         if name.endswith(".bias") or leaf.startswith("bias_"):

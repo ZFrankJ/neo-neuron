@@ -95,8 +95,12 @@ def main() -> None:
 
     if args.save_plots:
         if model_name == "neo":
+            if plot_neo_records is None:
+                raise RuntimeError("Plotting requires matplotlib. Install via: pip install matplotlib")
             plot_neo_records(records, args.seq_len, str(out_dir))
         else:
+            if plot_lstm_records is None:
+                raise RuntimeError("Plotting requires matplotlib. Install via: pip install matplotlib")
             plot_lstm_records(records, args.seq_len, str(out_dir))
 
 

@@ -68,7 +68,7 @@ class BaseCorticalNeuron(nn.Module):
         return alpha
 
 
-class CorticalNeuronModeC(BaseCorticalNeuron):
+class CorticalNeuron(BaseCorticalNeuron):
     def __init__(
         self,
         input_dim,

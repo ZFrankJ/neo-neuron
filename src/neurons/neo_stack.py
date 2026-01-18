@@ -6,10 +6,10 @@ import torch
 import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
 
-from .neo_cell import BaseCorticalNeuron, CorticalNeuronModeC
+from .neo_cell import BaseCorticalNeuron, CorticalNeuron
 
 CELL_REGISTRY: Dict[str, Type[BaseCorticalNeuron]] = {
-    "mode_c": CorticalNeuronModeC,
+    "cortical": CorticalNeuron,
 }
 
 

@@ -38,7 +38,7 @@ def test_neo_forward_shapes():
         n_layers=2,
         dropout=0.0,
         tie_embeddings=True,
-        cell_type="mode_c",
+        cell_type="cortical",
         cell_kwargs={
         },
         use_checkpoint=False,
