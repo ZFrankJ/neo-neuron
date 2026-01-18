@@ -26,6 +26,12 @@ batch_size: 16
 epochs: 24
 lr: 2e-4
 weight_decay: 1e-2
+weight_decay_policy: table
+transformer_weight_decay: 1e-2
+proj_weight_decay: 1e-3
+recurrent_weight_decay: 0.0
+embed_weight_decay: 0.0
+alpha_weight_decay: 0.0
 grad_clip: 1.0
 
 tbptt_len: 128
