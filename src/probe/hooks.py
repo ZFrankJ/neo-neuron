@@ -41,17 +41,28 @@ def attach_neo_hooks(model, layer_indices, selected_neurons, batch_index: int = 
             "neuron_indices": neuron_ids,
             "state": {nid: [] for nid in neuron_ids},
             "output": {nid: [] for nid in neuron_ids},
+            "f_x_raw": {nid: [] for nid in neuron_ids},
+            "g_x_raw": {nid: [] for nid in neuron_ids},
         }
 
         def make_hook(layer_idx, neuron_ids_in_layer):
             def hook(_, __, outputs):
-                out, state, *_ = outputs
+                out, state, aux = outputs
                 b = min(batch_index, out.size(0) - 1)
                 out_b = out[b].detach().cpu()
                 state_b = state[b].detach().cpu()
                 for nid in neuron_ids_in_layer:
                     records[layer_idx]["output"][nid].append(float(out_b[nid]))
                     records[layer_idx]["state"][nid].append(float(state_b[nid]))
+                if isinstance(aux, dict):
+                    f_x_raw = aux.get("f_x_raw")
+                    g_x_raw = aux.get("g_x_raw")
+                    if isinstance(f_x_raw, torch.Tensor) and isinstance(g_x_raw, torch.Tensor):
+                        f_x_b = f_x_raw[b].detach().cpu()
+                        g_x_b = g_x_raw[b].detach().cpu()
+                        for nid in neuron_ids_in_layer:
+                            records[layer_idx]["f_x_raw"][nid].append(float(f_x_b[nid]))
+                            records[layer_idx]["g_x_raw"][nid].append(float(g_x_b[nid]))
 
             return hook
 

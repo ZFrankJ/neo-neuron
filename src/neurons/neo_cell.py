@@ -99,7 +99,8 @@ class CorticalNeuron(BaseCorticalNeuron):
     def forward(self, x, prev_state=None, reset=False):
         s_prev = self._resolve_prev_state(x, prev_state, reset)
         fg = self.fg_linear(x)
-        f_x, g_out = fg.chunk(2, dim=-1)
+        f_x_raw, g_out = fg.chunk(2, dim=-1)
+        f_x = f_x_raw
         if self.rms_norm_fx:
             f_x = _rms_norm(f_x, eps=self.rms_norm_eps)
         output, state = fused_cortical_step(f_x, s_prev, g_out, self._alpha_value(f_x))
@@ -107,4 +108,4 @@ class CorticalNeuron(BaseCorticalNeuron):
         if prev_state is None:
             self.prev_state = state.detach()
 
-        return output, state, f_x
+        return output, state, {"f_x_raw": f_x_raw, "g_x_raw": g_out}

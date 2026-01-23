@@ -15,7 +15,7 @@ def summarize_neuron_records(records: Dict[int, Dict[str, object]]) -> Dict[int,
     summary: Dict[int, Dict[str, object]] = {}
     for layer_idx, layer_rec in records.items():
         layer_summary = {"neuron_indices": layer_rec.get("neuron_indices", [])}
-        for key in ("state", "output", "hidden_state", "cell_state"):
+        for key in ("state", "output", "hidden_state", "cell_state", "f_x_raw", "g_x_raw"):
             if key not in layer_rec:
                 continue
             stats = {}
