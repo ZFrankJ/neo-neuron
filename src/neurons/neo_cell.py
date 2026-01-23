@@ -8,6 +8,10 @@ import torch.nn as nn
 from .activations import fused_cortical_step, three_state_activation
 
 
+def _rms_norm(x: torch.Tensor, eps: float = 1e-5) -> torch.Tensor:
+    return x * torch.rsqrt(x.pow(2).mean(dim=-1, keepdim=True) + eps)
+
+
 class BaseCorticalNeuron(nn.Module):
     def __init__(
         self,
@@ -77,6 +81,8 @@ class CorticalNeuron(BaseCorticalNeuron):
         alpha_trainable: bool = True,
         alpha_min: float = 1e-2,
         alpha_max: float = 1e0,
+        rms_norm_fx: bool = True,
+        rms_norm_eps: float = 1e-5,
     ):
         super().__init__(
             input_dim,
@@ -87,11 +93,15 @@ class CorticalNeuron(BaseCorticalNeuron):
             alpha_max=alpha_max,
         )
         self.fg_linear = nn.Linear(input_dim, 2 * output_dim)
+        self.rms_norm_fx = bool(rms_norm_fx)
+        self.rms_norm_eps = float(rms_norm_eps)
 
     def forward(self, x, prev_state=None, reset=False):
         s_prev = self._resolve_prev_state(x, prev_state, reset)
         fg = self.fg_linear(x)
         f_x, g_out = fg.chunk(2, dim=-1)
+        if self.rms_norm_fx:
+            f_x = _rms_norm(f_x, eps=self.rms_norm_eps)
         output, state = fused_cortical_step(f_x, s_prev, g_out, self._alpha_value(f_x))
 
         if prev_state is None:

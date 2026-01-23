@@ -100,6 +100,8 @@ def build_model(cfg: Dict[str, Any], model_name: str):
             "alpha_trainable": bool(cfg.get("alpha_trainable", True)),
             "alpha_min": float(cfg.get("alpha_min", 1e-2)),
             "alpha_max": float(cfg.get("alpha_max", 1e0)),
+            "rms_norm_fx": bool(cfg.get("rms_norm_fx", True)),
+            "rms_norm_eps": float(cfg.get("rms_norm_eps", 1e-5)),
         }
         return NeoLM(
             vocab_size=vocab_size,
