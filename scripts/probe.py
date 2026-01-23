@@ -66,6 +66,13 @@ def main() -> None:
     device = get_device(args.device) if args.device and args.device != "auto" else get_device()
     set_seed(int(args.seed))
 
+    ckpt = torch.load(args.checkpoint, map_location=device)
+    ckpt_cfg = ckpt.get("cfg")
+    if isinstance(ckpt_cfg, dict) and ckpt_cfg:
+        merged_cfg = dict(cfg)
+        merged_cfg.update(ckpt_cfg)
+        cfg = merged_cfg
+
     tokenizer = build_tokenizer()
     _, val_ids, _ = build_data(cfg, tokenizer)
 
@@ -74,7 +81,7 @@ def main() -> None:
         raise ValueError("Transformer probing is not implemented.")
 
     model = build_model(cfg, model_name)
-    load_checkpoint(args.checkpoint, model, device=device)
+    model.load_state_dict(ckpt["model_state_dict"])
     model.to(device)
 
     idx = _make_probe_batch(val_ids, args.seq_len, args.batch_size, args.start).to(device)
