@@ -17,8 +17,9 @@ alpha_trainable: false
 alpha_min: 1e-2
 alpha_max: 1e0
 alpha_lr_frac: 0.1
-rms_norm_fx: true
+rms_norm_fx: false
 rms_norm_eps: 1e-5
+energy_l2_frac: 0.1
 use_checkpoint: false
 use_compile: false
 vocab_size: 50257

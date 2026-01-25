@@ -23,6 +23,7 @@ class CorticalRecurrentStack(nn.Module):
         self.n_layers = int(n_layers)
         self.d_model = int(d_model)
         self.use_checkpoint = bool(use_checkpoint)
+        self.last_fx_energy = None
 
     @torch.no_grad()
     def reset_state(self, batch_size: int, device=None, dtype=None):
@@ -38,6 +39,8 @@ class CorticalRecurrentStack(nn.Module):
     def forward(self, x: torch.Tensor, state: Optional[torch.Tensor] = None):
         T, B, D = x.shape
         y = torch.empty((T, B, D), device=x.device, dtype=x.dtype)
+        energy_sum = None
+        energy_count = 0
 
         if state is not None:
             if state.dim() != 3 or state.size(0) != self.n_layers or state.size(2) != self.d_model:
@@ -56,20 +59,36 @@ class CorticalRecurrentStack(nn.Module):
                 reset_flag = state is None and t == 0
 
                 def step(h_in, ps_in):
-                    out, ns, _ = layer(h_in, prev_state=ps_in, reset=reset_flag)
-                    return out, ns
+                    out, ns, aux = layer(h_in, prev_state=ps_in, reset=reset_flag)
+                    fx_energy = None
+                    if isinstance(aux, dict):
+                        fx_raw = aux.get("f_x_raw")
+                        if isinstance(fx_raw, torch.Tensor):
+                            fx_energy = fx_raw.pow(2).mean()
+                    if fx_energy is None:
+                        fx_energy = h_in.new_zeros(())
+                    return out, ns, fx_energy
 
                 use_ckpt = self.training and self.use_checkpoint and h.requires_grad and ps is not None
                 if use_ckpt:
-                    h, ns = checkpoint(step, h, ps, use_reentrant=False)
+                    h, ns, fx_energy = checkpoint(step, h, ps, use_reentrant=False)
                 else:
-                    h, ns = step(h, ps)
+                    h, ns, fx_energy = step(h, ps)
 
                 prev_states[i] = ns
+                if energy_sum is None:
+                    energy_sum = fx_energy
+                else:
+                    energy_sum = energy_sum + fx_energy
+                energy_count += 1
 
             y[t] = h
 
         new_state = torch.stack(prev_states, dim=0)
+        if energy_sum is None:
+            self.last_fx_energy = None
+        else:
+            self.last_fx_energy = energy_sum / max(1, energy_count)
         if state is None:
             for i, layer in enumerate(self.layers):
                 layer.prev_state = new_state[i].detach()

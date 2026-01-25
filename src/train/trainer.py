@@ -164,6 +164,8 @@ def train_model(
     epochs = int(_cfg_get(cfg, "epochs", 1))
     grad_clip = float(_cfg_get(cfg, "grad_clip", 1.0))
     mem_interval = _cfg_get(cfg, "mem_report_interval", None)
+    energy_l2_weight_cfg = _cfg_get(cfg, "energy_l2_weight", None)
+    energy_l2_frac = float(_cfg_get(cfg, "energy_l2_frac", 0.0))
     mem_clear_interval = _cfg_get(cfg, "mem_clear_interval", None)
 
     train_regime = str(_cfg_get(cfg, "train_regime", "random")).lower()
@@ -172,6 +174,7 @@ def train_model(
         raise ValueError(f"Unsupported train_regime '{train_regime}'.")
 
     run_dir = _cfg_get(cfg, "run_dir", None)
+    energy_on = (energy_l2_weight_cfg is not None or energy_l2_frac > 0.0) and hasattr(model, "recurrent")
 
     for epoch in range(start_epoch, epochs + 1):
         model.train()
@@ -209,7 +212,20 @@ def train_model(
                         logits.reshape(-1, int(_cfg_get(cfg, "vocab_size", 0))),
                         y[start:end].reshape(-1),
                     )
-                    loss.backward()
+                    if energy_on:
+                        rec = getattr(model, "recurrent", None)
+                        energy = getattr(rec, "last_fx_energy", None)
+                        if isinstance(energy, torch.Tensor):
+                            if energy_l2_weight_cfg is None:
+                                energy_weight = energy_l2_frac * optimizer.param_groups[0]["lr"]
+                            else:
+                                energy_weight = float(energy_l2_weight_cfg)
+                            loss_total = loss + (energy_weight * energy)
+                        else:
+                            loss_total = loss
+                    else:
+                        loss_total = loss
+                    loss_total.backward()
                     batch_loss += loss.detach()
                     chunks += 1
                     state = _detach_state(state)
@@ -222,7 +238,20 @@ def train_model(
                     logits.reshape(-1, int(_cfg_get(cfg, "vocab_size", 0))),
                     y.reshape(-1),
                 )
-                loss.backward()
+                if energy_on:
+                    rec = getattr(model, "recurrent", None)
+                    energy = getattr(rec, "last_fx_energy", None)
+                    if isinstance(energy, torch.Tensor):
+                        if energy_l2_weight_cfg is None:
+                            energy_weight = energy_l2_frac * optimizer.param_groups[0]["lr"]
+                        else:
+                            energy_weight = float(energy_l2_weight_cfg)
+                        loss_total = loss + (energy_weight * energy)
+                    else:
+                        loss_total = loss
+                else:
+                    loss_total = loss
+                loss_total.backward()
                 epoch_loss += loss.detach()
                 if _is_recurrent_model(model) and stream_state:
                     state = _detach_state(state_out)
