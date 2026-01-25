@@ -39,8 +39,8 @@ class CorticalRecurrentStack(nn.Module):
     def forward(self, x: torch.Tensor, state: Optional[torch.Tensor] = None):
         T, B, D = x.shape
         y = torch.empty((T, B, D), device=x.device, dtype=x.dtype)
-        energy_sum = None
-        energy_count = 0
+        energy_sum = torch.zeros(self.n_layers, device=x.device, dtype=x.dtype)
+        energy_count = torch.zeros(self.n_layers, device=x.device, dtype=x.dtype)
 
         if state is not None:
             if state.dim() != 3 or state.size(0) != self.n_layers or state.size(2) != self.d_model:
@@ -76,19 +76,14 @@ class CorticalRecurrentStack(nn.Module):
                     h, ns, fx_energy = step(h, ps)
 
                 prev_states[i] = ns
-                if energy_sum is None:
-                    energy_sum = fx_energy
-                else:
-                    energy_sum = energy_sum + fx_energy
-                energy_count += 1
+                energy_sum[i] = energy_sum[i] + fx_energy
+                energy_count[i] = energy_count[i] + 1.0
 
             y[t] = h
 
         new_state = torch.stack(prev_states, dim=0)
-        if energy_sum is None:
-            self.last_fx_energy = None
-        else:
-            self.last_fx_energy = energy_sum / max(1, energy_count)
+        energy_count = torch.clamp(energy_count, min=1.0)
+        self.last_fx_energy = energy_sum / energy_count
         if state is None:
             for i, layer in enumerate(self.layers):
                 layer.prev_state = new_state[i].detach()

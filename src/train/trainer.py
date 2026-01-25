@@ -216,6 +216,8 @@ def train_model(
                         rec = getattr(model, "recurrent", None)
                         energy = getattr(rec, "last_fx_energy", None)
                         if isinstance(energy, torch.Tensor):
+                            if energy.ndim > 0:
+                                energy = energy.sum()
                             if energy_l2_weight_cfg is None:
                                 energy_weight = energy_l2_frac * optimizer.param_groups[0]["lr"]
                             else:
@@ -226,7 +228,9 @@ def train_model(
                     else:
                         loss_total = loss
                     loss_total.backward()
-                    batch_loss += loss.detach()
+                    if energy_on and rec is not None:
+                        rec.last_fx_energy = None
+                    batch_loss += loss_total.detach()
                     chunks += 1
                     state = _detach_state(state)
                 epoch_loss += batch_loss / max(1, chunks)
@@ -242,6 +246,8 @@ def train_model(
                     rec = getattr(model, "recurrent", None)
                     energy = getattr(rec, "last_fx_energy", None)
                     if isinstance(energy, torch.Tensor):
+                        if energy.ndim > 0:
+                            energy = energy.sum()
                         if energy_l2_weight_cfg is None:
                             energy_weight = energy_l2_frac * optimizer.param_groups[0]["lr"]
                         else:
@@ -252,7 +258,9 @@ def train_model(
                 else:
                     loss_total = loss
                 loss_total.backward()
-                epoch_loss += loss.detach()
+                if energy_on and rec is not None:
+                    rec.last_fx_energy = None
+                epoch_loss += loss_total.detach()
                 if _is_recurrent_model(model) and stream_state:
                     state = _detach_state(state_out)
                 else:
