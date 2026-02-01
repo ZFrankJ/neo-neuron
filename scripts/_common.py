@@ -102,6 +102,7 @@ def build_model(cfg: Dict[str, Any], model_name: str):
             "alpha_max": float(cfg.get("alpha_max", 1e0)),
             "rms_norm_fx": bool(cfg.get("rms_norm_fx", True)),
             "rms_norm_eps": float(cfg.get("rms_norm_eps", 1e-5)),
+            "g_clamp_L": float(cfg.get("g_clamp_L", 1.0)),
         }
         return NeoLM(
             vocab_size=vocab_size,

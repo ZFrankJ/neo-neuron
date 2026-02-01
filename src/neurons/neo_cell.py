@@ -83,6 +83,7 @@ class CorticalNeuron(BaseCorticalNeuron):
         alpha_max: float = 1e0,
         rms_norm_fx: bool = True,
         rms_norm_eps: float = 1e-5,
+        g_clamp_L: float = 1.0,
     ):
         super().__init__(
             input_dim,
@@ -95,6 +96,7 @@ class CorticalNeuron(BaseCorticalNeuron):
         self.fg_linear = nn.Linear(input_dim, 2 * output_dim)
         self.rms_norm_fx = bool(rms_norm_fx)
         self.rms_norm_eps = float(rms_norm_eps)
+        self.g_clamp_L = float(g_clamp_L)
 
     def forward(self, x, prev_state=None, reset=False):
         s_prev = self._resolve_prev_state(x, prev_state, reset)
@@ -103,7 +105,10 @@ class CorticalNeuron(BaseCorticalNeuron):
         f_x = f_x_raw
         if self.rms_norm_fx:
             f_x = _rms_norm(f_x, eps=self.rms_norm_eps)
-        output, state = fused_cortical_step(f_x, s_prev, g_out, self._alpha_value(f_x))
+        g_clamped = g_out
+        if self.g_clamp_L > 0.0:
+            g_clamped = self.g_clamp_L * torch.tanh(g_out / self.g_clamp_L)
+        output, state = fused_cortical_step(f_x, s_prev, g_clamped, self._alpha_value(f_x))
 
         if prev_state is None:
             self.prev_state = state.detach()
