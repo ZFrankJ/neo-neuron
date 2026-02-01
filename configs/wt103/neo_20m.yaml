@@ -13,12 +13,12 @@ tie_embeddings: true
 cell_type: cortical
 alpha_init: 1.0
 alpha_trainable: false
-alpha_min: 1e-2
-alpha_max: 1e0
-alpha_lr_frac: 0.1
+alpha_min: 1.0
+alpha_max: 1.0
+alpha_lr_frac: 0.0
 rms_norm_fx: false
 rms_norm_eps: 1e-5
-energy_l2_frac: 0.1
+energy_l2_frac: 0.0
 use_checkpoint: true
 use_compile: false
 vocab_size: 50257
