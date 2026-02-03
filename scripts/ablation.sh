@@ -11,7 +11,7 @@ if [[ ! -f "$CFG_PATH" ]]; then
   exit 1
 fi
 
-L_VALUES=(0 1 2 3 5)
+L_VALUES=(0 1 2 4 8)
 
 cd "$ROOT_DIR"
 
