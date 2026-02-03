@@ -12,15 +12,7 @@ n_layers: 3
 dropout: 0.1
 tie_embeddings: true
 cell_type: cortical
-alpha_init: 1.0
-alpha_trainable: false
-alpha_min: 1.0
-alpha_max: 1.0
-alpha_lr_frac: 0.0
-rms_norm_fx: false
-rms_norm_eps: 1e-5
 g_clamp_L: 1.0
-energy_l2_frac: 0.0
 use_checkpoint: false
 use_compile: false
 vocab_size: 50257
@@ -35,7 +27,6 @@ transformer_weight_decay: 1e-2
 proj_weight_decay: 1e-3
 recurrent_weight_decay: 0.0
 embed_weight_decay: 0.0
-alpha_weight_decay: 0.0
 grad_clip: 1.0
 
 tbptt_len: 128

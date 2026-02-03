@@ -5,9 +5,9 @@ train_split: train
 val_split: validation
 test_split: test
 
-d_model: 332
+d_model: 312
 d_embed: 256
-n_layers: 2
+n_layers: 3
 n_heads: 4
 ff_mult: 5
 dropout: 0.1
@@ -17,14 +17,13 @@ vocab_size: 50257
 block_size: 256
 batch_size: 20
 epochs: 12
-lr: 2e-4
+lr: 3e-4
 weight_decay: 1e-2
 weight_decay_policy: table
 transformer_weight_decay: 1e-2
 proj_weight_decay: 1e-3
 recurrent_weight_decay: 0.0
 embed_weight_decay: 0.0
-alpha_weight_decay: 0.0
 grad_clip: 1.0
 
 tbptt_len: 256

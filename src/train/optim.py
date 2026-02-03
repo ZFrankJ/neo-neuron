@@ -38,10 +38,6 @@ def _to_betas(value: Any, default=(0.9, 0.95)) -> tuple:
     return default
 
 
-def _is_alpha_name(name: str) -> bool:
-    return name == "alpha" or name.endswith(".alpha")
-
-
 def _get_module_map(model: torch.nn.Module) -> Dict[str, torch.nn.Module]:
     return dict(model.named_modules())
 
@@ -58,7 +54,6 @@ def _build_weight_decay_groups(
     model: torch.nn.Module,
     cfg: Any,
     lr: float,
-    alpha_lr: float,
 ) -> List[Dict[str, object]]:
     module_map = _get_module_map(model)
 
@@ -66,13 +61,10 @@ def _build_weight_decay_groups(
     proj_wd = _to_float(_cfg_get(cfg, "proj_weight_decay", 1e-3), 1e-3)
     recurrent_wd = _to_float(_cfg_get(cfg, "recurrent_weight_decay", 0.0), 0.0)
     transformer_wd = _to_float(_cfg_get(cfg, "transformer_weight_decay", 1e-2), 1e-2)
-    alpha_wd = _to_float(_cfg_get(cfg, "alpha_weight_decay", 0.0), 0.0)
-
     no_decay: List[torch.nn.Parameter] = []
     embeddings: List[torch.nn.Parameter] = []
     recurrent: List[torch.nn.Parameter] = []
     proj: List[torch.nn.Parameter] = []
-    alpha_params: List[torch.nn.Parameter] = []
 
     is_transformer = hasattr(model, "blocks")
     is_lstm = hasattr(model, "lstm")
@@ -80,9 +72,6 @@ def _build_weight_decay_groups(
 
     for name, param in model.named_parameters():
         if not param.requires_grad:
-            continue
-        if _is_alpha_name(name):
-            alpha_params.append(param)
             continue
         if name == "output_bias" or name.endswith(".output_bias"):
             no_decay.append(param)
@@ -124,9 +113,6 @@ def _build_weight_decay_groups(
         param_groups.append({"params": embeddings, "lr": lr, "weight_decay": embed_wd})
     if no_decay:
         param_groups.append({"params": no_decay, "lr": lr, "weight_decay": 0.0})
-    if alpha_params:
-        param_groups.append({"params": alpha_params, "lr": alpha_lr, "weight_decay": alpha_wd})
-
     return param_groups
 
 
@@ -135,24 +121,17 @@ def build_optimizer(model: torch.nn.Module, cfg: Any) -> torch.optim.Optimizer:
     weight_decay = _to_float(_cfg_get(cfg, "weight_decay", 0.0), 0.0)
     betas = _to_betas(_cfg_get(cfg, "betas", (0.9, 0.95)), (0.9, 0.95))
     adam_eps = _to_float(_cfg_get(cfg, "adam_eps", 1e-8), 1e-8)
-    alpha_lr = _cfg_get(cfg, "alpha_lr", None)
-    alpha_lr_frac = _to_float(_cfg_get(cfg, "alpha_lr_frac", 0.1), 0.1)
-    alpha_lr = _to_float(alpha_lr, lr * alpha_lr_frac) if alpha_lr is not None else lr * alpha_lr_frac
 
     policy = str(_cfg_get(cfg, "weight_decay_policy", "table")).lower()
     if policy in ("table", "per_param", "per-parameter"):
-        param_groups = _build_weight_decay_groups(model, cfg, lr, alpha_lr)
+        param_groups = _build_weight_decay_groups(model, cfg, lr)
         return torch.optim.AdamW(param_groups, betas=betas, eps=adam_eps)
 
     module_map = _get_module_map(model)
     decay: List[torch.nn.Parameter] = []
     no_decay: List[torch.nn.Parameter] = []
-    alpha_params: List[torch.nn.Parameter] = []
     for name, param in model.named_parameters():
         if not param.requires_grad:
-            continue
-        if _is_alpha_name(name):
-            alpha_params.append(param)
             continue
         if name == "output_bias" or name.endswith(".output_bias"):
             no_decay.append(param)
@@ -174,7 +153,5 @@ def build_optimizer(model: torch.nn.Module, cfg: Any) -> torch.optim.Optimizer:
         param_groups.append({"params": decay, "lr": lr, "weight_decay": weight_decay})
     if no_decay:
         param_groups.append({"params": no_decay, "lr": lr, "weight_decay": 0.0})
-    if alpha_params:
-        param_groups.append({"params": alpha_params, "lr": alpha_lr, "weight_decay": 0.0})
 
     return torch.optim.AdamW(param_groups, betas=betas, eps=adam_eps)
