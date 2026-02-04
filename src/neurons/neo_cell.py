@@ -67,10 +67,7 @@ class CorticalNeuron(BaseCorticalNeuron):
         fg = self.fg_linear(x)
         f_x_raw, g_out = fg.chunk(2, dim=-1)
         f_x = f_x_raw
-        g_clamped = g_out
-        if self.g_clamp_L > 0.0:
-            g_clamped = self.g_clamp_L * torch.tanh(g_out / self.g_clamp_L)
-        output, state = fused_cortical_step(f_x, s_prev, g_clamped)
+        output, state = fused_cortical_step(f_x, s_prev, g_out, self.g_clamp_L)
 
         if prev_state is None:
             self.prev_state = state.detach()
