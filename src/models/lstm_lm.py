@@ -38,6 +38,7 @@ class LSTMLM(nn.Module):
         self.emb = nn.Embedding(vocab_size, d_embed)
         self.in_proj = nn.Linear(d_embed, d_model) if d_embed != d_model else nn.Identity()
         self.lstm = nn.LSTM(d_model, d_model, num_layers=n_layers, dropout=dropout, batch_first=False)
+        self.out_norm = nn.LayerNorm(d_model)
         self.drop = nn.Dropout(dropout)
         self.out_proj = nn.Linear(d_model, d_embed) if d_embed != d_model else nn.Identity()
 
@@ -69,6 +70,7 @@ class LSTMLM(nn.Module):
         if not isinstance(self.in_proj, nn.Identity):
             x = self.in_proj(x)
         y, new_state = self.lstm(x, state)
+        y = self.out_norm(y)
         y = self.drop(y)
 
         if self.tie_embeddings:

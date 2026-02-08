@@ -31,7 +31,7 @@ def _param_breakdown(model: torch.nn.Module) -> Tuple[int, Dict[str, int]]:
     total = _count_params(model)
     if hasattr(model, "lstm"):
         emb = model.emb.weight.numel()
-        recurrent = _count_params(model.lstm)
+        recurrent = _count_params(model.lstm) + _count_params(getattr(model, "out_norm", None))
         proj = _count_params(model.in_proj) + _count_params(model.out_proj)
         head = 0
         if getattr(model, "output_bias", None) is not None:

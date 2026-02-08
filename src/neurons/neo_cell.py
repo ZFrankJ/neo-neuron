@@ -56,20 +56,19 @@ class CorticalNeuron(BaseCorticalNeuron):
         self,
         input_dim,
         output_dim,
-        g_clamp_L: float = 1.0,
     ):
         super().__init__(input_dim, output_dim)
         self.fg_linear = nn.Linear(input_dim, 2 * output_dim)
-        self.g_clamp_L = float(g_clamp_L)
+        self.out_norm = nn.LayerNorm(output_dim)
 
     def forward(self, x, prev_state=None, reset=False):
         s_prev = self._resolve_prev_state(x, prev_state, reset)
         fg = self.fg_linear(x)
-        f_x_raw, g_out = fg.chunk(2, dim=-1)
-        f_x = f_x_raw
-        output, state = fused_cortical_step(f_x, s_prev, g_out, self.g_clamp_L)
+        f_x_raw, g_x_raw = fg.chunk(2, dim=-1)
+        output, state = fused_cortical_step(f_x_raw, s_prev, g_x_raw)
+        output = self.out_norm(output)
 
         if prev_state is None:
             self.prev_state = state.detach()
 
-        return output, state, {"f_x_raw": f_x_raw, "g_x_raw": g_out}
+        return output, state, {"f_x_raw": f_x_raw, "g_x_raw": g_x_raw}

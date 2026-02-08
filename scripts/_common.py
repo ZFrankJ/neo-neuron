@@ -95,9 +95,7 @@ def build_model(cfg: Dict[str, Any], model_name: str):
         )
 
     if model_name == "neo":
-        cell_kwargs = {
-            "g_clamp_L": float(cfg.get("g_clamp_L", 1.0)),
-        }
+        cell_kwargs = {}
         return NeoLM(
             vocab_size=vocab_size,
             d_model=d_model,
