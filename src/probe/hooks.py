@@ -39,6 +39,7 @@ def attach_neo_hooks(model, layer_indices, selected_neurons, batch_index: int = 
         neuron_ids = selected_neurons[li]
         records[li] = {
             "neuron_indices": neuron_ids,
+            "embedding": {nid: [] for nid in neuron_ids},
             "state": {nid: [] for nid in neuron_ids},
             "output": {nid: [] for nid in neuron_ids},
             "f_x_raw": {nid: [] for nid in neuron_ids},

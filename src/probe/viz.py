@@ -32,8 +32,12 @@ def _plot_two_axis(time_axis, left_series, right_series, left_label, right_label
     plt.close(fig)
 
 
-def _plot_neo_neuron(time_axis, state, output, f_x_raw, g_x_raw, title, out_path):
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
+def _plot_neo_neuron(time_axis, embedding, state, output, f_x_raw, g_x_raw, title, out_path):
+    fig, (ax0, ax1, ax2) = plt.subplots(3, 1, figsize=(10, 9), sharex=True)
+
+    ax0.set_ylabel("Input")
+    ax0.plot(time_axis, embedding, linewidth=1.3, label="embedding", color="tab:cyan")
+    ax0.legend()
 
     ax1.set_ylabel("Value")
     ax1.plot(time_axis, state, linewidth=1.5, label="state", color="tab:blue")
@@ -57,23 +61,27 @@ def plot_neo_records(records: Dict[int, Dict[str, object]], seq_len: int, out_di
     time_axis = list(range(seq_len))
     for layer_idx, layer_rec in records.items():
         neuron_ids = layer_rec["neuron_indices"]
+        emb_map = layer_rec.get("embedding", {})
         fx_map = layer_rec.get("f_x_raw", {})
         gx_map = layer_rec.get("g_x_raw", {})
         for nid in neuron_ids:
+            emb = emb_map.get(nid, [])
             states = layer_rec["state"][nid]
             outputs = layer_rec["output"][nid]
             fx_raw = fx_map.get(nid, [])
             gx_raw = gx_map.get(nid, [])
-            L = min(len(states), len(outputs), len(fx_raw), len(gx_raw), seq_len)
+            L = min(len(emb), len(states), len(outputs), len(fx_raw), len(gx_raw), seq_len)
             if L == 0:
                 L = min(len(states), len(outputs), seq_len)
                 if L == 0:
                     continue
+                emb = [0.0] * L
                 fx_raw = [0.0] * L
                 gx_raw = [0.0] * L
             out_path = os.path.join(out_dir, f"layer{layer_idx}_neuron{nid}.png")
             _plot_neo_neuron(
                 time_axis[:L],
+                emb[:L],
                 states[:L],
                 outputs[:L],
                 fx_raw[:L],
