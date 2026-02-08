@@ -71,4 +71,6 @@ class CorticalNeuron(BaseCorticalNeuron):
         if prev_state is None:
             self.prev_state = state.detach()
 
-        return output, state, {"f_x_raw": f_x_raw, "g_x_raw": g_x_raw}
+        # Keep raw traces only for eval/probe to avoid per-step dict allocations during training.
+        aux = None if self.training else {"f_x_raw": f_x_raw, "g_x_raw": g_x_raw}
+        return output, state, aux
