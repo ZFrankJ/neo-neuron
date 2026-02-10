@@ -100,6 +100,25 @@ def main() -> None:
     torch.save(records, out_dir / "records.pt")
     save_json(out_dir / "summary.json", summary)
 
+    global_stats = summary.get("_global_abs_percentiles")
+    if isinstance(global_stats, dict):
+        def _fmt_abs_stats(name: str) -> None:
+            stats = global_stats.get(name)
+            if not isinstance(stats, dict):
+                return
+            print(
+                f"{name} |abs| "
+                f"P50={float(stats.get('p50', 0.0)):.6f} "
+                f"P90={float(stats.get('p90', 0.0)):.6f} "
+                f"P95={float(stats.get('p95', 0.0)):.6f} "
+                f"P99={float(stats.get('p99', 0.0)):.6f} "
+                f"Max={float(stats.get('max', 0.0)):.6f}",
+                flush=True,
+            )
+
+        _fmt_abs_stats("f_x_raw")
+        _fmt_abs_stats("g_x_raw")
+
     if args.save_plots:
         if model_name == "neo":
             if plot_neo_records is None:
