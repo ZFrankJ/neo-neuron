@@ -5,7 +5,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 
-from .activations import fused_cortical_step, three_state_activation
+from .activations import cortical_activation, fused_cortical_step
 
 
 class BaseCorticalNeuron(nn.Module):
@@ -17,6 +17,7 @@ class BaseCorticalNeuron(nn.Module):
         super().__init__()
         self.input_dim = int(input_dim)
         self.output_dim = int(output_dim)
+        self.activation_id = 3
         self.prev_state: Optional[torch.Tensor] = None
 
     @torch.no_grad()
@@ -48,7 +49,7 @@ class BaseCorticalNeuron(nn.Module):
         return self.prev_state  # type: ignore[return-value]
 
     def _activate(self, x: torch.Tensor) -> torch.Tensor:
-        return three_state_activation(x)
+        return cortical_activation(x, activation_id=self.activation_id)
 
 
 def _build_output_norm(norm_type: str, output_dim: int) -> nn.Module:
@@ -65,23 +66,41 @@ def _build_output_norm(norm_type: str, output_dim: int) -> nn.Module:
     raise ValueError(f"Unsupported output_norm '{norm_type}'.")
 
 
+def _parse_activation_id(activation_id) -> int:
+    if isinstance(activation_id, str):
+        text = activation_id.strip().lower()
+        if text.startswith("id"):
+            text = text[2:]
+        try:
+            value = int(text)
+        except ValueError as exc:
+            raise ValueError(f"Unsupported activation_id '{activation_id}'. Expected id3/id4/id5.") from exc
+    else:
+        value = int(activation_id)
+    if value not in (3, 4, 5):
+        raise ValueError(f"Unsupported activation_id '{activation_id}'. Expected id3/id4/id5.")
+    return value
+
+
 class CorticalNeuron(BaseCorticalNeuron):
     def __init__(
         self,
         input_dim,
         output_dim,
         output_norm: str = "layernorm",
+        activation_id="id3",
     ):
         super().__init__(input_dim, output_dim)
         self.fg_linear = nn.Linear(input_dim, 2 * output_dim)
         self.output_norm_type = str(output_norm)
         self.out_norm = _build_output_norm(self.output_norm_type, output_dim)
+        self.activation_id = _parse_activation_id(activation_id)
 
     def forward(self, x, prev_state=None, reset=False):
         s_prev = self._resolve_prev_state(x, prev_state, reset)
         fg = self.fg_linear(x)
         f_x_raw, g_x_raw = fg.chunk(2, dim=-1)
-        output, state = fused_cortical_step(f_x_raw, s_prev, g_x_raw)
+        output, state = fused_cortical_step(f_x_raw, s_prev, g_x_raw, self.activation_id)
         output = self.out_norm(output)
 
         if prev_state is None:

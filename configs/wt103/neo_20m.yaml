@@ -12,6 +12,7 @@ dropout: 0.1
 tie_embeddings: true
 cell_type: cortical
 output_norm: none
+activation_id: id3
 use_checkpoint: true
 use_compile: false
 vocab_size: 50257
