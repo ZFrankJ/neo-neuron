@@ -5,9 +5,9 @@ train_split: train
 val_split: validation
 test_split: test
 
-d_model: 532
+d_model: 649
 d_embed: 256
-n_layers: 3
+n_layers: 2
 dropout: 0.1
 tie_embeddings: true
 output_norm: none
