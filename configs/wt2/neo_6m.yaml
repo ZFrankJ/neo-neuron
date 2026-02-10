@@ -12,6 +12,7 @@ n_layers: 3
 dropout: 0.1
 tie_embeddings: true
 cell_type: cortical
+output_norm: none
 use_checkpoint: false
 use_compile: false
 vocab_size: 50257

@@ -92,10 +92,11 @@ def build_model(cfg: Dict[str, Any], model_name: str):
             n_layers=n_layers,
             dropout=dropout,
             tie_embeddings=tie_embeddings,
+            output_norm=str(cfg.get("output_norm", "layernorm")),
         )
 
     if model_name == "neo":
-        cell_kwargs = {}
+        cell_kwargs = {"output_norm": str(cfg.get("output_norm", "layernorm"))}
         return NeoLM(
             vocab_size=vocab_size,
             d_model=d_model,

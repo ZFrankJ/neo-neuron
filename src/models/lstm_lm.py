@@ -16,6 +16,21 @@ class LSTMConfig:
     n_layers: int
     dropout: float
     tie_embeddings: bool = True
+    output_norm: str = "layernorm"
+
+
+def _build_output_norm(norm_type: str, d_model: int) -> nn.Module:
+    norm = str(norm_type).strip().lower()
+    if norm in ("none", "off", "identity"):
+        return nn.Identity()
+    if norm in ("layernorm", "layer_norm", "ln"):
+        return nn.LayerNorm(d_model)
+    if norm in ("rmsnorm", "rms_norm", "rms"):
+        rms_norm = getattr(nn, "RMSNorm", None)
+        if rms_norm is None:
+            raise ValueError("RMSNorm is not available in this torch version.")
+        return rms_norm(d_model)
+    raise ValueError(f"Unsupported output_norm '{norm_type}'.")
 
 
 class LSTMLM(nn.Module):
@@ -27,6 +42,7 @@ class LSTMLM(nn.Module):
         n_layers: int,
         dropout: float,
         tie_embeddings: bool = True,
+        output_norm: str = "layernorm",
     ):
         super().__init__()
         self.vocab_size = vocab_size
@@ -34,11 +50,12 @@ class LSTMLM(nn.Module):
         self.d_embed = d_embed
         self.n_layers = n_layers
         self.tie_embeddings = tie_embeddings
+        self.output_norm_type = str(output_norm)
 
         self.emb = nn.Embedding(vocab_size, d_embed)
         self.in_proj = nn.Linear(d_embed, d_model) if d_embed != d_model else nn.Identity()
         self.lstm = nn.LSTM(d_model, d_model, num_layers=n_layers, dropout=dropout, batch_first=False)
-        self.out_norm = nn.LayerNorm(d_model)
+        self.out_norm = _build_output_norm(self.output_norm_type, d_model)
         self.drop = nn.Dropout(dropout)
         self.out_proj = nn.Linear(d_model, d_embed) if d_embed != d_model else nn.Identity()
 

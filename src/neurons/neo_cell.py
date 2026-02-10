@@ -51,15 +51,31 @@ class BaseCorticalNeuron(nn.Module):
         return three_state_activation(x)
 
 
+def _build_output_norm(norm_type: str, output_dim: int) -> nn.Module:
+    norm = str(norm_type).strip().lower()
+    if norm in ("none", "off", "identity"):
+        return nn.Identity()
+    if norm in ("layernorm", "layer_norm", "ln"):
+        return nn.LayerNorm(output_dim)
+    if norm in ("rmsnorm", "rms_norm", "rms"):
+        rms_norm = getattr(nn, "RMSNorm", None)
+        if rms_norm is None:
+            raise ValueError("RMSNorm is not available in this torch version.")
+        return rms_norm(output_dim)
+    raise ValueError(f"Unsupported output_norm '{norm_type}'.")
+
+
 class CorticalNeuron(BaseCorticalNeuron):
     def __init__(
         self,
         input_dim,
         output_dim,
+        output_norm: str = "layernorm",
     ):
         super().__init__(input_dim, output_dim)
         self.fg_linear = nn.Linear(input_dim, 2 * output_dim)
-        self.out_norm = nn.LayerNorm(output_dim)
+        self.output_norm_type = str(output_norm)
+        self.out_norm = _build_output_norm(self.output_norm_type, output_dim)
 
     def forward(self, x, prev_state=None, reset=False):
         s_prev = self._resolve_prev_state(x, prev_state, reset)
