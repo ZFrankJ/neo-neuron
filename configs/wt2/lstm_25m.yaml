@@ -27,8 +27,8 @@ embed_weight_decay: 0.0
 grad_clip: 1.0
 
 tbptt_len: 128
-train_regime: random
-stream_state: false
+train_regime: streaming
+stream_state: true
 
 cosine: true
 warmup_epochs: 2

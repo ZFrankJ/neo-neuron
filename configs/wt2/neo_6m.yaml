@@ -13,7 +13,7 @@ dropout: 0.1
 tie_embeddings: true
 cell_type: cortical
 output_norm: none
-activation_id: id3
+activation_id: id4
 use_checkpoint: false
 use_compile: false
 vocab_size: 50257
@@ -31,8 +31,8 @@ embed_weight_decay: 0.0
 grad_clip: 1.0
 
 tbptt_len: 128
-train_regime: random
-stream_state: false
+train_regime: streaming
+stream_state: true
 
 cosine: true
 warmup_epochs: 2
