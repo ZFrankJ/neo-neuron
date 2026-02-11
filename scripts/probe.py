@@ -2,6 +2,7 @@
 """Probe neuron activations and gates."""
 
 import argparse
+import pickle
 import random
 from pathlib import Path
 
@@ -76,7 +77,24 @@ def main() -> None:
     device = backend.get_runtime_device(args.device)
     set_seed(int(args.seed))
 
-    ckpt = torch.load(args.checkpoint, map_location=device)
+    try:
+        # For trusted local checkpoints, read full payload explicitly.
+        ckpt = torch.load(args.checkpoint, map_location=device, weights_only=False)
+    except Exception as exc:
+        # Give a clear hint when a user passes an MLX-native checkpoint to torch probe.
+        try:
+            with Path(args.checkpoint).open("rb") as handle:
+                raw = pickle.load(handle)
+            if isinstance(raw, dict) and raw.get("backend") == "mlx":
+                raise ValueError(
+                    "This is an MLX checkpoint. Convert it first, then probe the converted torch checkpoint.\n"
+                    "Example:\n"
+                    "python3 scripts/convert_checkpoint.py --config <cfg> --input <mlx_ckpt> "
+                    "--output <torch_ckpt> --src-backend mlx --dst-backend torch"
+                ) from exc
+        except Exception:
+            pass
+        raise
     ckpt_cfg = ckpt.get("cfg")
     if isinstance(ckpt_cfg, dict) and ckpt_cfg:
         merged_cfg = dict(cfg)
