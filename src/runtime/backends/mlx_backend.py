@@ -798,6 +798,9 @@ def train_entry(
         global_step = int(ckpt.get("global_step", 0))
         best_val = float(ckpt.get("best_val", best_val))
         _log_line(f"Resumed from {resume_path} (epoch {start_epoch - 1}, global_step {global_step})")
+        # Avoid retaining full checkpoint payload (including optimizer state arrays).
+        del ckpt
+        _clear_memory()
 
     epochs = int(_cfg_get(cfg, "epochs", 1))
     grad_clip = _to_float(_cfg_get(cfg, "grad_clip", 1.0), 1.0)

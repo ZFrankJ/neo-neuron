@@ -1,5 +1,6 @@
 """Unified training loop for Neo models."""
 
+import gc
 import json
 import os
 from typing import Any, Dict, Optional, Tuple
@@ -160,6 +161,13 @@ def train_model(
         global_step = int(ckpt.get("global_step", 0))
         best_val = float(ckpt.get("best_val", best_val))
         log_line(f"Resumed from {resume_path} (epoch {start_epoch - 1}, global_step {global_step})")
+        # Avoid retaining a full checkpoint dict (model + optimizer states) in memory.
+        del ckpt
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        if torch.backends.mps.is_available():
+            torch.mps.empty_cache()
 
     epochs = int(_cfg_get(cfg, "epochs", 1))
     grad_clip = float(_cfg_get(cfg, "grad_clip", 1.0))
