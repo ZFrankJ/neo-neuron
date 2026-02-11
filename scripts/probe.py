@@ -2,7 +2,6 @@
 """Probe neuron activations and gates."""
 
 import argparse
-import pickle
 import random
 from pathlib import Path
 
@@ -61,6 +60,7 @@ def main() -> None:
         select_random_neurons,
         summarize_neuron_records,
     )
+    from src.runtime.checkpoint_compat import load_checkpoint_payload
     from src.utils import set_seed
 
     cfg_path = Path(args.config).expanduser().resolve()
@@ -77,24 +77,7 @@ def main() -> None:
     device = backend.get_runtime_device(args.device)
     set_seed(int(args.seed))
 
-    try:
-        # For trusted local checkpoints, read full payload explicitly.
-        ckpt = torch.load(args.checkpoint, map_location=device, weights_only=False)
-    except Exception as exc:
-        # Give a clear hint when a user passes an MLX-native checkpoint to torch probe.
-        try:
-            with Path(args.checkpoint).open("rb") as handle:
-                raw = pickle.load(handle)
-            if isinstance(raw, dict) and raw.get("backend") == "mlx":
-                raise ValueError(
-                    "This is an MLX checkpoint. Convert it first, then probe the converted torch checkpoint.\n"
-                    "Example:\n"
-                    "python3 scripts/convert_checkpoint.py --config <cfg> --input <mlx_ckpt> "
-                    "--output <torch_ckpt> --src-backend mlx --dst-backend torch"
-                ) from exc
-        except Exception:
-            pass
-        raise
+    ckpt = load_checkpoint_payload(args.checkpoint, map_location=device)
     ckpt_cfg = ckpt.get("cfg")
     if isinstance(ckpt_cfg, dict) and ckpt_cfg:
         merged_cfg = dict(cfg)
@@ -109,7 +92,7 @@ def main() -> None:
         raise ValueError("Transformer probing is not implemented.")
 
     model = build_model(cfg, model_name, backend_name=backend_name)
-    model.load_state_dict(ckpt["model_state_dict"])
+    backend.load_checkpoint_entry(args.checkpoint, model, device=device)
     model.to(device)
 
     idx = _make_probe_batch(val_ids, args.seq_len, args.batch_size, args.start).to(device)

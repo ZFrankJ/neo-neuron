@@ -25,13 +25,15 @@ try:
 except Exception:  # pragma: no cover - optional dependency
     psutil = None
 
+from ..checkpoint_compat import (
+    infer_checkpoint_backend,
+    infer_model_name_from_model,
+    load_checkpoint_payload,
+    map_model_state,
+    to_numpy_state_dict,
+)
+
 NAME = "mlx"
-
-
-class RestartEpoch(RuntimeError):
-    def __init__(self, resume_path: str):
-        super().__init__(f"Restart requested from {resume_path}")
-        self.resume_path = resume_path
 
 
 def _cfg_get(cfg: Any, key: str, default=None):
@@ -92,7 +94,10 @@ def _mem_report(tag: str = "") -> None:
         return
     rss = psutil.Process().memory_info().rss / (1024 ** 3)
     try:
-        active = mx.metal.get_active_memory() / (1024 ** 3)
+        if not hasattr(mx, "get_active_memory"):
+            _log_line(f"{tag} | RSS={rss:.2f} GB")
+            return
+        active = mx.get_active_memory() / (1024 ** 3)
         _log_line(f"{tag} | RSS={rss:.2f} GB | MLX={active:.2f} GB")
     except Exception:
         _log_line(f"{tag} | RSS={rss:.2f} GB")
@@ -684,6 +689,7 @@ def save_checkpoint_entry(
     best_val: Optional[float] = None,
 ) -> None:
     payload = {
+        "format": "neo_unified_checkpoint_v1",
         "backend": "mlx",
         "model_state_dict": _flatten_tree(model.parameters()),
         "epoch": int(epoch),
@@ -702,15 +708,28 @@ def save_checkpoint_entry(
 
 def load_checkpoint_entry(path: str | Path, model, optimizer=None, scheduler=None, device=None) -> Dict[str, Any]:
     del device
-    with Path(path).open("rb") as handle:
-        ckpt = pickle.load(handle)
-    if ckpt.get("backend") != "mlx":
-        raise ValueError(f"Checkpoint at {path} is not an MLX checkpoint.")
-    model.update(_unflatten_tree(ckpt["model_state_dict"]))
-    if optimizer is not None and ckpt.get("optimizer_state_dict") is not None:
-        optimizer.state = _unflatten_tree(ckpt["optimizer_state_dict"])
-    if scheduler is not None and ckpt.get("scheduler_state_dict") is not None:
-        scheduler.update(ckpt["scheduler_state_dict"])
+    ckpt = load_checkpoint_payload(path, map_location="cpu")
+    raw_state = ckpt.get("model_state_dict")
+    if not isinstance(raw_state, dict):
+        raise ValueError("Checkpoint missing 'model_state_dict' mapping.")
+
+    src_backend = infer_checkpoint_backend(ckpt)
+    model_name = infer_model_name_from_model(model)
+    dst_template = dict(tree_flatten(model.parameters()))
+    mapped_state, _ = map_model_state(
+        model_name=model_name,
+        src_backend=src_backend,
+        dst_backend="mlx",
+        src_state_np=to_numpy_state_dict(raw_state),
+        dst_template=dst_template,
+        cfg=ckpt.get("cfg", {}),
+    )
+    model.update(_unflatten_tree(mapped_state))
+    if src_backend == "mlx":
+        if optimizer is not None and ckpt.get("optimizer_state_dict") is not None:
+            optimizer.state = _unflatten_tree(ckpt["optimizer_state_dict"])
+        if scheduler is not None and ckpt.get("scheduler_state_dict") is not None:
+            scheduler.update(ckpt["scheduler_state_dict"])
     return ckpt
 
 
@@ -908,10 +927,6 @@ def train_entry(
                 "global_step": global_step,
             },
         )
-
-        if bool(_cfg_get(cfg, "restart_after_epoch", False)) and epoch < epochs:
-            _log_line(f"[Restart] Exiting after epoch {epoch} and restarting from {last_path}")
-            raise RestartEpoch(last_path)
 
     metrics: Dict[str, Optional[float]] = {"val_ppl": best_val}
     if test_np is not None:
