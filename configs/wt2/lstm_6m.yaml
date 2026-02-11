@@ -1,3 +1,4 @@
+backend: mlx
 # Params (approx): total 9.6M; recurrent 6.3M; embed+proj 3.3M.
 model_name: lstm
 dataset_name: wikitext

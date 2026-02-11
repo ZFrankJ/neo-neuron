@@ -1,3 +1,4 @@
+backend: mlx
 model_name: transformer
 dataset_name: wikitext
 dataset_config: wikitext-103-raw-v1

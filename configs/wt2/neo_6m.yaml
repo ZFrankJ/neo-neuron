@@ -1,3 +1,4 @@
+backend: mlx
 # Params (approx): total 9.7M; recurrent 6.3M; embed+proj 3.5M.
 model_name: neo
 dataset_name: wikitext

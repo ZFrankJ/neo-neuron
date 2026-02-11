@@ -1,3 +1,4 @@
+backend: mlx
 model_name: neo
 dataset_name: wikitext
 dataset_config: wikitext-103-raw-v1
@@ -11,8 +12,8 @@ n_layers: 2
 dropout: 0.1
 tie_embeddings: true
 cell_type: cortical
-output_norm: none
-activation_id: id4
+output_norm: rmsnorm
+activation_id: id5
 use_checkpoint: true
 use_compile: false
 vocab_size: 50257
