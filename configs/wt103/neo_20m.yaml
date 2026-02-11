@@ -12,7 +12,7 @@ n_layers: 2
 dropout: 0.1
 tie_embeddings: true
 cell_type: cortical
-output_norm: rmsnorm
+output_norm: none
 activation_id: id5
 use_checkpoint: true
 use_compile: false
