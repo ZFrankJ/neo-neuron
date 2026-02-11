@@ -8,7 +8,8 @@
 
 This repo is for demonstrating a new recurrent neuron founded by me. 
 
-## This repo is currently still in progress, please wait for training completed and results handled.
+# This repo is currently still in progress, please wait for training completed and results handled.
+
 
 ## Backend selection
 
@@ -36,7 +37,7 @@ python3 scripts/eval.py --config configs/wt103/neo_20m.yaml --checkpoint checkpo
 
 ## Full evaluation via PyTorch
 
-Yes, full evaluation is still available through the PyTorch backend (including PPL, GFLOPs/token via THOP, and activation sparsity).
+Full evaluation is still available through the PyTorch backend (including PPL, GFLOPs/token via THOP, and activation sparsity).
 
 Use:
 
