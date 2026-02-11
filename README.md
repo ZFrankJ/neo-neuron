@@ -28,4 +28,22 @@ python3 scripts/train.py --config configs/wt103/neo_20m.yaml --backend mlx
 python3 scripts/eval.py --config configs/wt103/neo_20m.yaml --checkpoint checkpoints/best_wt103_neo_20m.pt --backend mlx
 ```
 
-Note: probing is currently implemented for `torch` backend.
+## Current limitations
+
+- `probe.py` is currently implemented for `torch` backend only.
+- `mlx` backend evaluation currently reports perplexity, while GFLOPs/token and activation sparsity are marked unavailable.
+- Checkpoints are backend-specific (`torch` and `mlx` checkpoints are not cross-loadable).
+
+## Full evaluation via PyTorch
+
+Yes, full evaluation is still available through the PyTorch backend (including PPL, GFLOPs/token via THOP, and activation sparsity).
+
+Use:
+
+```bash
+python3 scripts/eval.py --config configs/wt103/neo_20m.yaml --checkpoint checkpoints/best_wt103_neo_20m.pt --backend torch
+python3 scripts/eval.py --config configs/wt103/lstm_20m.yaml --checkpoint checkpoints/best_wt103_lstm_20m.pt --backend torch
+python3 scripts/eval.py --config configs/wt103/transformer_20m.yaml --checkpoint checkpoints/best_wt103_transformer_20m.pt --backend torch
+```
+
+For probing, use `--backend torch` as well.
