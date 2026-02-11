@@ -6,3 +6,4 @@ numpy
 psutil
 matplotlib
 thop
+mlx>=0.30.0; platform_system=="Darwin" and platform_machine=="arm64"

@@ -18,6 +18,9 @@ packages as needed.
 - matplotlib (probe plots)
 - thop (FLOPs profiling)
 
+## Optional backend
+- mlx (Apple Silicon / macOS only; enables `backend: mlx`)
+
 ## Install
 ```
 pip install -r requirements.txt

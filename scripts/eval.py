@@ -4,7 +4,15 @@
 import argparse
 from pathlib import Path
 
-from _common import build_data, build_model, ensure_repo_root_on_path, infer_model_name, load_yaml
+from _common import (
+    build_data,
+    build_model,
+    ensure_repo_root_on_path,
+    get_backend_api,
+    infer_model_name,
+    load_yaml,
+    resolve_backend_name,
+)
 
 
 def main() -> None:
@@ -13,32 +21,32 @@ def main() -> None:
     parser.add_argument("--checkpoint", required=True, help="Checkpoint path")
     parser.add_argument("--split", default="test", choices=["val", "test"], help="Dataset split")
     parser.add_argument("--device", default=None, help="cpu | cuda | mps | auto")
+    parser.add_argument("--backend", default=None, help="torch | mlx (defaults to config/backend or torch)")
     args = parser.parse_args()
 
     ensure_repo_root_on_path()
     from src.data import build_tokenizer
-    from src.train.eval import evaluate_metrics
-    from src.train import load_checkpoint
-    from src.utils import get_device, set_seed
 
     cfg_path = Path(args.config).expanduser().resolve()
     cfg = load_yaml(cfg_path)
+    backend_name = resolve_backend_name(cfg, explicit=args.backend)
+    backend = get_backend_api(backend_name)
+    cfg["backend"] = backend_name
 
-    device = get_device(args.device) if args.device and args.device != "auto" else get_device()
+    device = backend.get_runtime_device(args.device)
     seed = cfg.get("seed")
     if seed is not None:
-        set_seed(int(seed))
+        backend.seed_all(int(seed))
 
     tokenizer = build_tokenizer()
     train_ids, val_ids, test_ids = build_data(cfg, tokenizer)
 
     model_name = infer_model_name(cfg_path, cfg)
-    model = build_model(cfg, model_name)
-    load_checkpoint(args.checkpoint, model, device=device)
-    model.to(device)
+    model = build_model(cfg, model_name, backend_name=backend_name)
+    backend.load_checkpoint_entry(args.checkpoint, model, device=device)
 
     ids = val_ids if args.split == "val" else test_ids
-    metrics = evaluate_metrics(model, ids, cfg, device)
+    metrics = backend.eval_metrics_entry(model, ids, cfg, device)
     print(f"{args.split} PPL: {metrics['ppl']:.2f}")
     if metrics.get("gflops_per_token") is not None:
         print(f"Measured GFLOPs/token (THOP): {metrics['gflops_per_token']:.3f}")

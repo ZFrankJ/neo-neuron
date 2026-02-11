@@ -11,8 +11,10 @@ from _common import (
     build_data,
     build_model,
     ensure_repo_root_on_path,
+    get_backend_api,
     infer_model_name,
     load_yaml,
+    resolve_backend_name,
     save_json,
 )
 
@@ -45,6 +47,7 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=0, help="Random seed")
     parser.add_argument("--start", type=int, default=0, help="Start offset in validation set")
     parser.add_argument("--device", default=None, help="cpu | cuda | mps | auto")
+    parser.add_argument("--backend", default=None, help="torch | mlx (defaults to config/backend or torch)")
     parser.add_argument("--save-plots", action="store_true", help="Save plots without displaying them")
     args = parser.parse_args()
 
@@ -57,13 +60,20 @@ def main() -> None:
         select_random_neurons,
         summarize_neuron_records,
     )
-    from src.train import load_checkpoint
-    from src.utils import get_device, set_seed
+    from src.utils import set_seed
 
     cfg_path = Path(args.config).expanduser().resolve()
     cfg = load_yaml(cfg_path)
+    backend_name = resolve_backend_name(cfg, explicit=args.backend)
+    backend = get_backend_api(backend_name)
+    cfg["backend"] = backend_name
 
-    device = get_device(args.device) if args.device and args.device != "auto" else get_device()
+    if not backend.supports_probe():
+        raise ValueError(
+            f"Probe is currently implemented for torch backend only. Got backend='{backend_name}'."
+        )
+
+    device = backend.get_runtime_device(args.device)
     set_seed(int(args.seed))
 
     ckpt = torch.load(args.checkpoint, map_location=device)
@@ -80,7 +90,7 @@ def main() -> None:
     if model_name == "transformer":
         raise ValueError("Transformer probing is not implemented.")
 
-    model = build_model(cfg, model_name)
+    model = build_model(cfg, model_name, backend_name=backend_name)
     model.load_state_dict(ckpt["model_state_dict"])
     model.to(device)
 

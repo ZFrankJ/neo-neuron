@@ -1,6 +1,7 @@
 dataset_name: wikitext
 vocab_size: 50257
 seed: 42
+backend: torch
 weight_decay: 1e-2
 grad_clip: 1.0
 cosine: true
