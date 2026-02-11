@@ -115,12 +115,6 @@ def _streaming_batches(ids: torch.Tensor, block_size: int, batch_size: int, devi
         yield x.t().contiguous(), y.t().contiguous(), cur_B
 
 
-class RestartEpoch(RuntimeError):
-    def __init__(self, resume_path: str):
-        super().__init__(f"Restart requested from {resume_path}")
-        self.resume_path = resume_path
-
-
 def train_model(
     model: torch.nn.Module,
     cfg: Any,
@@ -272,10 +266,6 @@ def train_model(
                 "global_step": global_step,
             },
         )
-
-        if _cfg_get(cfg, "restart_after_epoch", False) and epoch < epochs:
-            log_line(f"[Restart] Exiting after epoch {epoch} and restarting from {last_path}")
-            raise RestartEpoch(last_path)
 
     metrics = {"val_ppl": best_val}
     if test_ids is not None:

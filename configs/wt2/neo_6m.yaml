@@ -44,5 +44,3 @@ save_dir: checkpoints
 run_tag: wt2_neo_6m
 save_each_epoch: true
 resume_path: ""
-restart_after_epoch: false
-restart_done: false

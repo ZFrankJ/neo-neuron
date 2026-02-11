@@ -42,5 +42,3 @@ mem_report_interval: 1000
 mem_clear_interval: 200
 save_each_epoch: true
 resume_path: ""
-restart_after_epoch: true
-restart_done: false

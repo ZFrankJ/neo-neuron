@@ -10,7 +10,7 @@ import torch
 from ...models import LSTMLM, NeoLM, TransformerLM
 from ...train import load_checkpoint, save_checkpoint
 from ...train.eval import evaluate_metrics
-from ...train.trainer import RestartEpoch, train_model
+from ...train.trainer import train_model
 from ...utils import get_device, set_seed
 
 NAME = "torch"

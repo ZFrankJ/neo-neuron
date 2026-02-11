@@ -2,7 +2,6 @@
 """Train a model from a config."""
 
 import argparse
-import os
 import sys
 import warnings
 from pathlib import Path
@@ -74,35 +73,7 @@ def main() -> None:
 
     tokenizer = build_tokenizer()
     train_ids, val_ids, test_ids = build_data(cfg, tokenizer)
-    try:
-        metrics = backend.train_entry(model, cfg, train_ids, val_ids, test_ids=test_ids, device=device)
-    except backend.RestartEpoch as exc:
-        clean_args = []
-        skip_next = False
-        for arg in sys.argv[1:]:
-            if skip_next:
-                skip_next = False
-                continue
-            if arg == "--resume":
-                skip_next = True
-                continue
-            if arg == "--backend":
-                skip_next = True
-                continue
-            if arg == "--run-dir":
-                skip_next = True
-                continue
-            clean_args.append(arg)
-        restart_args = [sys.executable, sys.argv[0]] + clean_args + [
-            "--backend",
-            backend_name,
-            "--resume",
-            exc.resume_path,
-            "--run-dir",
-            cfg["run_dir"],
-        ]
-        print(f"[Restart] Relaunching: {' '.join(restart_args)}", flush=True)
-        os.execv(sys.executable, restart_args)
+    metrics = backend.train_entry(model, cfg, train_ids, val_ids, test_ids=test_ids, device=device)
     metrics["provenance"] = build_provenance(cfg, str(device), param_count, sys.argv, backend=backend_name)
 
     save_config_snapshot(run_dir, cfg)
