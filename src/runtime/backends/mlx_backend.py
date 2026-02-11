@@ -108,7 +108,11 @@ def _maybe_report_memory(step: int, interval: Optional[int]) -> None:
 def _clear_memory() -> None:
     gc.collect()
     try:
-        mx.metal.clear_cache()
+        # New MLX API; keep compatibility with older releases.
+        if hasattr(mx, "clear_cache"):
+            mx.clear_cache()
+        else:
+            mx.metal.clear_cache()
     except Exception:
         pass
 
