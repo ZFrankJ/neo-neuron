@@ -33,7 +33,8 @@ python3 scripts/eval.py --config configs/wt103/neo_20m.yaml --checkpoint checkpo
 
 - `probe.py` is currently implemented for `torch` backend only.
 - `mlx` backend evaluation currently reports perplexity, while GFLOPs/token and activation sparsity are marked unavailable.
-- Checkpoints are backend-specific (`torch` and `mlx` checkpoints are not cross-loadable).
+- Checkpoints are stored in a unified model-state format and can be loaded across `torch` and `mlx` for model weights.
+- Optimizer/scheduler state remains backend-native and is restored only when backend matches.
 
 ## Full evaluation via PyTorch
 
