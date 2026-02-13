@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
 
+from .activations import fused_cortical_step
 from .neo_cell import BaseCorticalNeuron, CorticalNeuron
 
 CELL_REGISTRY: Dict[str, Type[BaseCorticalNeuron]] = {
@@ -108,3 +109,40 @@ class CorticalRecurrentStack(nn.Module):
             for i, layer in enumerate(self.layers):
                 layer.prev_state = new_state[i].detach()
         return y, new_state
+
+    def _forward_layerwise_train(self, x: torch.Tensor, state: Optional[torch.Tensor] = None):
+        # Faster training path: fuse input-side affine for each layer over all timesteps.
+        T, B, D = x.shape
+        prev_states = self._resolve_prev_states(x, state)
+        layer_input = x
+
+        for li, layer in enumerate(self.layers):
+            s_prev = prev_states[li]
+            if s_prev is None:
+                # Mirror layer state bootstrap semantics.
+                s_prev = layer._resolve_prev_state(layer_input[0], prev_state=None, reset=True)
+
+            x_norm = self.pre_norms[li](layer_input)
+            fg = layer.fg_linear(x_norm.reshape(T * B, D)).reshape(T, B, 2 * D)
+
+            layer_output = x_norm.new_empty((T, B, D))
+            for t in range(T):
+                f_x_raw, g_x_raw = fg[t].chunk(2, dim=-1)
+                out, s_prev = fused_cortical_step(f_x_raw, s_prev, g_x_raw, layer.activation_id)
+                layer_output[t] = out
+
+            prev_states[li] = s_prev
+            layer_input = layer_output
+
+        y = self.stack_norm(layer_input)
+        new_state = torch.stack(prev_states, dim=0)
+        if state is None:
+            for i, layer in enumerate(self.layers):
+                layer.prev_state = new_state[i].detach()
+        return y, new_state
+
+    def forward(self, x: torch.Tensor, state: Optional[torch.Tensor] = None):
+        # Keep stepwise path for eval/probing hooks and checkpoint mode.
+        if self.training and not self.use_checkpoint:
+            return self._forward_layerwise_train(x, state)
+        return self._forward_stepwise(x, state)
