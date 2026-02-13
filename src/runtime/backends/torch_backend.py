@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Dict, Optional
+import sys
 
 import torch
 
@@ -22,6 +23,26 @@ def _require(cfg: Dict[str, Any], key: str) -> Any:
     return cfg[key]
 
 
+def _resolve_recurrent_norm(cfg: Dict[str, Any]) -> str:
+    if cfg.get("recurrent_norm") not in (None, ""):
+        return str(cfg["recurrent_norm"])
+    if cfg.get("output_norm") not in (None, ""):
+        print(
+            "Warning: 'output_norm' is deprecated; use 'recurrent_norm'. "
+            "Falling back to 'output_norm' for compatibility.",
+            file=sys.stderr,
+            flush=True,
+        )
+        return str(cfg["output_norm"])
+    print(
+        "Warning: neither 'recurrent_norm' nor deprecated 'output_norm' is set; "
+        "defaulting to 'layernorm'.",
+        file=sys.stderr,
+        flush=True,
+    )
+    return "layernorm"
+
+
 def build_model(cfg: Dict[str, Any], model_name: str):
     vocab_size = int(_require(cfg, "vocab_size"))
     d_model = int(_require(cfg, "d_model"))
@@ -29,6 +50,7 @@ def build_model(cfg: Dict[str, Any], model_name: str):
     n_layers = int(cfg.get("n_layers", 1))
     dropout = float(cfg.get("dropout", 0.0))
     tie_embeddings = bool(cfg.get("tie_embeddings", True))
+    recurrent_norm = _resolve_recurrent_norm(cfg)
 
     if model_name == "lstm":
         return LSTMLM(
@@ -38,7 +60,7 @@ def build_model(cfg: Dict[str, Any], model_name: str):
             n_layers=n_layers,
             dropout=dropout,
             tie_embeddings=tie_embeddings,
-            output_norm=str(cfg.get("output_norm", "layernorm")),
+            output_norm=recurrent_norm,
         )
 
     if model_name == "neo":
@@ -53,7 +75,7 @@ def build_model(cfg: Dict[str, Any], model_name: str):
             dropout=dropout,
             tie_embeddings=tie_embeddings,
             cell_type=str(cfg.get("cell_type", "cortical")),
-            output_norm=str(cfg.get("output_norm", "layernorm")),
+            output_norm=recurrent_norm,
             cell_kwargs=cell_kwargs,
             use_checkpoint=bool(cfg.get("use_checkpoint", False)),
         )
