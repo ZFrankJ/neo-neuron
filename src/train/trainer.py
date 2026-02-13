@@ -103,6 +103,21 @@ def _detach_state(state):
     return state.detach()
 
 
+def _state_batch_size(state) -> Optional[int]:
+    if state is None:
+        return None
+    if isinstance(state, tuple):
+        if not state:
+            return None
+        first = state[0]
+        if hasattr(first, "size") and first.dim() >= 2:
+            return int(first.size(1))
+        return None
+    if hasattr(state, "size") and state.dim() >= 2:
+        return int(state.size(1))
+    return None
+
+
 def _streaming_batches(ids: torch.Tensor, block_size: int, batch_size: int, device: torch.device):
     n_tokens = ids.size(0)
     step = block_size * batch_size
@@ -131,10 +146,20 @@ def train_model(
     model.to(device)
     log_line(f"Using device: {device}")
 
+    # MPS + recurrent checkpointing is prone to Metal command-buffer faults.
+    # Disable it automatically and use the recurrent fast path instead.
+    recurrent = getattr(model, "recurrent", None)
+    if device.type == "mps" and recurrent is not None and bool(getattr(recurrent, "use_checkpoint", False)):
+        recurrent.use_checkpoint = False
+        log_line("Warning: disabled recurrent checkpoint on MPS for stability (fast path enabled).")
+
     _log_model_info(model, cfg)
 
     if _cfg_get(cfg, "use_compile", False) and hasattr(torch, "compile"):
-        model = torch.compile(model)  # type: ignore[assignment]
+        if device.type == "mps":
+            log_line("Warning: torch.compile is disabled on MPS for stability.")
+        else:
+            model = torch.compile(model)  # type: ignore[assignment]
 
     optimizer = build_optimizer(model, cfg)
     batch_size = int(_cfg_get(cfg, "batch_size", 1))
@@ -199,7 +224,7 @@ def train_model(
             optimizer.zero_grad(set_to_none=True)
 
             if _is_recurrent_model(model):
-                if not stream_state or state is None or (hasattr(state, "size") and state.size(1) != cur_B):
+                if not stream_state or state is None or (_state_batch_size(state) != cur_B):
                     state = init_state_for_model(model, cur_B, device)
             else:
                 state = None
