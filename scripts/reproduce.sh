@@ -91,16 +91,7 @@ probe_wt103() {
 cd "$ROOT_DIR"
 
 # WT-103 in requested order:
-# 1) two 10M models
-run_dir_wt103_neo_10m="$(run_train configs/wt103/neo_10m.yaml)"
-eval_best configs/wt103/neo_10m.yaml
-probe_wt103 configs/wt103/neo_10m.yaml "$run_dir_wt103_neo_10m"
-
-run_dir_wt103_lstm_10m="$(run_train configs/wt103/lstm_10m.yaml)"
-eval_best configs/wt103/lstm_10m.yaml
-probe_wt103 configs/wt103/lstm_10m.yaml "$run_dir_wt103_lstm_10m"
-
-# 2) three 20M models
+# 1) two 20M models
 run_dir_wt103_neo_20m="$(run_train configs/wt103/neo_20m.yaml)"
 eval_best configs/wt103/neo_20m.yaml
 probe_wt103 configs/wt103/neo_20m.yaml "$run_dir_wt103_neo_20m"
@@ -109,10 +100,7 @@ run_dir_wt103_lstm_20m="$(run_train configs/wt103/lstm_20m.yaml)"
 eval_best configs/wt103/lstm_20m.yaml
 probe_wt103 configs/wt103/lstm_20m.yaml "$run_dir_wt103_lstm_20m"
 
-run_dir_wt103_tfm_20m="$(run_train configs/wt103/transformer_20m.yaml)"
-eval_best configs/wt103/transformer_20m.yaml
-
-# 3) two 40M models
+# 2) three 40M models
 run_dir_wt103_neo_40m="$(run_train configs/wt103/neo_40m.yaml)"
 eval_best configs/wt103/neo_40m.yaml
 probe_wt103 configs/wt103/neo_40m.yaml "$run_dir_wt103_neo_40m"
@@ -120,5 +108,17 @@ probe_wt103 configs/wt103/neo_40m.yaml "$run_dir_wt103_neo_40m"
 run_dir_wt103_lstm_40m="$(run_train configs/wt103/lstm_40m.yaml)"
 eval_best configs/wt103/lstm_40m.yaml
 probe_wt103 configs/wt103/lstm_40m.yaml "$run_dir_wt103_lstm_40m"
+
+run_dir_wt103_tfm_40m="$(run_train configs/wt103/transformer_40m.yaml)"
+eval_best configs/wt103/transformer_40m.yaml
+
+# 3) two 80M models
+run_dir_wt103_neo_80m="$(run_train configs/wt103/neo_80m.yaml)"
+eval_best configs/wt103/neo_80m.yaml
+probe_wt103 configs/wt103/neo_80m.yaml "$run_dir_wt103_neo_80m"
+
+run_dir_wt103_lstm_80m="$(run_train configs/wt103/lstm_80m.yaml)"
+eval_best configs/wt103/lstm_80m.yaml
+probe_wt103 configs/wt103/lstm_80m.yaml "$run_dir_wt103_lstm_80m"
 
 python3 scripts/summarize_runs.py --root runs --out experiments/overall_summary

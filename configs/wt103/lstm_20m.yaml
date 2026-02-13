@@ -5,15 +5,13 @@ dataset_config: wikitext-103-raw-v1
 train_split: train
 val_split: validation
 test_split: test
-
-d_model: 704
+d_model: 788
 d_embed: 192
-n_layers: 4
+n_layers: 2
 dropout: 0.1
 tie_embeddings: true
 recurrent_norm: rmsnorm
-vocab_size: 20000
-
+vocab_size: 50527
 block_size: 256
 batch_size: 20
 epochs: 12
@@ -25,19 +23,16 @@ proj_weight_decay: 1e-3
 recurrent_weight_decay: 0.0
 embed_weight_decay: 0.0
 grad_clip: 1.0
-
 tbptt_len: 256
 train_regime: streaming
 stream_state: true
-
 cosine: true
 warmup_epochs: 2
 min_lr: 3e-5
-
 seed: 42
 save_dir: checkpoints
 run_tag: wt103_lstm_20m
 mem_report_interval: 10000
 mem_clear_interval: 200
 save_each_epoch: true
-resume_path: ""
+resume_path: ''
