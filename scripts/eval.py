@@ -12,6 +12,7 @@ from _common import (
     infer_model_name,
     load_yaml,
     resolve_backend_name,
+    validate_token_ids_against_vocab,
 )
 
 
@@ -40,6 +41,7 @@ def main() -> None:
 
     tokenizer = build_tokenizer()
     train_ids, val_ids, test_ids = build_data(cfg, tokenizer)
+    validate_token_ids_against_vocab(cfg, tokenizer, train_ids, val_ids, test_ids, context="eval")
 
     model_name = infer_model_name(cfg_path, cfg)
     model = build_model(cfg, model_name, backend_name=backend_name)

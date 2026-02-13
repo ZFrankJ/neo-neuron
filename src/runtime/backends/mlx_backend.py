@@ -560,6 +560,25 @@ def _to_numpy_ids(ids) -> np.ndarray:
     return arr
 
 
+def _validate_token_id_range(cfg: Any, *arrays: np.ndarray, context: str = "mlx") -> None:
+    vocab_size = int(_cfg_get(cfg, "vocab_size", 0) or 0)
+    if vocab_size <= 0:
+        raise ValueError(f"[{context}] Invalid vocab_size={vocab_size}. Set a positive vocab_size in config.")
+    max_id = -1
+    for arr in arrays:
+        if arr is None or arr.size == 0:
+            continue
+        cur = int(arr.max())
+        if cur > max_id:
+            max_id = cur
+    if max_id >= vocab_size:
+        raise ValueError(
+            f"[{context}] token id range exceeds config vocab_size: max_token_id={max_id}, "
+            f"requires vocab_size >= {max_id + 1}, but config has vocab_size={vocab_size}. "
+            "This can cause embedding OOB and Metal/MLX crashes."
+        )
+
+
 def _random_batch(ids: np.ndarray, batch_size: int, block_size: int) -> Tuple[mx.array, mx.array]:
     n_tokens = int(ids.shape[0])
     max_start = max(1, n_tokens - block_size - 1)
@@ -794,6 +813,7 @@ def _eval_perplexity(model, ids: np.ndarray, cfg: Any) -> float:
 def eval_metrics_entry(model, ids, cfg: Any, device=None):
     del device
     ids_np = _to_numpy_ids(ids)
+    _validate_token_id_range(cfg, ids_np, context="mlx_eval")
     ppl = _eval_perplexity(model, ids_np, cfg)
     return {"ppl": ppl, "act_sparsity": None, "gflops_per_token": None}
 
@@ -821,6 +841,7 @@ def train_entry(
     train_np = _to_numpy_ids(train_ids)
     val_np = _to_numpy_ids(val_ids)
     test_np = _to_numpy_ids(test_ids) if test_ids is not None else None
+    _validate_token_id_range(cfg, train_np, val_np, test_np, context="mlx_train")
 
     lr = _to_float(_cfg_get(cfg, "lr", 3e-4), 3e-4)
     betas = _to_betas(_cfg_get(cfg, "betas", (0.9, 0.95)), (0.9, 0.95))

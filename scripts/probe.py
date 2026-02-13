@@ -16,6 +16,7 @@ from _common import (
     load_yaml,
     resolve_backend_name,
     save_json,
+    validate_token_ids_against_vocab,
 )
 
 
@@ -85,7 +86,8 @@ def main() -> None:
         cfg = merged_cfg
 
     tokenizer = build_tokenizer()
-    _, val_ids, _ = build_data(cfg, tokenizer)
+    train_ids, val_ids, test_ids = build_data(cfg, tokenizer)
+    validate_token_ids_against_vocab(cfg, tokenizer, train_ids, val_ids, test_ids, context="probe")
 
     model_name = infer_model_name(cfg_path, cfg)
     if model_name == "transformer":

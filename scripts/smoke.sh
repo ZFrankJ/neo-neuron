@@ -60,7 +60,7 @@ with out.open("w", encoding="utf-8") as handle:
     yaml.safe_dump(cfg, handle, sort_keys=False)
 PY
 
-  python3 scripts/train.py --config "$TMP_CFG" --device "$DEVICE" | tee "$LOG_PATH"
+  python3 scripts/train.py --config "$TMP_CFG" --backend torch --device "$DEVICE" | tee "$LOG_PATH"
 
   RUN_DIR="$(sed -n 's/^Run artifacts saved to //p' "$LOG_PATH" | tail -n1)"
   if [[ -z "$RUN_DIR" ]]; then
@@ -78,7 +78,7 @@ print(cfg.get("save_dir", "checkpoints"))
 PY
 )"
 
-  python3 scripts/eval.py --config "$TMP_CFG" --checkpoint "$SAVE_DIR/best_smoke.pt" --split test --device "$DEVICE"
+  python3 scripts/eval.py --config "$TMP_CFG" --backend torch --checkpoint "$SAVE_DIR/best_smoke.pt" --split test --device "$DEVICE"
 
   python3 scripts/probe.py \
     --config "$TMP_CFG" \

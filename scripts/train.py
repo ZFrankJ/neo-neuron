@@ -19,6 +19,7 @@ from _common import (
     resolve_run_dir,
     save_config_snapshot,
     save_metrics,
+    validate_token_ids_against_vocab,
 )
 
 
@@ -73,6 +74,7 @@ def main() -> None:
 
     tokenizer = build_tokenizer()
     train_ids, val_ids, test_ids = build_data(cfg, tokenizer)
+    validate_token_ids_against_vocab(cfg, tokenizer, train_ids, val_ids, test_ids, context="train")
     metrics = backend.train_entry(model, cfg, train_ids, val_ids, test_ids=test_ids, device=device)
     metrics["provenance"] = build_provenance(cfg, str(device), param_count, sys.argv, backend=backend_name)
 

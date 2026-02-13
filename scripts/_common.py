@@ -164,3 +164,32 @@ def build_provenance(
         "param_count": param_count,
         "seed": cfg.get("seed"),
     }
+
+
+def validate_token_ids_against_vocab(cfg: Dict[str, Any], tokenizer, *splits, context: str = "run") -> None:
+    vocab_size = int(cfg.get("vocab_size", 0) or 0)
+    if vocab_size <= 0:
+        raise ValueError(f"Invalid vocab_size={vocab_size}. Set a positive vocab_size in config.")
+
+    max_id = -1
+    for split in splits:
+        if split is None:
+            continue
+        if hasattr(split, "numel") and split.numel() == 0:  # torch tensor
+            continue
+        if hasattr(split, "size") and not callable(split.size) and split.size == 0:  # numpy array
+            continue
+        if hasattr(split, "max"):
+            cur = int(split.max().item() if hasattr(split.max(), "item") else split.max())
+            if cur > max_id:
+                max_id = cur
+
+    if max_id >= vocab_size:
+        tok_name = getattr(tokenizer, "name_or_path", "tokenizer")
+        tok_vocab = getattr(tokenizer, "vocab_size", None)
+        hint = f"Tokenizer '{tok_name}' vocab_size={tok_vocab}" if tok_vocab is not None else f"Tokenizer '{tok_name}'"
+        raise ValueError(
+            f"[{context}] token id range exceeds config vocab_size: max_token_id={max_id}, "
+            f"requires vocab_size >= {max_id + 1}, but config has vocab_size={vocab_size}. "
+            f"{hint}. This can cause embedding OOB and backend crashes on Metal/MLX."
+        )
