@@ -82,6 +82,7 @@ PY
 
   python3 scripts/probe.py \
     --config "$TMP_CFG" \
+    --backend torch \
     --checkpoint "$SAVE_DIR/best_smoke.pt" \
     --out-dir "$RUN_DIR/probe" \
     --seq-len 64 \

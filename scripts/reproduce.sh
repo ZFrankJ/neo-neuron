@@ -51,6 +51,7 @@ probe_wt103() {
 
   python3 scripts/probe.py \
     --config "$cfg_path" \
+    --backend torch \
     --checkpoint "$save_dir/epoch_01_${run_tag}.pt" \
     --out-dir "$run_dir/probe/epoch01" \
     --seq-len 1024 \
@@ -61,6 +62,7 @@ probe_wt103() {
 
   python3 scripts/probe.py \
     --config "$cfg_path" \
+    --backend torch \
     --checkpoint "$save_dir/best_${run_tag}.pt" \
     --out-dir "$run_dir/probe/best" \
     --seq-len 1024 \
@@ -71,6 +73,7 @@ probe_wt103() {
 
   python3 scripts/probe.py \
     --config "$cfg_path" \
+    --backend torch \
     --checkpoint "$save_dir/last_${run_tag}.pt" \
     --out-dir "$run_dir/probe/last" \
     --seq-len 1024 \
