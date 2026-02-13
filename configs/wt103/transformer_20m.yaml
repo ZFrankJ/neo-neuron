@@ -6,14 +6,14 @@ train_split: train
 val_split: validation
 test_split: test
 
-d_model: 332
-d_embed: 256
-n_layers: 2
+d_model: 444
+d_embed: 192
+n_layers: 4
 n_heads: 4
 ff_mult: 5
 dropout: 0.1
 tie_embeddings: true
-vocab_size: 50257
+vocab_size: 20000
 
 block_size: 256
 batch_size: 20

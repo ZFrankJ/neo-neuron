@@ -6,17 +6,17 @@ train_split: train
 val_split: validation
 test_split: test
 
-d_model: 1268
-d_embed: 256
-n_layers: 2
+d_model: 1396
+d_embed: 192
+n_layers: 4
 dropout: 0.1
 tie_embeddings: true
 cell_type: cortical
-output_norm: none
+output_norm: rmsnorm
 activation_id: id5
 use_checkpoint: true
 use_compile: false
-vocab_size: 50257
+vocab_size: 20000
 
 block_size: 256
 batch_size: 20
