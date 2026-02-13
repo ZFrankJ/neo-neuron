@@ -146,20 +146,10 @@ def train_model(
     model.to(device)
     log_line(f"Using device: {device}")
 
-    # MPS + recurrent checkpointing is prone to Metal command-buffer faults.
-    # Disable it automatically and use the recurrent fast path instead.
-    recurrent = getattr(model, "recurrent", None)
-    if device.type == "mps" and recurrent is not None and bool(getattr(recurrent, "use_checkpoint", False)):
-        recurrent.use_checkpoint = False
-        log_line("Warning: disabled recurrent checkpoint on MPS for stability (fast path enabled).")
-
     _log_model_info(model, cfg)
 
     if _cfg_get(cfg, "use_compile", False) and hasattr(torch, "compile"):
-        if device.type == "mps":
-            log_line("Warning: torch.compile is disabled on MPS for stability.")
-        else:
-            model = torch.compile(model)  # type: ignore[assignment]
+        model = torch.compile(model)  # type: ignore[assignment]
 
     optimizer = build_optimizer(model, cfg)
     batch_size = int(_cfg_get(cfg, "batch_size", 1))
