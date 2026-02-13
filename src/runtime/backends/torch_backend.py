@@ -43,7 +43,6 @@ def build_model(cfg: Dict[str, Any], model_name: str):
 
     if model_name == "neo":
         cell_kwargs = {
-            "output_norm": str(cfg.get("output_norm", "layernorm")),
             "activation_id": cfg.get("activation_id", "id3"),
         }
         return NeoLM(
@@ -54,6 +53,7 @@ def build_model(cfg: Dict[str, Any], model_name: str):
             dropout=dropout,
             tie_embeddings=tie_embeddings,
             cell_type=str(cfg.get("cell_type", "cortical")),
+            output_norm=str(cfg.get("output_norm", "layernorm")),
             cell_kwargs=cell_kwargs,
             use_checkpoint=bool(cfg.get("use_checkpoint", False)),
         )

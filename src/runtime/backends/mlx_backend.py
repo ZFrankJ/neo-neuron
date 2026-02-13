@@ -157,7 +157,9 @@ def _param_breakdown(model_name: str, model) -> Dict[str, int]:
         if model_name == "neo" and "recurrent." in name:
             recurrent += n
             continue
-        if model_name == "lstm" and "lstm_layers." in name:
+        if model_name == "lstm" and (
+            "lstm_layers." in name or name.startswith("pre_norms.") or name.startswith("stack_norm.")
+        ):
             recurrent += n
             continue
         if model_name == "transformer" and "encoder." in name:
@@ -218,10 +220,9 @@ def _build_output_norm(norm_type: str, dims: int) -> mxnn.Module:
 
 
 class MlxCorticalNeuron(mxnn.Module):
-    def __init__(self, input_dim: int, output_dim: int, output_norm: str = "layernorm", activation_id="id3"):
+    def __init__(self, input_dim: int, output_dim: int, activation_id="id3"):
         super().__init__()
         self.fg_linear = mxnn.Linear(input_dim, 2 * output_dim)
-        self.out_norm = _build_output_norm(output_norm, output_dim)
         self.activation_id = _parse_activation_id(activation_id)
 
     def __call__(self, x: mx.array, prev_state: mx.array):
@@ -229,15 +230,20 @@ class MlxCorticalNeuron(mxnn.Module):
         f_x_raw, g_x_raw = mx.split(fg, 2, axis=-1)
         hidden = prev_state + f_x_raw
         state = _cortical_activation(hidden, self.activation_id)
-        output = self.out_norm(state * g_x_raw)
+        output = state * g_x_raw
         aux = None if self.training else {"f_x_raw": f_x_raw, "g_x_raw": g_x_raw}
         return output, state, aux
 
 
 class MlxCorticalRecurrentStack(mxnn.Module):
-    def __init__(self, d_model: int, n_layers: int, cell_kwargs: Dict[str, Any]):
+    def __init__(self, d_model: int, n_layers: int, cell_kwargs: Dict[str, Any], output_norm: str = "layernorm"):
         super().__init__()
+        cell_kwargs = dict(cell_kwargs or {})
+        # Norm is now handled at stack level (pre-layer + final norm), not in the cell.
+        cell_kwargs.pop("output_norm", None)
         self.layers = [MlxCorticalNeuron(d_model, d_model, **cell_kwargs) for _ in range(n_layers)]
+        self.pre_norms = [_build_output_norm(output_norm, d_model) for _ in range(n_layers)]
+        self.stack_norm = _build_output_norm(output_norm, d_model)
         self.n_layers = int(n_layers)
         self.d_model = int(d_model)
 
@@ -253,8 +259,10 @@ class MlxCorticalRecurrentStack(mxnn.Module):
         for ti in range(t):
             h = x[ti]
             for li, layer in enumerate(self.layers):
-                h, ns, _ = layer(h, states[li])
+                h_norm = self.pre_norms[li](h)
+                h, ns, _ = layer(h_norm, states[li])
                 states[li] = ns
+            h = self.stack_norm(h)
             ys.append(h)
         y = mx.stack(ys, axis=0)
         new_state = mx.stack(states, axis=0)
@@ -271,6 +279,7 @@ class MlxNeoLM(mxnn.Module):
         dropout: float,
         tie_embeddings: bool,
         cell_kwargs: Dict[str, Any],
+        output_norm: str = "layernorm",
     ):
         super().__init__()
         self.vocab_size = int(vocab_size)
@@ -281,7 +290,7 @@ class MlxNeoLM(mxnn.Module):
 
         self.emb = mxnn.Embedding(vocab_size, d_embed)
         self.in_proj = mxnn.Linear(d_embed, d_model) if d_embed != d_model else mxnn.Identity()
-        self.recurrent = MlxCorticalRecurrentStack(d_model, n_layers, cell_kwargs)
+        self.recurrent = MlxCorticalRecurrentStack(d_model, n_layers, cell_kwargs, output_norm=output_norm)
         self.drop = mxnn.Dropout(dropout)
         self.out_proj = mxnn.Linear(d_model, d_embed) if d_embed != d_model else mxnn.Identity()
         if self.tie_embeddings:
@@ -329,7 +338,8 @@ class MlxLSTMLM(mxnn.Module):
         self.emb = mxnn.Embedding(vocab_size, d_embed)
         self.in_proj = mxnn.Linear(d_embed, d_model) if d_embed != d_model else mxnn.Identity()
         self.lstm_layers = [mxnn.LSTM(d_model, d_model) for _ in range(n_layers)]
-        self.out_norm = _build_output_norm(output_norm, d_model)
+        self.pre_norms = [_build_output_norm(output_norm, d_model) for _ in range(n_layers)]
+        self.stack_norm = _build_output_norm(output_norm, d_model)
         self.drop = mxnn.Dropout(dropout)
         self.layer_drop = float(dropout)
         self.out_proj = mxnn.Linear(d_model, d_embed) if d_embed != d_model else mxnn.Identity()
@@ -358,6 +368,7 @@ class MlxLSTMLM(mxnn.Module):
         new_hs: List[mx.array] = []
         new_cs: List[mx.array] = []
         for li, layer in enumerate(self.lstm_layers):
+            h = self.pre_norms[li](h)
             h0 = None if hs is None else hs[li]
             c0 = None if cs is None else cs[li]
             if h0 is None:
@@ -371,7 +382,7 @@ class MlxLSTMLM(mxnn.Module):
             new_cs.append(c_seq[:, -1, :])
 
         y = mx.swapaxes(h, 0, 1)  # [T, B, D]
-        y = self.out_norm(y)
+        y = self.stack_norm(y)
         y = self.drop(y)
         if self.tie_embeddings:
             y = self.out_proj(y)
@@ -449,7 +460,6 @@ def build_model(cfg: Dict[str, Any], model_name: str):
 
     if model_name == "neo":
         cell_kwargs = {
-            "output_norm": str(cfg.get("output_norm", "layernorm")),
             "activation_id": cfg.get("activation_id", "id3"),
         }
         return MlxNeoLM(
@@ -460,6 +470,7 @@ def build_model(cfg: Dict[str, Any], model_name: str):
             dropout=dropout,
             tie_embeddings=tie_embeddings,
             cell_kwargs=cell_kwargs,
+            output_norm=str(cfg.get("output_norm", "layernorm")),
         )
     if model_name == "lstm":
         return MlxLSTMLM(
@@ -629,7 +640,7 @@ def _build_weight_decay_lookup(model, model_name: str, cfg: Any) -> Dict[str, fl
         if name.endswith("output_bias") or leaf == "bias" or leaf.startswith("bias_"):
             out[name] = 0.0
             continue
-        if ".out_norm." in name or ".ln." in name or ".ln1." in name or ".ln2." in name or "norm." in name:
+        if ".out_norm." in name or ".ln." in name or ".ln1." in name or ".ln2." in name or "norm." in name or name.startswith("pre_norms."):
             out[name] = 0.0
             continue
         if ".emb." in name or name.startswith("emb.") or "pos_emb." in name:

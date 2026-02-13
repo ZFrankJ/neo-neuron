@@ -52,20 +52,6 @@ class BaseCorticalNeuron(nn.Module):
         return cortical_activation(x, activation_id=self.activation_id)
 
 
-def _build_output_norm(norm_type: str, output_dim: int) -> nn.Module:
-    norm = str(norm_type).strip().lower()
-    if norm in ("none", "off", "identity"):
-        return nn.Identity()
-    if norm in ("layernorm", "layer_norm", "ln"):
-        return nn.LayerNorm(output_dim)
-    if norm in ("rmsnorm", "rms_norm", "rms"):
-        rms_norm = getattr(nn, "RMSNorm", None)
-        if rms_norm is None:
-            raise ValueError("RMSNorm is not available in this torch version.")
-        return rms_norm(output_dim)
-    raise ValueError(f"Unsupported output_norm '{norm_type}'.")
-
-
 def _parse_activation_id(activation_id) -> int:
     if isinstance(activation_id, str):
         text = activation_id.strip().lower()
@@ -87,13 +73,10 @@ class CorticalNeuron(BaseCorticalNeuron):
         self,
         input_dim,
         output_dim,
-        output_norm: str = "layernorm",
         activation_id="id3",
     ):
         super().__init__(input_dim, output_dim)
         self.fg_linear = nn.Linear(input_dim, 2 * output_dim)
-        self.output_norm_type = str(output_norm)
-        self.out_norm = _build_output_norm(self.output_norm_type, output_dim)
         self.activation_id = _parse_activation_id(activation_id)
 
     def forward(self, x, prev_state=None, reset=False):
@@ -101,7 +84,6 @@ class CorticalNeuron(BaseCorticalNeuron):
         fg = self.fg_linear(x)
         f_x_raw, g_x_raw = fg.chunk(2, dim=-1)
         output, state = fused_cortical_step(f_x_raw, s_prev, g_x_raw, self.activation_id)
-        output = self.out_norm(output)
 
         if prev_state is None:
             self.prev_state = state.detach()

@@ -90,8 +90,9 @@ def capture_lstm_traces(
                 weight_hh = getattr(model.lstm, f"weight_hh_l{li}")
                 bias_ih = getattr(model.lstm, f"bias_ih_l{li}")
                 bias_hh = getattr(model.lstm, f"bias_hh_l{li}")
-
-                gates = F.linear(layer_input, weight_ih, bias_ih) + F.linear(h_prev, weight_hh, bias_hh)
+                pre_norms = getattr(model.lstm, "pre_norms", None)
+                layer_input_norm = pre_norms[li](layer_input) if pre_norms is not None else layer_input
+                gates = F.linear(layer_input_norm, weight_ih, bias_ih) + F.linear(h_prev, weight_hh, bias_hh)
                 i_gate, f_gate, g_gate, o_gate = gates.chunk(4, dim=-1)
 
                 i_gate = torch.sigmoid(i_gate)

@@ -1,7 +1,7 @@
 """LSTM language model."""
 
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -33,6 +33,92 @@ def _build_output_norm(norm_type: str, d_model: int) -> nn.Module:
     raise ValueError(f"Unsupported output_norm '{norm_type}'.")
 
 
+class LSTMStack(nn.Module):
+    """Stacked LSTM core with internal per-layer pre-norm and final stack norm."""
+
+    def __init__(self, d_model: int, n_layers: int, output_norm: str, layer_dropout: float):
+        super().__init__()
+        self.d_model = int(d_model)
+        self.num_layers = int(n_layers)
+        self.layer_dropout = float(layer_dropout)
+        self.pre_norms = nn.ModuleList([_build_output_norm(output_norm, d_model) for _ in range(n_layers)])
+        self.stack_norm = _build_output_norm(output_norm, d_model)
+
+        gate_dim = 4 * d_model
+        for li in range(n_layers):
+            setattr(self, f"weight_ih_l{li}", nn.Parameter(torch.empty(gate_dim, d_model)))
+            setattr(self, f"weight_hh_l{li}", nn.Parameter(torch.empty(gate_dim, d_model)))
+            setattr(self, f"bias_ih_l{li}", nn.Parameter(torch.empty(gate_dim)))
+            setattr(self, f"bias_hh_l{li}", nn.Parameter(torch.empty(gate_dim)))
+
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        for li in range(self.num_layers):
+            w_ih = getattr(self, f"weight_ih_l{li}")
+            w_hh = getattr(self, f"weight_hh_l{li}")
+            b_ih = getattr(self, f"bias_ih_l{li}")
+            b_hh = getattr(self, f"bias_hh_l{li}")
+            nn.init.xavier_uniform_(w_ih)
+            nn.init.xavier_uniform_(w_hh)
+            nn.init.zeros_(b_ih)
+            nn.init.zeros_(b_hh)
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        state: Optional[Tuple[torch.Tensor, torch.Tensor]],
+    ) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        # x: [T, B, D]
+        T, B, _ = x.shape
+        if state is None:
+            h_prev = [x.new_zeros(B, self.d_model) for _ in range(self.num_layers)]
+            c_prev = [x.new_zeros(B, self.d_model) for _ in range(self.num_layers)]
+        else:
+            h_prev = list(state[0].unbind(0))
+            c_prev = list(state[1].unbind(0))
+
+        layer_input = x
+        next_h: List[torch.Tensor] = []
+        next_c: List[torch.Tensor] = []
+
+        for li in range(self.num_layers):
+            x_norm = self.pre_norms[li](layer_input)
+            w_ih = getattr(self, f"weight_ih_l{li}")
+            w_hh = getattr(self, f"weight_hh_l{li}")
+            b_ih = getattr(self, f"bias_ih_l{li}")
+            b_hh = getattr(self, f"bias_hh_l{li}")
+
+            # Fuse the input affine across all timesteps: one large matmul per layer.
+            x_gates = F.linear(x_norm.reshape(T * B, self.d_model), w_ih, b_ih).reshape(
+                T, B, 4 * self.d_model
+            )
+            h_t = h_prev[li]
+            c_t = c_prev[li]
+            layer_output = x_norm.new_empty((T, B, self.d_model))
+            for t in range(T):
+                gates = x_gates[t] + F.linear(h_t, w_hh, b_hh)
+                i_gate, f_gate, g_gate, o_gate = gates.chunk(4, dim=-1)
+                i_gate = torch.sigmoid(i_gate)
+                f_gate = torch.sigmoid(f_gate)
+                g_gate = torch.tanh(g_gate)
+                o_gate = torch.sigmoid(o_gate)
+                c_t = f_gate * c_t + i_gate * g_gate
+                h_t = o_gate * torch.tanh(c_t)
+                layer_output[t] = h_t
+
+            if self.layer_dropout > 0.0 and self.training and li < (self.num_layers - 1):
+                layer_input = F.dropout(layer_output, p=self.layer_dropout, training=True)
+            else:
+                layer_input = layer_output
+            next_h.append(h_t)
+            next_c.append(c_t)
+
+        y = self.stack_norm(layer_input)
+        new_state = (torch.stack(next_h, dim=0), torch.stack(next_c, dim=0))
+        return y, new_state
+
+
 class LSTMLM(nn.Module):
     def __init__(
         self,
@@ -54,8 +140,12 @@ class LSTMLM(nn.Module):
 
         self.emb = nn.Embedding(vocab_size, d_embed)
         self.in_proj = nn.Linear(d_embed, d_model) if d_embed != d_model else nn.Identity()
-        self.lstm = nn.LSTM(d_model, d_model, num_layers=n_layers, dropout=dropout, batch_first=False)
-        self.out_norm = _build_output_norm(self.output_norm_type, d_model)
+        self.lstm = LSTMStack(
+            d_model=d_model,
+            n_layers=n_layers,
+            output_norm=self.output_norm_type,
+            layer_dropout=dropout,
+        )
         self.drop = nn.Dropout(dropout)
         self.out_proj = nn.Linear(d_model, d_embed) if d_embed != d_model else nn.Identity()
 
@@ -87,7 +177,6 @@ class LSTMLM(nn.Module):
         if not isinstance(self.in_proj, nn.Identity):
             x = self.in_proj(x)
         y, new_state = self.lstm(x, state)
-        y = self.out_norm(y)
         y = self.drop(y)
 
         if self.tie_embeddings:

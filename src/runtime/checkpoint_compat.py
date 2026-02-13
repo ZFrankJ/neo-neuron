@@ -81,6 +81,71 @@ def _identity_map(
     return out
 
 
+def _infer_n_layers_from_template_keys(dst_template: Dict[str, Any]) -> int:
+    max_idx = -1
+    for k in dst_template.keys():
+        if not k.startswith("recurrent.layers."):
+            continue
+        parts = k.split(".")
+        if len(parts) < 3:
+            continue
+        try:
+            idx = int(parts[2])
+        except ValueError:
+            continue
+        if idx > max_idx:
+            max_idx = idx
+    return max_idx + 1 if max_idx >= 0 else 0
+
+
+def _map_neo_state(
+    src: Dict[str, np.ndarray],
+    dst_template: Dict[str, Any],
+    cfg: Dict[str, Any],
+    warn: List[str],
+) -> Dict[str, np.ndarray]:
+    out: Dict[str, np.ndarray] = {}
+
+    # First copy all keys that already match by name and shape.
+    for k, dv in dst_template.items():
+        sv = src.get(k)
+        if sv is not None and tuple(sv.shape) == tuple(dv.shape):
+            out[k] = sv
+
+    n_layers = int(cfg.get("n_layers", 0)) or _infer_n_layers_from_template_keys(dst_template)
+
+    # Backward-compat for old per-cell norm naming:
+    # recurrent.layers.{i}.out_norm.{weight,bias} -> recurrent.pre_norms.{i}.{weight,bias}
+    for i in range(n_layers):
+        for suffix in ("weight", "bias"):
+            dst_key = f"recurrent.pre_norms.{i}.{suffix}"
+            if dst_key in out or dst_key not in dst_template:
+                continue
+            src_key = f"recurrent.layers.{i}.out_norm.{suffix}"
+            if src_key in src and tuple(src[src_key].shape) == tuple(dst_template[dst_key].shape):
+                out[dst_key] = src[src_key]
+
+    # Backward-compat for final stack norm:
+    # recurrent.layers.{last}.out_norm.{weight,bias} -> recurrent.stack_norm.{weight,bias}
+    for suffix in ("weight", "bias"):
+        dst_key = f"recurrent.stack_norm.{suffix}"
+        if dst_key in out or dst_key not in dst_template:
+            continue
+        src_key_direct = dst_key
+        src_key_fallback = f"recurrent.layers.{max(0, n_layers - 1)}.out_norm.{suffix}"
+        if src_key_direct in src and tuple(src[src_key_direct].shape) == tuple(dst_template[dst_key].shape):
+            out[dst_key] = src[src_key_direct]
+        elif src_key_fallback in src and tuple(src[src_key_fallback].shape) == tuple(dst_template[dst_key].shape):
+            out[dst_key] = src[src_key_fallback]
+
+    missing = sorted(set(dst_template.keys()) - set(out.keys()))
+    if missing:
+        raise KeyError(f"Missing mapped destination keys: {missing}")
+    for k in sorted(set(src.keys()) - set(out.keys())):
+        warn.append(f"Ignoring extra source key: {k}")
+    return out
+
+
 def _map_lstm_torch_to_mlx(
     src: Dict[str, np.ndarray],
     dst_template: Dict[str, Any],
@@ -88,21 +153,45 @@ def _map_lstm_torch_to_mlx(
     warn: List[str],
 ) -> Dict[str, np.ndarray]:
     out: Dict[str, np.ndarray] = {}
-    common = [
-        "emb.weight",
-        "in_proj.weight",
-        "in_proj.bias",
-        "out_proj.weight",
-        "out_proj.bias",
-        "output_bias",
-        "head.weight",
-        "head.bias",
-        "out_norm.weight",
-        "out_norm.bias",
-    ]
-    for k in common:
-        if k in src and k in dst_template:
-            out[k] = src[k]
+    # Copy non-recurrent keys that already match by name/shape.
+    for k, dv in dst_template.items():
+        if k.startswith("lstm_layers."):
+            continue
+        sv = src.get(k)
+        if sv is not None and tuple(sv.shape) == tuple(dv.shape):
+            out[k] = sv
+
+    # Torch -> MLX norm key translation and backward-compat.
+    # New torch: lstm.pre_norms.{i}.{weight,bias}, lstm.stack_norm.{weight,bias}
+    # Old torch: out_norm.{weight,bias}
+    for i in range(n_layers):
+        for suffix in ("weight", "bias"):
+            dst_pre = f"pre_norms.{i}.{suffix}"
+            if dst_pre in dst_template and dst_pre not in out:
+                src_new = f"lstm.pre_norms.{i}.{suffix}"
+                src_old_pre = f"pre_norm.{suffix}"
+                src_old = f"out_norm.{suffix}"
+                if src_new in src and tuple(src[src_new].shape) == tuple(dst_template[dst_pre].shape):
+                    out[dst_pre] = src[src_new]
+                elif src_old_pre in src and tuple(src[src_old_pre].shape) == tuple(dst_template[dst_pre].shape):
+                    out[dst_pre] = src[src_old_pre]
+                elif src_old in src and tuple(src[src_old].shape) == tuple(dst_template[dst_pre].shape):
+                    out[dst_pre] = src[src_old]
+
+    for suffix in ("weight", "bias"):
+        src_old = f"out_norm.{suffix}"
+        dst_pre = f"pre_norm.{suffix}"
+        dst_stack = f"stack_norm.{suffix}"
+        src_new_stack = f"lstm.stack_norm.{suffix}"
+        if dst_stack in dst_template and dst_stack not in out and src_new_stack in src:
+            if tuple(src[src_new_stack].shape) == tuple(dst_template[dst_stack].shape):
+                out[dst_stack] = src[src_new_stack]
+        if dst_pre in dst_template and dst_pre not in out and src_old in src:
+            if tuple(src[src_old].shape) == tuple(dst_template[dst_pre].shape):
+                out[dst_pre] = src[src_old]
+        if dst_stack in dst_template and dst_stack not in out and src_old in src:
+            if tuple(src[src_old].shape) == tuple(dst_template[dst_stack].shape):
+                out[dst_stack] = src[src_old]
 
     for i in range(n_layers):
         out[f"lstm_layers.{i}.Wx"] = src[f"lstm.weight_ih_l{i}"]
@@ -124,21 +213,51 @@ def _map_lstm_mlx_to_torch(
     warn: List[str],
 ) -> Dict[str, np.ndarray]:
     out: Dict[str, np.ndarray] = {}
-    common = [
-        "emb.weight",
-        "in_proj.weight",
-        "in_proj.bias",
-        "out_proj.weight",
-        "out_proj.bias",
-        "output_bias",
-        "head.weight",
-        "head.bias",
-        "out_norm.weight",
-        "out_norm.bias",
-    ]
-    for k in common:
-        if k in src and k in dst_template:
-            out[k] = src[k]
+    # Copy non-recurrent keys that already match by name/shape.
+    for k, dv in dst_template.items():
+        if k.startswith("lstm."):
+            continue
+        sv = src.get(k)
+        if sv is not None and tuple(sv.shape) == tuple(dv.shape):
+            out[k] = sv
+
+    # MLX -> Torch norm key translation and backward-compat.
+    for i in range(n_layers):
+        for suffix in ("weight", "bias"):
+            src_pre = f"pre_norms.{i}.{suffix}"
+            dst_pre = f"lstm.pre_norms.{i}.{suffix}"
+            if dst_pre in dst_template and dst_pre not in out and src_pre in src:
+                if tuple(src[src_pre].shape) == tuple(dst_template[dst_pre].shape):
+                    out[dst_pre] = src[src_pre]
+
+    for suffix in ("weight", "bias"):
+        src_old = f"out_norm.{suffix}"
+        src_old_pre = f"pre_norm.{suffix}"
+        src_stack = f"stack_norm.{suffix}"
+        dst_pre = f"pre_norm.{suffix}"
+        dst_stack = f"lstm.stack_norm.{suffix}"
+        dst_old = f"out_norm.{suffix}"
+
+        if dst_pre in dst_template and dst_pre not in out and src_old in src:
+            if tuple(src[src_old].shape) == tuple(dst_template[dst_pre].shape):
+                out[dst_pre] = src[src_old]
+        if dst_pre in dst_template and dst_pre not in out and src_old_pre in src:
+            if tuple(src[src_old_pre].shape) == tuple(dst_template[dst_pre].shape):
+                out[dst_pre] = src[src_old_pre]
+        if dst_stack in dst_template and dst_stack not in out:
+            src_key = src_stack if src_stack in src else src_old
+            if src_key in src and tuple(src[src_key].shape) == tuple(dst_template[dst_stack].shape):
+                out[dst_stack] = src[src_key]
+        # Support older torch template naming.
+        dst_stack_old = "stack_norm." + suffix
+        if dst_stack_old in dst_template and dst_stack_old not in out:
+            src_key = src_stack if src_stack in src else src_old
+            if src_key in src and tuple(src[src_key].shape) == tuple(dst_template[dst_stack_old].shape):
+                out[dst_stack_old] = src[src_key]
+        if dst_old in dst_template and dst_old not in out:
+            src_key = src_stack if src_stack in src else src_old
+            if src_key in src and tuple(src[src_key].shape) == tuple(dst_template[dst_old].shape):
+                out[dst_old] = src[src_key]
 
     for i in range(n_layers):
         wx = src[f"lstm_layers.{i}.Wx"]
@@ -148,6 +267,57 @@ def _map_lstm_mlx_to_torch(
         out[f"lstm.weight_hh_l{i}"] = wh
         out[f"lstm.bias_ih_l{i}"] = b
         out[f"lstm.bias_hh_l{i}"] = np.zeros_like(b)
+
+    missing = sorted(set(dst_template.keys()) - set(out.keys()))
+    if missing:
+        raise KeyError(f"Missing mapped destination keys: {missing}")
+    for k in sorted(set(src.keys()) - set(out.keys())):
+        warn.append(f"Ignoring extra source key: {k}")
+    return out
+
+
+def _map_lstm_same_backend(
+    src: Dict[str, np.ndarray],
+    dst_template: Dict[str, Any],
+    n_layers: int,
+    warn: List[str],
+) -> Dict[str, np.ndarray]:
+    out: Dict[str, np.ndarray] = {}
+    for k, dv in dst_template.items():
+        sv = src.get(k)
+        if sv is not None and tuple(sv.shape) == tuple(dv.shape):
+            out[k] = sv
+
+    for i in range(n_layers):
+        for suffix in ("weight", "bias"):
+            dst_keys = [
+                f"lstm.pre_norms.{i}.{suffix}",
+                f"pre_norms.{i}.{suffix}",
+            ]
+            src_keys = [
+                f"lstm.pre_norms.{i}.{suffix}",
+                f"pre_norms.{i}.{suffix}",
+                f"pre_norm.{suffix}",
+                f"out_norm.{suffix}",
+            ]
+            for dk in dst_keys:
+                if dk not in dst_template or dk in out:
+                    continue
+                for sk in src_keys:
+                    if sk in src and tuple(src[sk].shape) == tuple(dst_template[dk].shape):
+                        out[dk] = src[sk]
+                        break
+
+    for suffix in ("weight", "bias"):
+        dst_keys = [f"lstm.stack_norm.{suffix}", f"stack_norm.{suffix}"]
+        src_keys = [f"lstm.stack_norm.{suffix}", f"stack_norm.{suffix}", f"out_norm.{suffix}"]
+        for dk in dst_keys:
+            if dk not in dst_template or dk in out:
+                continue
+            for sk in src_keys:
+                if sk in src and tuple(src[sk].shape) == tuple(dst_template[dk].shape):
+                    out[dk] = src[sk]
+                    break
 
     missing = sorted(set(dst_template.keys()) - set(out.keys()))
     if missing:
@@ -252,18 +422,20 @@ def map_model_state(
     cfg = cfg or {}
     warn: List[str] = []
 
-    if src_backend == dst_backend:
-        mapped = _identity_map(src_state_np, dst_template, warn)
-    elif model_name == "neo":
-        mapped = _identity_map(src_state_np, dst_template, warn)
+    if model_name == "neo":
+        mapped = _map_neo_state(src_state_np, dst_template, cfg, warn)
     elif model_name == "lstm":
         n_layers = int(cfg.get("n_layers", 1))
-        if src_backend == "torch" and dst_backend == "mlx":
+        if src_backend == dst_backend:
+            mapped = _map_lstm_same_backend(src_state_np, dst_template, n_layers, warn)
+        elif src_backend == "torch" and dst_backend == "mlx":
             mapped = _map_lstm_torch_to_mlx(src_state_np, dst_template, n_layers, warn)
         elif src_backend == "mlx" and dst_backend == "torch":
             mapped = _map_lstm_mlx_to_torch(src_state_np, dst_template, n_layers, warn)
         else:
             raise ValueError(f"Unsupported LSTM mapping {src_backend} -> {dst_backend}")
+    elif src_backend == dst_backend:
+        mapped = _identity_map(src_state_np, dst_template, warn)
     elif model_name == "transformer":
         n_layers = int(cfg.get("n_layers", 1))
         d_model = int(cfg["d_model"])
@@ -279,4 +451,3 @@ def map_model_state(
     for msg in warn:
         warnings.warn(msg)
     return mapped, warn
-
