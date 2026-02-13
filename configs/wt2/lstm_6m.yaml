@@ -12,7 +12,7 @@ d_embed: 64
 n_layers: 3
 dropout: 0.1
 tie_embeddings: true
-output_norm: none
+recurrent_norm: none
 vocab_size: 50257
 
 block_size: 128
