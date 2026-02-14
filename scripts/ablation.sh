@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEVICE="${1:-auto}"
-BACKEND="${2:-}"
+BACKEND="${2:-mlx}"
 MODEL_SEL="${3:-both}"          # neo | lstm | both
 NORMS_CSV="${4:-none,rmsnorm,layernorm}"  # comma-separated
 export TOKENIZERS_PARALLELISM=false

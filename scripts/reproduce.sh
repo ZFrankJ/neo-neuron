@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEVICE="${1:-auto}"
-BACKEND="${2:-}"
+BACKEND="${2:-mlx}"
 export TOKENIZERS_PARALLELISM=false
 export PYTHONUNBUFFERED=1
 export PYTHONWARNINGS="ignore::UserWarning:multiprocessing.resource_tracker"
