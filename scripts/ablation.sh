@@ -4,14 +4,35 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEVICE="${1:-auto}"
 BACKEND="${2:-}"
+MODEL_SEL="${3:-both}"          # neo | lstm | both
+NORMS_CSV="${4:-none,rmsnorm,layernorm}"  # comma-separated
 export TOKENIZERS_PARALLELISM=false
 export PYTHONUNBUFFERED=1
 
-NORMS=(none rmsnorm layernorm)
-BASE_CFGS=(
-  "${ROOT_DIR}/configs/wt103/neo_40m.yaml"
-  "${ROOT_DIR}/configs/wt103/lstm_40m.yaml"
-)
+case "$(echo "$MODEL_SEL" | tr '[:upper:]' '[:lower:]')" in
+  neo)
+    BASE_CFGS=("${ROOT_DIR}/configs/wt103/neo_40m.yaml")
+    ;;
+  lstm)
+    BASE_CFGS=("${ROOT_DIR}/configs/wt103/lstm_40m.yaml")
+    ;;
+  both)
+    BASE_CFGS=(
+      "${ROOT_DIR}/configs/wt103/neo_40m.yaml"
+      "${ROOT_DIR}/configs/wt103/lstm_40m.yaml"
+    )
+    ;;
+  *)
+    echo "Invalid model selector '$MODEL_SEL'. Use: neo | lstm | both" >&2
+    exit 1
+    ;;
+esac
+
+IFS=',' read -r -a NORMS <<<"$NORMS_CSV"
+if [[ "${#NORMS[@]}" -eq 0 ]]; then
+  echo "No norms provided. Pass a CSV list like: none,rmsnorm,layernorm" >&2
+  exit 1
+fi
 
 run_with_norm() {
   local base_cfg="$1"
@@ -114,6 +135,17 @@ for base_cfg in "${BASE_CFGS[@]}"; do
     exit 1
   fi
   for norm in "${NORMS[@]}"; do
-    run_with_norm "$base_cfg" "$norm"
+    norm="$(echo "$norm" | tr '[:upper:]' '[:lower:]' | xargs)"
+    if [[ -z "$norm" ]]; then
+      continue
+    fi
+    case "$norm" in
+      none|rmsnorm|layernorm|layer_norm|ln|rms|rms_norm)
+        run_with_norm "$base_cfg" "$norm"
+        ;;
+      *)
+        echo "Skipping unknown norm '$norm' (allowed: none,rmsnorm,layernorm)" >&2
+        ;;
+    esac
   done
 done
