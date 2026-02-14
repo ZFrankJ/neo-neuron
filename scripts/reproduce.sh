@@ -16,8 +16,8 @@ echo "== Stage 1: Variance (Neo/LSTM 20M, no norm, 5 seeds) ==" >&2
 echo "== Stage 2: Scaling (Neo/LSTM 20/40/80M, RMSNorm) ==" >&2
 ./scripts/scaling.sh "$DEVICE" "$BACKEND"
 
-echo "== Stage 3: Stability (Neo/LSTM 40M, none/rmsnorm/layernorm) ==" >&2
-./scripts/stability.sh "$DEVICE" "$BACKEND"
+echo "== Stage 3: Ablation (Neo/LSTM 40M, none/rmsnorm/layernorm) ==" >&2
+./scripts/ablation.sh "$DEVICE" "$BACKEND"
 
 echo "== Stage 4: Transformer 40M training ==" >&2
 if [[ -n "$BACKEND" ]]; then
