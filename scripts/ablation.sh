@@ -11,15 +11,15 @@ export PYTHONUNBUFFERED=1
 
 case "$(echo "$MODEL_SEL" | tr '[:upper:]' '[:lower:]')" in
   neo)
-    BASE_CFGS=("${ROOT_DIR}/configs/wt103/neo_40m.yaml")
+    BASE_CFGS=("${ROOT_DIR}/configs/wt103/neo_20m.yaml")
     ;;
   lstm)
-    BASE_CFGS=("${ROOT_DIR}/configs/wt103/lstm_40m.yaml")
+    BASE_CFGS=("${ROOT_DIR}/configs/wt103/lstm_20m.yaml")
     ;;
   both)
     BASE_CFGS=(
-      "${ROOT_DIR}/configs/wt103/neo_40m.yaml"
-      "${ROOT_DIR}/configs/wt103/lstm_40m.yaml"
+      "${ROOT_DIR}/configs/wt103/neo_20m.yaml"
+      "${ROOT_DIR}/configs/wt103/lstm_20m.yaml"
     )
     ;;
   *)
