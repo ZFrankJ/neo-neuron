@@ -51,6 +51,7 @@ def build_model(cfg: Dict[str, Any], model_name: str):
     dropout = float(cfg.get("dropout", 0.0))
     tie_embeddings = bool(cfg.get("tie_embeddings", True))
     recurrent_norm = _resolve_recurrent_norm(cfg)
+    recurrent_norm_place = str(cfg.get("recurrent_norm_place", cfg.get("norm_place", "all")))
 
     if model_name == "lstm":
         return LSTMLM(
@@ -61,6 +62,7 @@ def build_model(cfg: Dict[str, Any], model_name: str):
             dropout=dropout,
             tie_embeddings=tie_embeddings,
             output_norm=recurrent_norm,
+            norm_place=recurrent_norm_place,
         )
 
     if model_name == "neo":
@@ -76,6 +78,7 @@ def build_model(cfg: Dict[str, Any], model_name: str):
             tie_embeddings=tie_embeddings,
             cell_type=str(cfg.get("cell_type", "cortical")),
             output_norm=recurrent_norm,
+            norm_place=recurrent_norm_place,
             cell_kwargs=cell_kwargs,
             use_checkpoint=bool(cfg.get("use_checkpoint", False)),
         )

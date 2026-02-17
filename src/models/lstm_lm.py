@@ -17,6 +17,7 @@ class LSTMConfig:
     dropout: float
     tie_embeddings: bool = True
     output_norm: str = "layernorm"
+    norm_place: str = "all"
 
 
 def _build_output_norm(norm_type: str, d_model: int) -> nn.Module:
@@ -33,16 +34,36 @@ def _build_output_norm(norm_type: str, d_model: int) -> nn.Module:
     raise ValueError(f"Unsupported output_norm '{norm_type}'.")
 
 
+def _parse_norm_place(norm_place: str) -> str:
+    place = str(norm_place).strip().lower()
+    if place in ("all", "pre", "stack"):
+        return place
+    raise ValueError(f"Unsupported norm placement '{norm_place}'. Use one of: all, pre, stack.")
+
+
 class LSTMStack(nn.Module):
     """Stacked LSTM core with internal per-layer pre-norm and final stack norm."""
 
-    def __init__(self, d_model: int, n_layers: int, output_norm: str, layer_dropout: float):
+    def __init__(
+        self,
+        d_model: int,
+        n_layers: int,
+        output_norm: str,
+        layer_dropout: float,
+        norm_place: str = "all",
+    ):
         super().__init__()
         self.d_model = int(d_model)
         self.num_layers = int(n_layers)
         self.layer_dropout = float(layer_dropout)
-        self.pre_norms = nn.ModuleList([_build_output_norm(output_norm, d_model) for _ in range(n_layers)])
-        self.stack_norm = _build_output_norm(output_norm, d_model)
+        place = _parse_norm_place(norm_place)
+        self.pre_norms = nn.ModuleList(
+            [
+                _build_output_norm(output_norm, d_model) if place in ("all", "pre") else nn.Identity()
+                for _ in range(n_layers)
+            ]
+        )
+        self.stack_norm = _build_output_norm(output_norm, d_model) if place in ("all", "stack") else nn.Identity()
 
         gate_dim = 4 * d_model
         for li in range(n_layers):
@@ -129,6 +150,7 @@ class LSTMLM(nn.Module):
         dropout: float,
         tie_embeddings: bool = True,
         output_norm: str = "layernorm",
+        norm_place: str = "all",
     ):
         super().__init__()
         self.vocab_size = vocab_size
@@ -145,6 +167,7 @@ class LSTMLM(nn.Module):
             n_layers=n_layers,
             output_norm=self.output_norm_type,
             layer_dropout=dropout,
+            norm_place=norm_place,
         )
         self.drop = nn.Dropout(dropout)
         self.out_proj = nn.Linear(d_model, d_embed) if d_embed != d_model else nn.Identity()

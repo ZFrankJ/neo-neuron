@@ -240,6 +240,13 @@ def _build_output_norm(norm_type: str, dims: int) -> mxnn.Module:
     raise ValueError(f"Unsupported output_norm '{norm_type}'.")
 
 
+def _parse_norm_place(norm_place: str) -> str:
+    place = str(norm_place).strip().lower()
+    if place in ("all", "pre", "stack"):
+        return place
+    raise ValueError(f"Unsupported norm placement '{norm_place}'. Use one of: all, pre, stack.")
+
+
 class MlxCorticalNeuron(mxnn.Module):
     def __init__(self, input_dim: int, output_dim: int, activation_id="id3"):
         super().__init__()
@@ -257,14 +264,25 @@ class MlxCorticalNeuron(mxnn.Module):
 
 
 class MlxCorticalRecurrentStack(mxnn.Module):
-    def __init__(self, d_model: int, n_layers: int, cell_kwargs: Dict[str, Any], output_norm: str = "layernorm"):
+    def __init__(
+        self,
+        d_model: int,
+        n_layers: int,
+        cell_kwargs: Dict[str, Any],
+        output_norm: str = "layernorm",
+        norm_place: str = "all",
+    ):
         super().__init__()
         cell_kwargs = dict(cell_kwargs or {})
         # Norm is now handled at stack level (pre-layer + final norm), not in the cell.
         cell_kwargs.pop("output_norm", None)
         self.layers = [MlxCorticalNeuron(d_model, d_model, **cell_kwargs) for _ in range(n_layers)]
-        self.pre_norms = [_build_output_norm(output_norm, d_model) for _ in range(n_layers)]
-        self.stack_norm = _build_output_norm(output_norm, d_model)
+        place = _parse_norm_place(norm_place)
+        self.pre_norms = [
+            _build_output_norm(output_norm, d_model) if place in ("all", "pre") else mxnn.Identity()
+            for _ in range(n_layers)
+        ]
+        self.stack_norm = _build_output_norm(output_norm, d_model) if place in ("all", "stack") else mxnn.Identity()
         self.n_layers = int(n_layers)
         self.d_model = int(d_model)
 
@@ -301,6 +319,7 @@ class MlxNeoLM(mxnn.Module):
         tie_embeddings: bool,
         cell_kwargs: Dict[str, Any],
         output_norm: str = "layernorm",
+        norm_place: str = "all",
     ):
         super().__init__()
         self.vocab_size = int(vocab_size)
@@ -311,7 +330,13 @@ class MlxNeoLM(mxnn.Module):
 
         self.emb = mxnn.Embedding(vocab_size, d_embed)
         self.in_proj = mxnn.Linear(d_embed, d_model) if d_embed != d_model else mxnn.Identity()
-        self.recurrent = MlxCorticalRecurrentStack(d_model, n_layers, cell_kwargs, output_norm=output_norm)
+        self.recurrent = MlxCorticalRecurrentStack(
+            d_model,
+            n_layers,
+            cell_kwargs,
+            output_norm=output_norm,
+            norm_place=norm_place,
+        )
         self.drop = mxnn.Dropout(dropout)
         self.out_proj = mxnn.Linear(d_model, d_embed) if d_embed != d_model else mxnn.Identity()
         if self.tie_embeddings:
@@ -348,6 +373,7 @@ class MlxLSTMLM(mxnn.Module):
         dropout: float,
         tie_embeddings: bool,
         output_norm: str = "layernorm",
+        norm_place: str = "all",
     ):
         super().__init__()
         self.vocab_size = int(vocab_size)
@@ -359,8 +385,12 @@ class MlxLSTMLM(mxnn.Module):
         self.emb = mxnn.Embedding(vocab_size, d_embed)
         self.in_proj = mxnn.Linear(d_embed, d_model) if d_embed != d_model else mxnn.Identity()
         self.lstm_layers = [mxnn.LSTM(d_model, d_model) for _ in range(n_layers)]
-        self.pre_norms = [_build_output_norm(output_norm, d_model) for _ in range(n_layers)]
-        self.stack_norm = _build_output_norm(output_norm, d_model)
+        place = _parse_norm_place(norm_place)
+        self.pre_norms = [
+            _build_output_norm(output_norm, d_model) if place in ("all", "pre") else mxnn.Identity()
+            for _ in range(n_layers)
+        ]
+        self.stack_norm = _build_output_norm(output_norm, d_model) if place in ("all", "stack") else mxnn.Identity()
         self.drop = mxnn.Dropout(dropout)
         self.layer_drop = float(dropout)
         self.out_proj = mxnn.Linear(d_model, d_embed) if d_embed != d_model else mxnn.Identity()
@@ -479,6 +509,7 @@ def build_model(cfg: Dict[str, Any], model_name: str):
     dropout = float(cfg.get("dropout", 0.0))
     tie_embeddings = bool(cfg.get("tie_embeddings", True))
     recurrent_norm = _resolve_recurrent_norm(cfg)
+    recurrent_norm_place = str(cfg.get("recurrent_norm_place", cfg.get("norm_place", "all")))
 
     if model_name == "neo":
         cell_kwargs = {
@@ -493,6 +524,7 @@ def build_model(cfg: Dict[str, Any], model_name: str):
             tie_embeddings=tie_embeddings,
             cell_kwargs=cell_kwargs,
             output_norm=recurrent_norm,
+            norm_place=recurrent_norm_place,
         )
     if model_name == "lstm":
         return MlxLSTMLM(
@@ -503,6 +535,7 @@ def build_model(cfg: Dict[str, Any], model_name: str):
             dropout=dropout,
             tie_embeddings=tie_embeddings,
             output_norm=recurrent_norm,
+            norm_place=recurrent_norm_place,
         )
     if model_name == "transformer":
         n_heads = int(_require(cfg, "n_heads"))

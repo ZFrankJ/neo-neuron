@@ -45,6 +45,14 @@ def _norm_kind(norm: str) -> str:
         return "rmsnorm"
     return "none"
 
+def _norm_place_count(place: str, n_layers: int) -> int:
+    p = str(place).strip().lower()
+    if p == "pre":
+        return n_layers
+    if p == "stack":
+        return 1
+    return n_layers + 1
+
 def _retune_d_model(cfg: dict, target: int | None) -> int:
     model = str(cfg.get("model_name", "")).strip().lower()
     if target is None or model not in ("neo", "lstm"):
@@ -62,10 +70,11 @@ def _retune_d_model(cfg: dict, target: int | None) -> int:
         a = 8 * L
         b = 2 * E + 8 * L + 1
 
+    norm_count = _norm_place_count(str(cfg.get("recurrent_norm_place", "all")), L)
     if norm == "layernorm":
-        b += 2 * (L + 1)
+        b += 2 * norm_count
     elif norm == "rmsnorm":
-        b += (L + 1)
+        b += norm_count
 
     c = V * E + V + E
     disc = b * b - 4 * a * (c - target)

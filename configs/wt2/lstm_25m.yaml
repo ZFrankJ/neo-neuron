@@ -1,20 +1,18 @@
 backend: mlx
-# Params (approx): total 28.59M; recurrent 25.2M; embed+proj 3.5M.
 model_name: lstm
 dataset_name: wikitext
 dataset_config: wikitext-2-raw-v1
 train_split: train
 val_split: validation
 test_split: test
-
 d_model: 1024
 d_embed: 64
 n_layers: 3
 dropout: 0.1
 tie_embeddings: true
 recurrent_norm: none
+recurrent_norm_place: all
 vocab_size: 50257
-
 block_size: 128
 batch_size: 16
 epochs: 24
@@ -26,17 +24,14 @@ proj_weight_decay: 1e-3
 recurrent_weight_decay: 0.0
 embed_weight_decay: 0.0
 grad_clip: 1.0
-
 tbptt_len: 128
 train_regime: streaming
 stream_state: true
-
 cosine: true
 warmup_epochs: 2
 min_lr: 2e-5
-
 seed: 42
 save_dir: checkpoints
 run_tag: wt2_lstm_25m
 save_each_epoch: true
-resume_path: ""
+resume_path: ''

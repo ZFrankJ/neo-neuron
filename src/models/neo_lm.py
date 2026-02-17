@@ -21,6 +21,7 @@ class NeoConfig:
     cell_type: str
     cell_kwargs: Dict[str, float]
     output_norm: str = "layernorm"
+    norm_place: str = "all"
     use_checkpoint: bool = False
 
 
@@ -36,6 +37,7 @@ class NeoLM(nn.Module):
         cell_type: str,
         cell_kwargs: Dict[str, float],
         output_norm: str = "layernorm",
+        norm_place: str = "all",
         use_checkpoint: bool = False,
     ):
         super().__init__()
@@ -52,6 +54,7 @@ class NeoLM(nn.Module):
             n_layers=n_layers,
             cell_type=cell_type,
             output_norm=output_norm,
+            norm_place=norm_place,
             cell_kwargs=cell_kwargs,
             use_checkpoint=use_checkpoint,
         )

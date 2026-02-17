@@ -28,6 +28,13 @@ def _build_output_norm(norm_type: str, d_model: int) -> nn.Module:
     raise ValueError(f"Unsupported output_norm '{norm_type}'.")
 
 
+def _parse_norm_place(norm_place: str) -> str:
+    place = str(norm_place).strip().lower()
+    if place in ("all", "pre", "stack"):
+        return place
+    raise ValueError(f"Unsupported norm placement '{norm_place}'. Use one of: all, pre, stack.")
+
+
 class CorticalRecurrentStack(nn.Module):
     def __init__(
         self,
@@ -37,6 +44,7 @@ class CorticalRecurrentStack(nn.Module):
         cell_kwargs,
         use_checkpoint=False,
         output_norm: str = "layernorm",
+        norm_place: str = "all",
     ):
         super().__init__()
         if cell_type not in CELL_REGISTRY:
@@ -46,8 +54,14 @@ class CorticalRecurrentStack(nn.Module):
         cell_kwargs.pop("output_norm", None)
         cell_cls = CELL_REGISTRY[cell_type]
         self.layers = nn.ModuleList([cell_cls(d_model, d_model, **cell_kwargs) for _ in range(n_layers)])
-        self.pre_norms = nn.ModuleList([_build_output_norm(output_norm, d_model) for _ in range(n_layers)])
-        self.stack_norm = _build_output_norm(output_norm, d_model)
+        place = _parse_norm_place(norm_place)
+        self.pre_norms = nn.ModuleList(
+            [
+                _build_output_norm(output_norm, d_model) if place in ("all", "pre") else nn.Identity()
+                for _ in range(n_layers)
+            ]
+        )
+        self.stack_norm = _build_output_norm(output_norm, d_model) if place in ("all", "stack") else nn.Identity()
         self.n_layers = int(n_layers)
         self.d_model = int(d_model)
         self.use_checkpoint = bool(use_checkpoint)

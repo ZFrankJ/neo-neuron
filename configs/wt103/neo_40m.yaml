@@ -12,6 +12,7 @@ dropout: 0.1
 tie_embeddings: true
 cell_type: cortical
 recurrent_norm: rmsnorm
+recurrent_norm_place: all
 activation_id: id5
 use_checkpoint: true
 use_compile: false
