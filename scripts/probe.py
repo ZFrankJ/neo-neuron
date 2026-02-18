@@ -129,8 +129,8 @@ def main() -> None:
                 flush=True,
             )
 
-        _fmt_abs_stats("f_x_raw")
-        _fmt_abs_stats("g_x_raw")
+        for key in ("state", "output", "hidden_state", "cell_state", "f_x_raw", "g_x_raw"):
+            _fmt_abs_stats(key)
 
     if args.save_plots:
         if model_name == "neo":

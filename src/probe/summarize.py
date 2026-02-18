@@ -41,6 +41,10 @@ def _abs_percentiles(values: Iterable[float]) -> Dict[str, float]:
 
 def summarize_neuron_records(records: Dict[int, Dict[str, object]]) -> Dict[str, Any]:
     summary: Dict[str, Any] = {}
+    state_all: List[float] = []
+    output_all: List[float] = []
+    hidden_all: List[float] = []
+    cell_all: List[float] = []
     fx_all: List[float] = []
     gx_all: List[float] = []
     for layer_idx, layer_rec in records.items():
@@ -51,7 +55,15 @@ def summarize_neuron_records(records: Dict[int, Dict[str, object]]) -> Dict[str,
             stats = {}
             for nid, series in layer_rec[key].items():
                 stats[nid] = _series_stats(series)
-                if key == "f_x_raw":
+                if key == "state":
+                    state_all.extend(series)
+                elif key == "output":
+                    output_all.extend(series)
+                elif key == "hidden_state":
+                    hidden_all.extend(series)
+                elif key == "cell_state":
+                    cell_all.extend(series)
+                elif key == "f_x_raw":
                     fx_all.extend(series)
                 elif key == "g_x_raw":
                     gx_all.extend(series)
@@ -63,9 +75,19 @@ def summarize_neuron_records(records: Dict[int, Dict[str, object]]) -> Dict[str,
             layer_summary["gates"] = gate_stats
         summary[str(layer_idx)] = layer_summary
 
-    if fx_all or gx_all:
-        summary["_global_abs_percentiles"] = {
-            "f_x_raw": _abs_percentiles(fx_all),
-            "g_x_raw": _abs_percentiles(gx_all),
-        }
+    global_abs: Dict[str, Dict[str, float]] = {}
+    if state_all:
+        global_abs["state"] = _abs_percentiles(state_all)
+    if output_all:
+        global_abs["output"] = _abs_percentiles(output_all)
+    if hidden_all:
+        global_abs["hidden_state"] = _abs_percentiles(hidden_all)
+    if cell_all:
+        global_abs["cell_state"] = _abs_percentiles(cell_all)
+    if fx_all:
+        global_abs["f_x_raw"] = _abs_percentiles(fx_all)
+    if gx_all:
+        global_abs["g_x_raw"] = _abs_percentiles(gx_all)
+    if global_abs:
+        summary["_global_abs_percentiles"] = global_abs
     return summary
