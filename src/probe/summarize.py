@@ -29,13 +29,23 @@ def _percentile(sorted_values: List[float], q: float) -> float:
 def _abs_percentiles(values: Iterable[float]) -> Dict[str, float]:
     abs_values = sorted(abs(float(v)) for v in values)
     if not abs_values:
-        return {"p50": 0.0, "p90": 0.0, "p95": 0.0, "p99": 0.0, "max": 0.0}
+        return {
+            "p50": 0.0,
+            "p90": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "max": 0.0,
+            "p99_over_p50": 0.0,
+        }
+    p50 = _percentile(abs_values, 0.50)
+    p99 = _percentile(abs_values, 0.99)
     return {
-        "p50": _percentile(abs_values, 0.50),
+        "p50": p50,
         "p90": _percentile(abs_values, 0.90),
         "p95": _percentile(abs_values, 0.95),
-        "p99": _percentile(abs_values, 0.99),
+        "p99": p99,
         "max": abs_values[-1],
+        "p99_over_p50": p99 / max(p50, 1e-12),
     }
 
 

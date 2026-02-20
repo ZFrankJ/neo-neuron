@@ -125,7 +125,8 @@ def main() -> None:
                 f"P90={float(stats.get('p90', 0.0)):.6f} "
                 f"P95={float(stats.get('p95', 0.0)):.6f} "
                 f"P99={float(stats.get('p99', 0.0)):.6f} "
-                f"Max={float(stats.get('max', 0.0)):.6f}",
+                f"Max={float(stats.get('max', 0.0)):.6f} "
+                f"P99/P50={float(stats.get('p99_over_p50', 0.0)):.6f}",
                 flush=True,
             )
 
