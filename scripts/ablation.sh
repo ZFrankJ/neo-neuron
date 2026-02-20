@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEVICE="${1:-auto}"
 BACKEND="${2:-mlx}"
 MODEL_SEL="${3:-both}"          # neo | lstm | both
-NORMS_CSV="${4:-none,rmsnorm,layernorm}"  # comma-separated
+MODES_CSV="${4:-none,rms_pre,rms_all}"  # comma-separated
 export TOKENIZERS_PARALLELISM=false
 export PYTHONUNBUFFERED=1
 
@@ -28,19 +28,19 @@ case "$(echo "$MODEL_SEL" | tr '[:upper:]' '[:lower:]')" in
     ;;
 esac
 
-IFS=',' read -r -a NORMS <<<"$NORMS_CSV"
-if [[ "${#NORMS[@]}" -eq 0 ]]; then
-  echo "No norms provided. Pass a CSV list like: none,rmsnorm,layernorm" >&2
+IFS=',' read -r -a MODES <<<"$MODES_CSV"
+if [[ "${#MODES[@]}" -eq 0 ]]; then
+  echo "No modes provided. Pass a CSV list like: none,rms_pre,rms_all" >&2
   exit 1
 fi
 
-run_with_norm() {
+run_with_mode() {
   local base_cfg="$1"
-  local norm="$2"
+  local mode="$2"
   local tmp_cfg
   tmp_cfg="$(mktemp -t neo_stability.XXXXXX.yaml)"
 
-  python3 - <<'PY' "$base_cfg" "$tmp_cfg" "$norm"
+  python3 - <<'PY' "$base_cfg" "$tmp_cfg" "$mode"
 import sys
 from pathlib import Path
 import yaml
@@ -116,18 +116,32 @@ def _retune_d_model(cfg: dict, target: int | None) -> int:
 
 base_cfg = Path(sys.argv[1])
 tmp_cfg = Path(sys.argv[2])
-norm = str(sys.argv[3]).strip().lower()
+mode = str(sys.argv[3]).strip().lower()
 
 cfg = yaml.safe_load(base_cfg.read_text()) or {}
-cfg["recurrent_norm"] = norm
+if mode == "none":
+    cfg["recurrent_norm"] = "none"
+    cfg["recurrent_norm_place"] = "all"
+    suffix = "ablate_nonorm"
+elif mode == "rms_pre":
+    cfg["recurrent_norm"] = "rmsnorm"
+    cfg["recurrent_norm_place"] = "pre"
+    suffix = "ablate_rmsnorm_pre"
+elif mode == "rms_all":
+    cfg["recurrent_norm"] = "rmsnorm"
+    cfg["recurrent_norm_place"] = "all"
+    suffix = "ablate_rmsnorm_all"
+else:
+    raise ValueError(f"Unsupported ablation mode '{mode}'.")
+
 cfg["resume_path"] = ""
-cfg["run_tag"] = f"{cfg.get('run_tag', cfg.get('model_name', 'model'))}_{norm}"
+cfg["run_tag"] = f"{cfg.get('run_tag', cfg.get('model_name', 'model'))}_{suffix}"
 target = _target_from_path(base_cfg, cfg.get("run_tag", ""))
 cfg["d_model"] = _retune_d_model(cfg, target)
 tmp_cfg.write_text(yaml.safe_dump(cfg, sort_keys=False))
 PY
 
-  echo "== Training: ${base_cfg#${ROOT_DIR}/} | recurrent_norm=${norm} ==" >&2
+  echo "== Training: ${base_cfg#${ROOT_DIR}/} | mode=${mode} ==" >&2
   if [[ -n "$BACKEND" ]]; then
     python3 -u scripts/train.py --config "$tmp_cfg" --device "$DEVICE" --backend "$BACKEND"
   else
@@ -143,17 +157,17 @@ for base_cfg in "${BASE_CFGS[@]}"; do
     echo "Config not found: $base_cfg" >&2
     exit 1
   fi
-  for norm in "${NORMS[@]}"; do
-    norm="$(echo "$norm" | tr '[:upper:]' '[:lower:]' | xargs)"
-    if [[ -z "$norm" ]]; then
+  for mode in "${MODES[@]}"; do
+    mode="$(echo "$mode" | tr '[:upper:]' '[:lower:]' | xargs)"
+    if [[ -z "$mode" ]]; then
       continue
     fi
-    case "$norm" in
-      none|rmsnorm|layernorm|layer_norm|ln|rms|rms_norm)
-        run_with_norm "$base_cfg" "$norm"
+    case "$mode" in
+      none|rms_pre|rms_all)
+        run_with_mode "$base_cfg" "$mode"
         ;;
       *)
-        echo "Skipping unknown norm '$norm' (allowed: none,rmsnorm,layernorm)" >&2
+        echo "Skipping unknown mode '$mode' (allowed: none,rms_pre,rms_all)" >&2
         ;;
     esac
   done

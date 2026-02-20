@@ -99,15 +99,16 @@ base_cfg = Path(sys.argv[1])
 tmp_cfg = Path(sys.argv[2])
 
 cfg = yaml.safe_load(base_cfg.read_text()) or {}
-cfg["recurrent_norm"] = "rmsnorm"
+cfg["recurrent_norm"] = "none"
+cfg["recurrent_norm_place"] = "all"
 cfg["resume_path"] = ""
-cfg["run_tag"] = f"{cfg.get('run_tag', cfg.get('model_name', 'model'))}_rmsnorm"
+cfg["run_tag"] = f"{cfg.get('run_tag', cfg.get('model_name', 'model'))}_scale_nonorm"
 target = _target_from_path(base_cfg, cfg.get("run_tag", ""))
 cfg["d_model"] = _retune_d_model(cfg, target)
 tmp_cfg.write_text(yaml.safe_dump(cfg, sort_keys=False))
 PY
 
-  echo "== Training: ${base_cfg#${ROOT_DIR}/} | recurrent_norm=rmsnorm ==" >&2
+  echo "== Training: ${base_cfg#${ROOT_DIR}/} | recurrent_norm=none ==" >&2
   if [[ -n "$BACKEND" ]]; then
     python3 -u scripts/train.py --config "$tmp_cfg" --device "$DEVICE" --backend "$BACKEND"
   else

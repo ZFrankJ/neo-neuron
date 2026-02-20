@@ -7,10 +7,10 @@ BACKEND="${2:-mlx}"
 export TOKENIZERS_PARALLELISM=false
 export PYTHONUNBUFFERED=1
 
-SEEDS=(42 314 1024 61803 271828)
+SEEDS=(42 1024 271828)
 BASE_CFGS=(
-  "${ROOT_DIR}/configs/wt103/neo_20m.yaml"
-  "${ROOT_DIR}/configs/wt103/lstm_20m.yaml"
+  "${ROOT_DIR}/configs/wt103/neo_40m.yaml"
+  "${ROOT_DIR}/configs/wt103/lstm_40m.yaml"
 )
 
 run_with_seed() {
@@ -99,9 +99,10 @@ seed = int(sys.argv[3])
 
 cfg = yaml.safe_load(base_cfg.read_text()) or {}
 cfg["recurrent_norm"] = "none"
+cfg["recurrent_norm_place"] = "all"
 cfg["seed"] = seed
 cfg["resume_path"] = ""
-cfg["run_tag"] = f"{cfg.get('run_tag', cfg.get('model_name', 'model'))}_nonorm_seed{seed}"
+cfg["run_tag"] = f"{cfg.get('run_tag', cfg.get('model_name', 'model'))}_var_nonorm_seed{seed}"
 target = _target_from_path(base_cfg, cfg.get("run_tag", ""))
 cfg["d_model"] = _retune_d_model(cfg, target)
 tmp_cfg.write_text(yaml.safe_dump(cfg, sort_keys=False))
