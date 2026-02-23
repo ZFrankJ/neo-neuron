@@ -98,7 +98,7 @@ probe_scaling_runs() {
   for cfg in "${cfgs[@]}"; do
     local stem
     stem="$(basename "$cfg" .yaml)"
-    local run_tag="wt103_${stem}_scale_nonorm"
+    local run_tag="wt103_${stem}_scale_rmsnorm"
     probe_checkpoints_for_run "$cfg" "$run_tag"
   done
 }
@@ -135,7 +135,7 @@ probe_variance_runs() {
   done
 }
 
-echo "== Stage 1: Scaling (Neo/LSTM 20/40/80M, no norm) ==" >&2
+echo "== Stage 1: Scaling (Neo/LSTM 20/40/80M, RMS norm) ==" >&2
 ./scripts/scaling.sh "$DEVICE" "$BACKEND"
 probe_scaling_runs
 
