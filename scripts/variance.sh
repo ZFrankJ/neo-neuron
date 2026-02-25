@@ -9,8 +9,8 @@ export PYTHONUNBUFFERED=1
 
 SEEDS=(42 1024 271828)
 BASE_CFGS=(
-  "${ROOT_DIR}/configs/wt103/neo_40m.yaml"
-  "${ROOT_DIR}/configs/wt103/lstm_40m.yaml"
+  "${ROOT_DIR}/configs/wt103/neo_30m.yaml"
+  "${ROOT_DIR}/configs/wt103/lstm_30m.yaml"
 )
 
 run_with_seed() {

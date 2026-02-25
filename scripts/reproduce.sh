@@ -87,18 +87,21 @@ probe_checkpoints_for_run() {
 }
 
 probe_scaling_runs() {
-  local cfgs=(
-    "configs/wt103/neo_20m.yaml"
-    "configs/wt103/lstm_20m.yaml"
-    "configs/wt103/neo_40m.yaml"
-    "configs/wt103/lstm_40m.yaml"
-    "configs/wt103/neo_80m.yaml"
-    "configs/wt103/lstm_80m.yaml"
+  local pairs=(
+    "configs/wt103/neo_20m.yaml:20"
+    "configs/wt103/lstm_20m.yaml:20"
+    "configs/wt103/neo_30m.yaml:30"
+    "configs/wt103/lstm_30m.yaml:30"
+    "configs/wt103/neo_50m.yaml:50"
+    "configs/wt103/lstm_50m.yaml:50"
   )
-  for cfg in "${cfgs[@]}"; do
+  for pair in "${pairs[@]}"; do
+    local cfg="${pair%%:*}"
+    local target_m="${pair##*:}"
     local stem
     stem="$(basename "$cfg" .yaml)"
-    local run_tag="wt103_${stem}_scale_rmsnorm"
+    local model="${stem%%_*}"
+    local run_tag="wt103_${model}_${target_m}m_scale_rmsnorm"
     probe_checkpoints_for_run "$cfg" "$run_tag"
   done
 }
@@ -121,8 +124,8 @@ probe_ablation_runs() {
 
 probe_variance_runs() {
   local cfgs=(
-    "configs/wt103/neo_40m.yaml"
-    "configs/wt103/lstm_40m.yaml"
+    "configs/wt103/neo_30m.yaml"
+    "configs/wt103/lstm_30m.yaml"
   )
   local seeds=(42 1024 271828)
   for cfg in "${cfgs[@]}"; do
@@ -135,7 +138,7 @@ probe_variance_runs() {
   done
 }
 
-echo "== Stage 1: Scaling (Neo/LSTM 20/40/80M, RMS norm) ==" >&2
+echo "== Stage 1: Scaling (Neo/LSTM 20/30/50M, RMS norm) ==" >&2
 ./scripts/scaling.sh "$DEVICE" "$BACKEND"
 probe_scaling_runs
 
@@ -143,7 +146,7 @@ echo "== Stage 2: Ablation (Neo/LSTM 20M, none/rms-pre/rms-all) ==" >&2
 ./scripts/ablation.sh "$DEVICE" "$BACKEND" both "none,rms_pre,rms_all"
 probe_ablation_runs
 
-echo "== Stage 3: Variance (Neo/LSTM 40M, no norm, 3 seeds) ==" >&2
+echo "== Stage 3: Variance (Neo/LSTM 30M, no norm, 3 seeds) ==" >&2
 ./scripts/variance.sh "$DEVICE" "$BACKEND"
 probe_variance_runs
 

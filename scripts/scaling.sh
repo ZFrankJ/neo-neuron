@@ -10,10 +10,10 @@ export PYTHONUNBUFFERED=1
 BASE_CFGS=(
   "${ROOT_DIR}/configs/wt103/neo_20m.yaml"
   "${ROOT_DIR}/configs/wt103/lstm_20m.yaml"
-  "${ROOT_DIR}/configs/wt103/neo_40m.yaml"
-  "${ROOT_DIR}/configs/wt103/lstm_40m.yaml"
-  "${ROOT_DIR}/configs/wt103/neo_80m.yaml"
-  "${ROOT_DIR}/configs/wt103/lstm_80m.yaml"
+  "${ROOT_DIR}/configs/wt103/neo_30m.yaml"
+  "${ROOT_DIR}/configs/wt103/lstm_30m.yaml"
+  "${ROOT_DIR}/configs/wt103/neo_50m.yaml"
+  "${ROOT_DIR}/configs/wt103/lstm_50m.yaml"
 )
 
 run_scaling_cfg() {
@@ -25,75 +25,6 @@ run_scaling_cfg() {
 import sys
 from pathlib import Path
 import yaml
-import math
-import re
-
-def _target_from_path(path: Path, run_tag: str) -> int | None:
-    m = re.search(r"_(\d+)m$", path.stem)
-    if m:
-        return int(m.group(1)) * 1_000_000
-    m = re.search(r"(\d+)m", run_tag or "")
-    if m:
-        return int(m.group(1)) * 1_000_000
-    return None
-
-def _norm_kind(norm: str) -> str:
-    n = str(norm).strip().lower()
-    if n in ("layernorm", "layer_norm", "ln"):
-        return "layernorm"
-    if n in ("rmsnorm", "rms_norm", "rms"):
-        return "rmsnorm"
-    return "none"
-
-def _norm_place_count(place: str, n_layers: int) -> int:
-    p = str(place).strip().lower()
-    if p == "pre":
-        return n_layers
-    if p == "stack":
-        return 1
-    return n_layers + 1
-
-def _retune_d_model(cfg: dict, target: int | None) -> int:
-    model = str(cfg.get("model_name", "")).strip().lower()
-    if target is None or model not in ("neo", "lstm"):
-        return int(cfg.get("d_model", 1))
-
-    L = int(cfg.get("n_layers", 1))
-    E = int(cfg.get("d_embed", 0))
-    V = int(cfg.get("vocab_size", 0))
-    norm = _norm_kind(str(cfg.get("recurrent_norm", "none")))
-
-    if model == "neo":
-        a = 2 * L
-        b = 2 * E + 2 * L + 1
-    else:
-        a = 8 * L
-        b = 2 * E + 8 * L + 1
-
-    norm_count = _norm_place_count(str(cfg.get("recurrent_norm_place", "all")), L)
-    if norm == "layernorm":
-        b += 2 * norm_count
-    elif norm == "rmsnorm":
-        b += norm_count
-
-    c = V * E + V + E
-    disc = b * b - 4 * a * (c - target)
-    if disc <= 0:
-        return int(cfg.get("d_model", 1))
-
-    d0 = max(1, int((-b + math.sqrt(disc)) / (2 * a)))
-    lo = max(1, d0 - 4096)
-    hi = d0 + 4096
-
-    best_d = d0
-    best_diff = None
-    for d in range(lo, hi + 1):
-        p = a * d * d + b * d + c
-        diff = abs(p - target)
-        if best_diff is None or diff < best_diff:
-            best_diff = diff
-            best_d = d
-    return best_d
 
 base_cfg = Path(sys.argv[1])
 tmp_cfg = Path(sys.argv[2])
@@ -103,8 +34,6 @@ cfg["recurrent_norm"] = "rmsnorm"
 cfg["recurrent_norm_place"] = "all"
 cfg["resume_path"] = ""
 cfg["run_tag"] = f"{cfg.get('run_tag', cfg.get('model_name', 'model'))}_scale_rmsnorm"
-target = _target_from_path(base_cfg, cfg.get("run_tag", ""))
-cfg["d_model"] = _retune_d_model(cfg, target)
 tmp_cfg.write_text(yaml.safe_dump(cfg, sort_keys=False))
 PY
 
