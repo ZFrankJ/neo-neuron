@@ -866,9 +866,9 @@ def train_entry(
     _log_line("== Model Info ==")
     _log_line(f"Model tag: {model_name}")
     _log_line(f"Model: {model.__class__.__name__}")
-    _log_line(f"Total params: {total_params / 1e6:.2f}M")
+    _log_line(f"Total params: {total_params / 1e6:.1f}M")
     if breakdown:
-        parts = [f"{k}={v / 1e6:.2f}M" for k, v in breakdown.items()]
+        parts = [f"{k}={v / 1e6:.1f}M" for k, v in breakdown.items()]
         _log_line("Breakdown: " + " | ".join(parts))
 
     train_np = _to_numpy_ids(train_ids)

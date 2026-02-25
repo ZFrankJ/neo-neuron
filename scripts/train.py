@@ -70,7 +70,7 @@ def main() -> None:
     model = build_model(cfg, model_name, backend_name=backend_name)
 
     param_count = count_params(model, backend_name=backend_name)
-    print(f"Model: {model_name} | Params: {param_count/1e6:.2f}M", flush=True)
+    print(f"Model: {model_name} | Params: {param_count/1e6:.1f}M", flush=True)
 
     tokenizer = build_tokenizer()
     train_ids, val_ids, test_ids = build_data(cfg, tokenizer)

@@ -73,9 +73,9 @@ def _log_model_info(model: torch.nn.Module, cfg: Optional[Any] = None) -> None:
     if model_tag:
         log_line(f"Model tag: {model_tag}")
     log_line(f"Model: {model.__class__.__name__}")
-    log_line(f"Total params: {total / 1e6:.2f}M")
+    log_line(f"Total params: {total / 1e6:.1f}M")
     if breakdown:
-        parts = [f"{key}={val / 1e6:.2f}M" for key, val in breakdown.items()]
+        parts = [f"{key}={val / 1e6:.1f}M" for key, val in breakdown.items()]
         log_line("Breakdown: " + " | ".join(parts))
 
 

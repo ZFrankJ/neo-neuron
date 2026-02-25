@@ -106,35 +106,12 @@ def _retune_d_model(cfg: dict, target: int | None) -> int:
 
     best_d = d0
     best_diff = None
-    best_under_d = None
-    best_under_gap = None
-    best_over_d = None
-    best_over_gap = None
     for d in range(lo, hi + 1):
         p = a * d * d + b * d + c
         diff = abs(p - target)
         if best_diff is None or diff < best_diff:
             best_diff = diff
             best_d = d
-        if p <= target:
-            gap = target - p
-            if best_under_gap is None or gap < best_under_gap:
-                best_under_gap = gap
-                best_under_d = d
-        else:
-            gap = p - target
-            if best_over_gap is None or gap < best_over_gap:
-                best_over_gap = gap
-                best_over_d = d
-    # Prefer staying under budget only when it is close to the best over-budget candidate.
-    if best_under_d is not None and best_over_d is not None:
-        if best_under_gap <= best_over_gap * 1.05:
-            return best_under_d
-        return best_over_d
-    if best_under_d is not None:
-        return best_under_d
-    if best_over_d is not None:
-        return best_over_d
     return best_d
 
 base_cfg = Path(sys.argv[1])
