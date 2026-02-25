@@ -76,6 +76,49 @@ def main() -> None:
     train_ids, val_ids, test_ids = build_data(cfg, tokenizer)
     validate_token_ids_against_vocab(cfg, tokenizer, train_ids, val_ids, test_ids, context="train")
     metrics = backend.train_entry(model, cfg, train_ids, val_ids, test_ids=test_ids, device=device)
+
+    if test_ids is not None and "test_ppl" in metrics:
+        print(
+            "Note: the in-training 'Test PPL' above is evaluated on the final model state "
+            "(equivalent to last checkpoint), not the best checkpoint.",
+            flush=True,
+        )
+
+    # Always run a PyTorch evaluation on the best checkpoint after training,
+    # regardless of training backend (torch or mlx).
+    save_dir = Path(str(cfg.get("save_dir", "checkpoints")))
+    run_tag = str(cfg.get("run_tag", model_name))
+    best_ckpt = save_dir / f"best_{run_tag}.pt"
+    if test_ids is not None:
+        if best_ckpt.exists():
+            torch_backend = get_backend_api("torch")
+            torch_device = torch_backend.get_runtime_device("cpu")
+            torch_model = build_model(cfg, model_name, backend_name="torch")
+            torch_backend.load_checkpoint_entry(str(best_ckpt), torch_model, device=torch_device)
+            best_metrics = torch_backend.eval_metrics_entry(torch_model, test_ids, cfg, torch_device)
+            metrics["best_ckpt_test_ppl_torch"] = best_metrics.get("ppl")
+            metrics["best_ckpt_gflops_per_token_torch"] = best_metrics.get("gflops_per_token")
+            metrics["best_ckpt_act_sparsity_torch"] = best_metrics.get("act_sparsity")
+            print(f"Best checkpoint (PyTorch eval, CPU) Test PPL: {best_metrics['ppl']:.2f}", flush=True)
+            if best_metrics.get("gflops_per_token") is not None:
+                print(
+                    f"Best checkpoint (PyTorch eval, CPU) GFLOPs/token: "
+                    f"{best_metrics['gflops_per_token']:.3f}",
+                    flush=True,
+                )
+            if best_metrics.get("act_sparsity") is not None:
+                print(
+                    f"Best checkpoint (PyTorch eval, CPU) Activation sparsity: "
+                    f"{best_metrics['act_sparsity']:.4f}",
+                    flush=True,
+                )
+        else:
+            print(
+                f"Warning: best checkpoint not found for post-training PyTorch eval: {best_ckpt}",
+                file=sys.stderr,
+                flush=True,
+            )
+
     metrics["provenance"] = build_provenance(cfg, str(device), param_count, sys.argv, backend=backend_name)
 
     save_config_snapshot(run_dir, cfg)
