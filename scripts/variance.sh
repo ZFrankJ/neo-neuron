@@ -16,6 +16,7 @@ BASE_CFGS=(
 run_with_seed() {
   local base_cfg="$1"
   local seed="$2"
+  local core_label="~20M"
   local tmp_cfg
   tmp_cfg="$(mktemp -t neo_variance.XXXXXX.yaml)"
 
@@ -108,7 +109,7 @@ cfg["d_model"] = _retune_d_model(cfg, target)
 tmp_cfg.write_text(yaml.safe_dump(cfg, sort_keys=False))
 PY
 
-  echo "== Training: ${base_cfg#${ROOT_DIR}/} | seed=${seed} | recurrent_norm=none ==" >&2
+  echo "== Training: ${base_cfg#${ROOT_DIR}/} | core=${core_label} | seed=${seed} | recurrent_norm=none ==" >&2
   if [[ -n "$BACKEND" ]]; then
     python3 -u scripts/train.py --config "$tmp_cfg" --device "$DEVICE" --backend "$BACKEND"
   else

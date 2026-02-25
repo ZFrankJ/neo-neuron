@@ -18,8 +18,16 @@ BASE_CFGS=(
 
 run_scaling_cfg() {
   local base_cfg="$1"
+  local core_label=""
   local tmp_cfg
   tmp_cfg="$(mktemp -t neo_scaling.XXXXXX.yaml)"
+
+  case "$base_cfg" in
+    *neo_20m.yaml|*lstm_20m.yaml) core_label="~10M" ;;
+    *neo_30m.yaml|*lstm_30m.yaml) core_label="~20M" ;;
+    *neo_50m.yaml|*lstm_50m.yaml) core_label="~40M" ;;
+    *) core_label="~unknown" ;;
+  esac
 
   python3 - <<'PY' "$base_cfg" "$tmp_cfg"
 import sys
@@ -37,7 +45,7 @@ cfg["run_tag"] = f"{cfg.get('run_tag', cfg.get('model_name', 'model'))}_scale_rm
 tmp_cfg.write_text(yaml.safe_dump(cfg, sort_keys=False))
 PY
 
-  echo "== Training: ${base_cfg#${ROOT_DIR}/} | recurrent_norm=rmsnorm ==" >&2
+  echo "== Training: ${base_cfg#${ROOT_DIR}/} | core=${core_label} | recurrent_norm=rmsnorm ==" >&2
   if [[ -n "$BACKEND" ]]; then
     python3 -u scripts/train.py --config "$tmp_cfg" --device "$DEVICE" --backend "$BACKEND"
   else

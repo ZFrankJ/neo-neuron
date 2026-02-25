@@ -37,6 +37,7 @@ fi
 run_with_mode() {
   local base_cfg="$1"
   local mode="$2"
+  local core_label="~10M"
   local tmp_cfg
   tmp_cfg="$(mktemp -t neo_stability.XXXXXX.yaml)"
 
@@ -141,7 +142,7 @@ cfg["d_model"] = _retune_d_model(cfg, target)
 tmp_cfg.write_text(yaml.safe_dump(cfg, sort_keys=False))
 PY
 
-  echo "== Training: ${base_cfg#${ROOT_DIR}/} | mode=${mode} ==" >&2
+  echo "== Training: ${base_cfg#${ROOT_DIR}/} | core=${core_label} | mode=${mode} ==" >&2
   if [[ -n "$BACKEND" ]]; then
     python3 -u scripts/train.py --config "$tmp_cfg" --device "$DEVICE" --backend "$BACKEND"
   else

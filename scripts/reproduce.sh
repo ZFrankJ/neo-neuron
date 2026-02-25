@@ -138,23 +138,23 @@ probe_variance_runs() {
   done
 }
 
-echo "== Stage 1: Scaling (Neo/LSTM 20/30/50M, RMS norm) ==" >&2
+echo "== Stage 1: Scaling (Neo/LSTM core ~10/~20/~40M, RMS norm) ==" >&2
 ./scripts/scaling.sh "$DEVICE" "$BACKEND"
 probe_scaling_runs
 
-echo "== Stage 2: Ablation (Neo/LSTM 20M, none/rms-pre/rms-all) ==" >&2
+echo "== Stage 2: Ablation (Neo/LSTM core ~10M, none/rms-pre/rms-all) ==" >&2
 ./scripts/ablation.sh "$DEVICE" "$BACKEND" both "none,rms_pre,rms_all"
 probe_ablation_runs
 
-echo "== Stage 3: Variance (Neo/LSTM 30M, no norm, 3 seeds) ==" >&2
+echo "== Stage 3: Variance (Neo/LSTM core ~20M, no norm, 3 seeds) ==" >&2
 ./scripts/variance.sh "$DEVICE" "$BACKEND"
 probe_variance_runs
 
-echo "== Stage 4: Transformer 40M training ==" >&2
+echo "== Stage 4: Transformer training (~30M total, 4 layers) ==" >&2
 if [[ -n "$BACKEND" ]]; then
-  python3 -u scripts/train.py --config configs/wt103/transformer_40m.yaml --device "$DEVICE" --backend "$BACKEND"
+  python3 -u scripts/train.py --config configs/wt103/transformer_30m.yaml --device "$DEVICE" --backend "$BACKEND"
 else
-  python3 -u scripts/train.py --config configs/wt103/transformer_40m.yaml --device "$DEVICE"
+  python3 -u scripts/train.py --config configs/wt103/transformer_30m.yaml --device "$DEVICE"
 fi
 
 python3 scripts/summarize_runs.py --root runs --out experiments/overall_summary
