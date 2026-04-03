@@ -149,17 +149,52 @@ def measure_activation_sparsity(
 
 def profile_real_flops_recurrent(model: torch.nn.Module, cfg: Any) -> Optional[float]:
     try:
-        from thop import profile
-        import copy
+        flops_per_token = 0.0
 
-        m = copy.deepcopy(model).to("cpu").eval()
-        T = min(int(_cfg_get(cfg, "block_size", 128)), 128)
-        B = 8
-        idx = torch.randint(0, int(_cfg_get(cfg, "vocab_size", 0)), (T, B), dtype=torch.long)
-        state = init_state_for_model(m, B, torch.device("cpu"))
-        macs, _ = profile(m, inputs=(idx, state), verbose=False)
-        flops = 2 * macs
-        return (flops / (B * T)) / 1e9
+        def _linear_weight_flops(module: Any) -> float:
+            weight = getattr(module, "weight", None)
+            if weight is None:
+                return 0.0
+            return float(2 * weight.numel())
+
+        vocab_size = int(_cfg_get(cfg, "vocab_size", 0))
+
+        in_proj = getattr(model, "in_proj", None)
+        if in_proj is not None:
+            flops_per_token += _linear_weight_flops(in_proj)
+
+        out_proj = getattr(model, "out_proj", None)
+        if out_proj is not None:
+            flops_per_token += _linear_weight_flops(out_proj)
+
+        head = getattr(model, "head", None)
+        if head is not None:
+            flops_per_token += _linear_weight_flops(head)
+        else:
+            emb = getattr(model, "emb", None)
+            if emb is not None and hasattr(emb, "weight"):
+                flops_per_token += float(2 * emb.weight.numel())
+
+        lstm = getattr(model, "lstm", None)
+        if lstm is not None:
+            for li in range(int(getattr(lstm, "num_layers", 0))):
+                w_ih = getattr(lstm, f"weight_ih_l{li}", None)
+                w_hh = getattr(lstm, f"weight_hh_l{li}", None)
+                if w_ih is not None:
+                    flops_per_token += float(2 * w_ih.numel())
+                if w_hh is not None:
+                    flops_per_token += float(2 * w_hh.numel())
+            return flops_per_token / 1e9
+
+        recurrent = getattr(model, "recurrent", None)
+        if recurrent is not None and hasattr(recurrent, "layers"):
+            for layer in recurrent.layers:
+                fg_linear = getattr(layer, "fg_linear", None)
+                if fg_linear is not None:
+                    flops_per_token += _linear_weight_flops(fg_linear)
+            return flops_per_token / 1e9
+
+        return None
     except Exception:
         return None
 

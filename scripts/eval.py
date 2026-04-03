@@ -51,9 +51,9 @@ def main() -> None:
     metrics = backend.eval_metrics_entry(model, ids, cfg, device)
     print(f"{args.split} PPL: {metrics['ppl']:.2f}")
     if metrics.get("gflops_per_token") is not None:
-        print(f"Measured GFLOPs/token (THOP): {metrics['gflops_per_token']:.3f}")
+        print(f"Estimated GFLOPs/token: {metrics['gflops_per_token']:.3f}")
     else:
-        print("Measured GFLOPs/token (THOP): unavailable")
+        print("Estimated GFLOPs/token: unavailable")
     if metrics.get("act_sparsity") is not None:
         print(f"Activation sparsity: {metrics['act_sparsity']:.4f}")
 

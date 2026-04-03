@@ -102,7 +102,7 @@ def main() -> None:
             print(f"Best checkpoint (PyTorch eval, CPU) Test PPL: {best_metrics['ppl']:.2f}", flush=True)
             if best_metrics.get("gflops_per_token") is not None:
                 print(
-                    f"Best checkpoint (PyTorch eval, CPU) GFLOPs/token: "
+                    f"Best checkpoint (PyTorch eval, CPU) Estimated GFLOPs/token: "
                     f"{best_metrics['gflops_per_token']:.3f}",
                     flush=True,
                 )
