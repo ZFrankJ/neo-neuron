@@ -300,6 +300,6 @@ def train_model(
         else:
             log_line("Estimated GFLOPs/token: unavailable")
         if eval_metrics.get("act_sparsity") is not None:
-            log_line(f"Activation sparsity: {eval_metrics['act_sparsity']:.4f}")
+            log_line(f"Average step activation sparsity: {eval_metrics['act_sparsity']:.4f}")
 
     return metrics

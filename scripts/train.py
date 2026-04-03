@@ -108,7 +108,7 @@ def main() -> None:
                 )
             if best_metrics.get("act_sparsity") is not None:
                 print(
-                    f"Best checkpoint (PyTorch eval, CPU) Activation sparsity: "
+                    f"Best checkpoint (PyTorch eval, CPU) Average step activation sparsity: "
                     f"{best_metrics['act_sparsity']:.4f}",
                     flush=True,
                 )

@@ -22,18 +22,26 @@ def init_state_for_model(model, batch_size: int, device: torch.device):
 class ActSparsityMeter:
     def __init__(self, eps: float = 0.0):
         self.eps = eps
-        self.zeros = 0
-        self.total = 0
+        self.step_sparsity_sum = 0.0
+        self.step_count = 0
         self.handles = []
 
     def _accum(self, t: torch.Tensor):
         t = t.detach()
-        if self.eps <= 0:
-            z = (t == 0).sum().item()
+        if t.numel() == 0:
+            return
+        # Measure sparsity per time step (or per emitted slice) and average,
+        # rather than pooling exact-zero counts over every element globally.
+        if t.dim() >= 2:
+            flat = t.reshape(t.shape[0], -1)
         else:
-            z = (t.abs() <= self.eps).sum().item()
-        self.zeros += z
-        self.total += t.numel()
+            flat = t.reshape(1, -1)
+        if self.eps <= 0:
+            frac = (flat == 0).float().mean(dim=1)
+        else:
+            frac = (flat.abs() <= self.eps).float().mean(dim=1)
+        self.step_sparsity_sum += frac.sum().item()
+        self.step_count += int(frac.numel())
 
     def attach_recurrent(self, model: torch.nn.Module):
         def hook_recurrent(_, __, out):
@@ -70,7 +78,7 @@ class ActSparsityMeter:
         self.handles.append(model.ln_f.register_forward_hook(hook_norm))
 
     def summary(self) -> float:
-        return (self.zeros / self.total) if self.total > 0 else 0.0
+        return (self.step_sparsity_sum / self.step_count) if self.step_count > 0 else 0.0
 
     def clear(self):
         for h in self.handles:

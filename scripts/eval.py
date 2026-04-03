@@ -55,7 +55,7 @@ def main() -> None:
     else:
         print("Estimated GFLOPs/token: unavailable")
     if metrics.get("act_sparsity") is not None:
-        print(f"Activation sparsity: {metrics['act_sparsity']:.4f}")
+        print(f"Average step activation sparsity: {metrics['act_sparsity']:.4f}")
 
 
 if __name__ == "__main__":
