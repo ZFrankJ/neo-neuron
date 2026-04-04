@@ -58,8 +58,8 @@ def _parse_activation_id(activation_id) -> int:
         named = {
             "tanh": 100,
             "gelu": 101,
-            "silu": 102,
-            "swish": 102,
+            "none": 102,
+            "identity": 102,
         }
         if text in named:
             return named[text]
@@ -69,12 +69,12 @@ def _parse_activation_id(activation_id) -> int:
             value = int(text)
         except ValueError as exc:
             raise ValueError(
-                f"Unsupported activation_id '{activation_id}'. Expected id3/id4/id5/tanh/gelu/silu."
+                f"Unsupported activation_id '{activation_id}'. Expected id3/id4/id5/tanh/gelu/none."
             ) from exc
     else:
         value = int(activation_id)
     if value not in (3, 4, 5, 100, 101, 102):
-        raise ValueError(f"Unsupported activation_id '{activation_id}'. Expected id3/id4/id5/tanh/gelu/silu.")
+        raise ValueError(f"Unsupported activation_id '{activation_id}'. Expected id3/id4/id5/tanh/gelu/none.")
     return value
 
 

@@ -203,8 +203,8 @@ def _parse_activation_id(activation_id) -> int:
         named = {
             "tanh": 100,
             "gelu": 101,
-            "silu": 102,
-            "swish": 102,
+            "none": 102,
+            "identity": 102,
         }
         if text in named:
             return named[text]
@@ -214,7 +214,7 @@ def _parse_activation_id(activation_id) -> int:
     else:
         value = int(activation_id)
     if value not in (3, 4, 5, 100, 101, 102):
-        raise ValueError(f"Unsupported activation_id '{activation_id}'. Expected id3/id4/id5/tanh/gelu/silu.")
+        raise ValueError(f"Unsupported activation_id '{activation_id}'. Expected id3/id4/id5/tanh/gelu/none.")
     return value
 
 
@@ -237,7 +237,7 @@ def _cortical_activation(x: mx.array, activation_id: int) -> mx.array:
     if activation_id == 101:
         return 0.5 * x * (1.0 + mx.erf(x / math.sqrt(2.0)))
     if activation_id == 102:
-        return x * mx.sigmoid(x)
+        return x
     pos = mx.tanh(x)
     neg = _negative_branch(x, activation_id) * mx.exp(mx.minimum(x, 0.0))
     return mx.where(x >= 0, pos, neg)

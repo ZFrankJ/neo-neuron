@@ -23,7 +23,7 @@ def cortical_activation(x: torch.Tensor, activation_id: int = 3) -> torch.Tensor
     if activation_id == 101:
         return F.gelu(x)
     if activation_id == 102:
-        return F.silu(x)
+        return x
     pos_part = torch.tanh(x)
     exp_arg = torch.clamp(x, max=0.0)
     neg_poly = _negative_branch(x, int(activation_id))
@@ -51,7 +51,7 @@ def _fused_cortical_step(
         output = state * g_out
         return output, state
     if activation_id == 102:
-        state = F.silu(hidden)
+        state = hidden
         output = state * g_out
         return output, state
     pos_part = torch.tanh(hidden)

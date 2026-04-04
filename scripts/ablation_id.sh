@@ -4,14 +4,14 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEVICE="${1:-auto}"
 BACKEND="${2:-mlx}"
-ACTIVATIONS_CSV="${3:-id3,id4,id5,tanh,gelu,silu}"
+ACTIVATIONS_CSV="${3:-id3,id4,id5,tanh,gelu,none}"
 BASE_CFG="${ROOT_DIR}/configs/wt103/neo_20m.yaml"
 export TOKENIZERS_PARALLELISM=false
 export PYTHONUNBUFFERED=1
 
 IFS=',' read -r -a ACTIVATIONS <<<"$ACTIVATIONS_CSV"
 if [[ "${#ACTIVATIONS[@]}" -eq 0 ]]; then
-  echo "No activations provided. Pass a CSV list like: id3,id4,id5,tanh,gelu,silu" >&2
+  echo "No activations provided. Pass a CSV list like: id3,id4,id5,tanh,gelu,none" >&2
   exit 1
 fi
 
@@ -30,11 +30,11 @@ base_cfg = Path(sys.argv[1])
 tmp_cfg = Path(sys.argv[2])
 activation_name = str(sys.argv[3]).strip().lower()
 
-allowed = {"id3", "id4", "id5", "tanh", "gelu", "silu"}
+allowed = {"id3", "id4", "id5", "tanh", "gelu", "none", "identity"}
 if activation_name not in allowed:
     raise ValueError(
         f"Unsupported activation '{activation_name}'. Expected one of: "
-        "id3,id4,id5,tanh,gelu,silu."
+        "id3,id4,id5,tanh,gelu,none."
     )
 
 cfg = yaml.safe_load(base_cfg.read_text()) or {}
@@ -68,11 +68,11 @@ for activation_name in "${ACTIVATIONS[@]}"; do
     continue
   fi
   case "$activation_name" in
-    id3|id4|id5|tanh|gelu|silu)
+    id3|id4|id5|tanh|gelu|none|identity)
       run_with_activation "$activation_name"
       ;;
     *)
-      echo "Skipping unknown activation '$activation_name' (allowed: id3,id4,id5,tanh,gelu,silu)" >&2
+      echo "Skipping unknown activation '$activation_name' (allowed: id3,id4,id5,tanh,gelu,none)" >&2
       ;;
   esac
 done
