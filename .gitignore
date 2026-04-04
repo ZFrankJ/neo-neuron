@@ -35,6 +35,7 @@ __pycache__/
 # Jupyter
 ############################
 .ipynb_checkpoints/
+notebooks/*.local.ipynb
 
 ############################
 # OS / editors
