@@ -1,6 +1,7 @@
 """Activation functions for cortical neurons."""
 
 import torch
+import torch.nn.functional as F
 
 
 def _negative_branch(hidden: torch.Tensor, activation_id: int) -> torch.Tensor:
@@ -17,6 +18,12 @@ def _negative_branch(hidden: torch.Tensor, activation_id: int) -> torch.Tensor:
 
 
 def cortical_activation(x: torch.Tensor, activation_id: int = 3) -> torch.Tensor:
+    if activation_id == 100:
+        return torch.tanh(x)
+    if activation_id == 101:
+        return F.gelu(x)
+    if activation_id == 102:
+        return F.silu(x)
     pos_part = torch.tanh(x)
     exp_arg = torch.clamp(x, max=0.0)
     neg_poly = _negative_branch(x, int(activation_id))
@@ -35,6 +42,18 @@ def _fused_cortical_step(
     activation_id: int,
 ):
     hidden = f_x + s_prev
+    if activation_id == 100:
+        state = torch.tanh(hidden)
+        output = state * g_out
+        return output, state
+    if activation_id == 101:
+        state = F.gelu(hidden)
+        output = state * g_out
+        return output, state
+    if activation_id == 102:
+        state = F.silu(hidden)
+        output = state * g_out
+        return output, state
     pos_part = torch.tanh(hidden)
     exp_arg = torch.clamp(hidden, max=0.0)
     neg_poly = _negative_branch(hidden, int(activation_id))

@@ -55,16 +55,26 @@ class BaseCorticalNeuron(nn.Module):
 def _parse_activation_id(activation_id) -> int:
     if isinstance(activation_id, str):
         text = activation_id.strip().lower()
+        named = {
+            "tanh": 100,
+            "gelu": 101,
+            "silu": 102,
+            "swish": 102,
+        }
+        if text in named:
+            return named[text]
         if text.startswith("id"):
             text = text[2:]
         try:
             value = int(text)
         except ValueError as exc:
-            raise ValueError(f"Unsupported activation_id '{activation_id}'. Expected id3/id4/id5.") from exc
+            raise ValueError(
+                f"Unsupported activation_id '{activation_id}'. Expected id3/id4/id5/tanh/gelu/silu."
+            ) from exc
     else:
         value = int(activation_id)
-    if value not in (3, 4, 5):
-        raise ValueError(f"Unsupported activation_id '{activation_id}'. Expected id3/id4/id5.")
+    if value not in (3, 4, 5, 100, 101, 102):
+        raise ValueError(f"Unsupported activation_id '{activation_id}'. Expected id3/id4/id5/tanh/gelu/silu.")
     return value
 
 

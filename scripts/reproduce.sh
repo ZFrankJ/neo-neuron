@@ -142,8 +142,8 @@ echo "== Stage 1: Scaling (Neo/LSTM core ~10/~20/~40M, RMS norm) ==" >&2
 ./scripts/scaling.sh "$DEVICE" "$BACKEND"
 probe_scaling_runs
 
-echo "== Stage 2: Ablation (Neo/LSTM core ~10M, none/rms-pre/rms-all) ==" >&2
-./scripts/ablation.sh "$DEVICE" "$BACKEND" both "none,rms_pre,rms_all"
+echo "== Stage 2: Ablation Norm (Neo/LSTM core ~10M, none/rms-pre/rms-all) ==" >&2
+./scripts/ablation_norm.sh "$DEVICE" "$BACKEND" both "none,rms_pre,rms_all"
 probe_ablation_runs
 
 echo "== Stage 3: Variance (Neo/LSTM core ~20M, no norm, 3 seeds) ==" >&2
