@@ -102,13 +102,14 @@ def main() -> None:
             print(f"Best checkpoint (PyTorch eval, CPU) Test PPL: {best_metrics['ppl']:.2f}", flush=True)
             if best_metrics.get("gflops_per_token") is not None:
                 print(
-                    f"Best checkpoint (PyTorch eval, CPU) GFLOPs/token: "
+                    f"Best checkpoint (PyTorch eval, CPU) Estimated GFLOPs/token: "
                     f"{best_metrics['gflops_per_token']:.3f}",
                     flush=True,
                 )
             if best_metrics.get("act_sparsity") is not None:
+                eps = float(best_metrics.get("act_sparsity_eps", cfg.get("activation_sparsity_eps", 1e-2)))
                 print(
-                    f"Best checkpoint (PyTorch eval, CPU) Activation sparsity: "
+                    f"Best checkpoint (PyTorch eval, CPU) Average step activation sparsity (|x|<={eps:.1e}): "
                     f"{best_metrics['act_sparsity']:.4f}",
                     flush=True,
                 )

@@ -81,6 +81,20 @@ def _identity_map(
     return out
 
 
+def _mark_used(used: set[str], *keys: str) -> None:
+    for key in keys:
+        used.add(key)
+
+
+def _warn_unconsumed_src(
+    src: Dict[str, np.ndarray],
+    used: set[str],
+    warn: List[str],
+) -> None:
+    for k in sorted(set(src.keys()) - used):
+        warn.append(f"Ignoring extra source key: {k}")
+
+
 def _infer_n_layers_from_template_keys(dst_template: Dict[str, Any]) -> int:
     max_idx = -1
     for k in dst_template.keys():
@@ -105,12 +119,14 @@ def _map_neo_state(
     warn: List[str],
 ) -> Dict[str, np.ndarray]:
     out: Dict[str, np.ndarray] = {}
+    used: set[str] = set()
 
     # First copy all keys that already match by name and shape.
     for k, dv in dst_template.items():
         sv = src.get(k)
         if sv is not None and tuple(sv.shape) == tuple(dv.shape):
             out[k] = sv
+            _mark_used(used, k)
 
     n_layers = int(cfg.get("n_layers", 0)) or _infer_n_layers_from_template_keys(dst_template)
 
@@ -124,6 +140,7 @@ def _map_neo_state(
             src_key = f"recurrent.layers.{i}.out_norm.{suffix}"
             if src_key in src and tuple(src[src_key].shape) == tuple(dst_template[dst_key].shape):
                 out[dst_key] = src[src_key]
+                _mark_used(used, src_key)
 
     # Backward-compat for final stack norm:
     # recurrent.layers.{last}.out_norm.{weight,bias} -> recurrent.stack_norm.{weight,bias}
@@ -135,14 +152,15 @@ def _map_neo_state(
         src_key_fallback = f"recurrent.layers.{max(0, n_layers - 1)}.out_norm.{suffix}"
         if src_key_direct in src and tuple(src[src_key_direct].shape) == tuple(dst_template[dst_key].shape):
             out[dst_key] = src[src_key_direct]
+            _mark_used(used, src_key_direct)
         elif src_key_fallback in src and tuple(src[src_key_fallback].shape) == tuple(dst_template[dst_key].shape):
             out[dst_key] = src[src_key_fallback]
+            _mark_used(used, src_key_fallback)
 
     missing = sorted(set(dst_template.keys()) - set(out.keys()))
     if missing:
         raise KeyError(f"Missing mapped destination keys: {missing}")
-    for k in sorted(set(src.keys()) - set(out.keys())):
-        warn.append(f"Ignoring extra source key: {k}")
+    _warn_unconsumed_src(src, used, warn)
     return out
 
 
@@ -153,6 +171,7 @@ def _map_lstm_torch_to_mlx(
     warn: List[str],
 ) -> Dict[str, np.ndarray]:
     out: Dict[str, np.ndarray] = {}
+    used: set[str] = set()
     # Copy non-recurrent keys that already match by name/shape.
     for k, dv in dst_template.items():
         if k.startswith("lstm_layers."):
@@ -160,6 +179,7 @@ def _map_lstm_torch_to_mlx(
         sv = src.get(k)
         if sv is not None and tuple(sv.shape) == tuple(dv.shape):
             out[k] = sv
+            _mark_used(used, k)
 
     # Torch -> MLX norm key translation and backward-compat.
     # New torch: lstm.pre_norms.{i}.{weight,bias}, lstm.stack_norm.{weight,bias}
@@ -173,10 +193,13 @@ def _map_lstm_torch_to_mlx(
                 src_old = f"out_norm.{suffix}"
                 if src_new in src and tuple(src[src_new].shape) == tuple(dst_template[dst_pre].shape):
                     out[dst_pre] = src[src_new]
+                    _mark_used(used, src_new)
                 elif src_old_pre in src and tuple(src[src_old_pre].shape) == tuple(dst_template[dst_pre].shape):
                     out[dst_pre] = src[src_old_pre]
+                    _mark_used(used, src_old_pre)
                 elif src_old in src and tuple(src[src_old].shape) == tuple(dst_template[dst_pre].shape):
                     out[dst_pre] = src[src_old]
+                    _mark_used(used, src_old)
 
     for suffix in ("weight", "bias"):
         src_old = f"out_norm.{suffix}"
@@ -186,23 +209,32 @@ def _map_lstm_torch_to_mlx(
         if dst_stack in dst_template and dst_stack not in out and src_new_stack in src:
             if tuple(src[src_new_stack].shape) == tuple(dst_template[dst_stack].shape):
                 out[dst_stack] = src[src_new_stack]
+                _mark_used(used, src_new_stack)
         if dst_pre in dst_template and dst_pre not in out and src_old in src:
             if tuple(src[src_old].shape) == tuple(dst_template[dst_pre].shape):
                 out[dst_pre] = src[src_old]
+                _mark_used(used, src_old)
         if dst_stack in dst_template and dst_stack not in out and src_old in src:
             if tuple(src[src_old].shape) == tuple(dst_template[dst_stack].shape):
                 out[dst_stack] = src[src_old]
+                _mark_used(used, src_old)
 
     for i in range(n_layers):
         out[f"lstm_layers.{i}.Wx"] = src[f"lstm.weight_ih_l{i}"]
         out[f"lstm_layers.{i}.Wh"] = src[f"lstm.weight_hh_l{i}"]
         out[f"lstm_layers.{i}.bias"] = src[f"lstm.bias_ih_l{i}"] + src[f"lstm.bias_hh_l{i}"]
+        _mark_used(
+            used,
+            f"lstm.weight_ih_l{i}",
+            f"lstm.weight_hh_l{i}",
+            f"lstm.bias_ih_l{i}",
+            f"lstm.bias_hh_l{i}",
+        )
 
     missing = sorted(set(dst_template.keys()) - set(out.keys()))
     if missing:
         raise KeyError(f"Missing mapped destination keys: {missing}")
-    for k in sorted(set(src.keys()) - set(out.keys())):
-        warn.append(f"Ignoring extra source key: {k}")
+    _warn_unconsumed_src(src, used, warn)
     return out
 
 
@@ -213,6 +245,7 @@ def _map_lstm_mlx_to_torch(
     warn: List[str],
 ) -> Dict[str, np.ndarray]:
     out: Dict[str, np.ndarray] = {}
+    used: set[str] = set()
     # Copy non-recurrent keys that already match by name/shape.
     for k, dv in dst_template.items():
         if k.startswith("lstm."):
@@ -220,6 +253,7 @@ def _map_lstm_mlx_to_torch(
         sv = src.get(k)
         if sv is not None and tuple(sv.shape) == tuple(dv.shape):
             out[k] = sv
+            _mark_used(used, k)
 
     # MLX -> Torch norm key translation and backward-compat.
     for i in range(n_layers):
@@ -229,6 +263,7 @@ def _map_lstm_mlx_to_torch(
             if dst_pre in dst_template and dst_pre not in out and src_pre in src:
                 if tuple(src[src_pre].shape) == tuple(dst_template[dst_pre].shape):
                     out[dst_pre] = src[src_pre]
+                    _mark_used(used, src_pre)
 
     for suffix in ("weight", "bias"):
         src_old = f"out_norm.{suffix}"
@@ -241,23 +276,28 @@ def _map_lstm_mlx_to_torch(
         if dst_pre in dst_template and dst_pre not in out and src_old in src:
             if tuple(src[src_old].shape) == tuple(dst_template[dst_pre].shape):
                 out[dst_pre] = src[src_old]
+                _mark_used(used, src_old)
         if dst_pre in dst_template and dst_pre not in out and src_old_pre in src:
             if tuple(src[src_old_pre].shape) == tuple(dst_template[dst_pre].shape):
                 out[dst_pre] = src[src_old_pre]
+                _mark_used(used, src_old_pre)
         if dst_stack in dst_template and dst_stack not in out:
             src_key = src_stack if src_stack in src else src_old
             if src_key in src and tuple(src[src_key].shape) == tuple(dst_template[dst_stack].shape):
                 out[dst_stack] = src[src_key]
+                _mark_used(used, src_key)
         # Support older torch template naming.
         dst_stack_old = "stack_norm." + suffix
         if dst_stack_old in dst_template and dst_stack_old not in out:
             src_key = src_stack if src_stack in src else src_old
             if src_key in src and tuple(src[src_key].shape) == tuple(dst_template[dst_stack_old].shape):
                 out[dst_stack_old] = src[src_key]
+                _mark_used(used, src_key)
         if dst_old in dst_template and dst_old not in out:
             src_key = src_stack if src_stack in src else src_old
             if src_key in src and tuple(src[src_key].shape) == tuple(dst_template[dst_old].shape):
                 out[dst_old] = src[src_key]
+                _mark_used(used, src_key)
 
     for i in range(n_layers):
         wx = src[f"lstm_layers.{i}.Wx"]
@@ -267,12 +307,12 @@ def _map_lstm_mlx_to_torch(
         out[f"lstm.weight_hh_l{i}"] = wh
         out[f"lstm.bias_ih_l{i}"] = b
         out[f"lstm.bias_hh_l{i}"] = np.zeros_like(b)
+        _mark_used(used, f"lstm_layers.{i}.Wx", f"lstm_layers.{i}.Wh", f"lstm_layers.{i}.bias")
 
     missing = sorted(set(dst_template.keys()) - set(out.keys()))
     if missing:
         raise KeyError(f"Missing mapped destination keys: {missing}")
-    for k in sorted(set(src.keys()) - set(out.keys())):
-        warn.append(f"Ignoring extra source key: {k}")
+    _warn_unconsumed_src(src, used, warn)
     return out
 
 
@@ -283,10 +323,12 @@ def _map_lstm_same_backend(
     warn: List[str],
 ) -> Dict[str, np.ndarray]:
     out: Dict[str, np.ndarray] = {}
+    used: set[str] = set()
     for k, dv in dst_template.items():
         sv = src.get(k)
         if sv is not None and tuple(sv.shape) == tuple(dv.shape):
             out[k] = sv
+            _mark_used(used, k)
 
     for i in range(n_layers):
         for suffix in ("weight", "bias"):
@@ -306,6 +348,7 @@ def _map_lstm_same_backend(
                 for sk in src_keys:
                     if sk in src and tuple(src[sk].shape) == tuple(dst_template[dk].shape):
                         out[dk] = src[sk]
+                        _mark_used(used, sk)
                         break
 
     for suffix in ("weight", "bias"):
@@ -317,13 +360,13 @@ def _map_lstm_same_backend(
             for sk in src_keys:
                 if sk in src and tuple(src[sk].shape) == tuple(dst_template[dk].shape):
                     out[dk] = src[sk]
+                    _mark_used(used, sk)
                     break
 
     missing = sorted(set(dst_template.keys()) - set(out.keys()))
     if missing:
         raise KeyError(f"Missing mapped destination keys: {missing}")
-    for k in sorted(set(src.keys()) - set(out.keys())):
-        warn.append(f"Ignoring extra source key: {k}")
+    _warn_unconsumed_src(src, used, warn)
     return out
 
 
