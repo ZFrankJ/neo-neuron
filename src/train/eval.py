@@ -19,6 +19,10 @@ def init_state_for_model(model, batch_size: int, device: torch.device):
     return None
 
 
+def activation_sparsity_eps(cfg: Any) -> float:
+    return float(_cfg_get(cfg, "activation_sparsity_eps", 1e-2))
+
+
 class ActSparsityMeter:
     def __init__(self, eps: float = 0.0):
         self.eps = eps
@@ -118,7 +122,7 @@ def measure_activation_sparsity(
     device: torch.device,
     max_batches: int = 50,
 ) -> Optional[float]:
-    meter = ActSparsityMeter(eps=0.0)
+    meter = ActSparsityMeter(eps=activation_sparsity_eps(cfg))
     model.eval()
     T = int(_cfg_get(cfg, "block_size", 128))
     B = min(int(_cfg_get(cfg, "batch_size", 16)), 16)
@@ -244,5 +248,6 @@ def evaluate_metrics(model: torch.nn.Module, ids: torch.Tensor, cfg: Any, device
     return {
         "ppl": ppl,
         "act_sparsity": sparsity,
+        "act_sparsity_eps": activation_sparsity_eps(cfg),
         "gflops_per_token": gflops,
     }

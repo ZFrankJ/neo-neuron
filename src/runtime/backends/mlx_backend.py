@@ -1027,5 +1027,6 @@ def train_entry(
         else:
             _log_line("Estimated GFLOPs/token: unavailable")
         if test_metrics.get("act_sparsity") is not None:
-            _log_line(f"Average step activation sparsity: {test_metrics['act_sparsity']:.4f}")
+            eps = float(test_metrics.get("act_sparsity_eps", _cfg_get(cfg, "activation_sparsity_eps", 1e-2)))
+            _log_line(f"Average step activation sparsity (|x|<={eps:.1e}): {test_metrics['act_sparsity']:.4f}")
     return metrics
