@@ -45,14 +45,14 @@ refresh_all() {
 }
 
 run_all() {
-  if ! command -v jupyter >/dev/null 2>&1; then
-    echo "jupyter is required for run-all" >&2
+  if ! python3 -m jupyter --version >/dev/null 2>&1; then
+    echo "python3 -m jupyter is required for run-all" >&2
     exit 1
   fi
   copy_missing
   for nb in "${NOTEBOOK_DIR}"/*.local.ipynb; do
     echo "Running ${nb#${ROOT_DIR}/}"
-    jupyter nbconvert \
+    python3 -m jupyter nbconvert \
       --to notebook \
       --execute \
       --inplace \
