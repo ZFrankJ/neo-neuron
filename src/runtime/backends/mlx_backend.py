@@ -854,7 +854,13 @@ def _eval_perplexity(model, ids: np.ndarray, cfg: Any) -> float:
         mx.eval(loss)
         total_loss += float(loss.item())
         total_tokens += cur_b * t_len
-    return math.exp(total_loss / max(1, total_tokens))
+    avg_nll = total_loss / max(1, total_tokens)
+    if not math.isfinite(avg_nll):
+        return float("inf")
+    try:
+        return math.exp(avg_nll)
+    except OverflowError:
+        return float("inf")
 
 
 def eval_metrics_entry(model, ids, cfg: Any, device=None):
