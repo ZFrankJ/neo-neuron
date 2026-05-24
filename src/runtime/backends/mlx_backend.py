@@ -205,6 +205,9 @@ def _parse_activation_id(activation_id) -> int:
             "gelu": 101,
             "none": 102,
             "identity": 102,
+            "gain_tanh": 103,
+            "one_plus_tanh": 103,
+            "1+tanh": 103,
         }
         if text in named:
             return named[text]
@@ -213,8 +216,8 @@ def _parse_activation_id(activation_id) -> int:
         value = int(text)
     else:
         value = int(activation_id)
-    if value not in (3, 4, 5, 100, 101, 102):
-        raise ValueError(f"Unsupported activation_id '{activation_id}'. Expected id3/id4/id5/tanh/gelu/none.")
+    if value not in (3, 4, 5, 100, 101, 102, 103):
+        raise ValueError(f"Unsupported activation_id '{activation_id}'. Expected id3/id4/id5/tanh/gelu/none/gain_tanh.")
     return value
 
 
@@ -234,6 +237,8 @@ def _negative_branch(x: mx.array, activation_id: int) -> mx.array:
 def _cortical_activation(x: mx.array, activation_id: int) -> mx.array:
     if activation_id == 100:
         return mx.tanh(x)
+    if activation_id == 103:
+        return mx.tanh(x)
     if activation_id == 101:
         return 0.5 * x * (1.0 + mx.erf(x / math.sqrt(2.0)))
     if activation_id == 102:
@@ -241,6 +246,22 @@ def _cortical_activation(x: mx.array, activation_id: int) -> mx.array:
     pos = mx.tanh(x)
     neg = _negative_branch(x, activation_id) * mx.exp(mx.minimum(x, 0.0))
     return mx.where(x >= 0, pos, neg)
+
+
+def _fused_cortical_step(
+    f_x: mx.array,
+    s_prev: mx.array,
+    g_x: mx.array,
+    activation_id: int,
+) -> Tuple[mx.array, mx.array]:
+    hidden = f_x + s_prev
+    if activation_id == 103:
+        state = mx.tanh(hidden)
+        output = (1.0 + state) * g_x
+        return output, state
+    state = _cortical_activation(hidden, activation_id)
+    output = state * g_x
+    return output, state
 
 
 def _build_output_norm(norm_type: str, dims: int) -> mxnn.Module:
@@ -270,9 +291,7 @@ class MlxCorticalNeuron(mxnn.Module):
     def __call__(self, x: mx.array, prev_state: mx.array):
         fg = self.fg_linear(x)
         f_x_raw, g_x_raw = mx.split(fg, 2, axis=-1)
-        hidden = prev_state + f_x_raw
-        state = _cortical_activation(hidden, self.activation_id)
-        output = state * g_x_raw
+        output, state = _fused_cortical_step(f_x_raw, prev_state, g_x_raw, self.activation_id)
         aux = None if self.training else {"f_x_raw": f_x_raw, "g_x_raw": g_x_raw}
         return output, state, aux
 

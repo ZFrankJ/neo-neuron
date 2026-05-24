@@ -20,6 +20,8 @@ def _negative_branch(hidden: torch.Tensor, activation_id: int) -> torch.Tensor:
 def cortical_activation(x: torch.Tensor, activation_id: int = 3) -> torch.Tensor:
     if activation_id == 100:
         return torch.tanh(x)
+    if activation_id == 103:
+        return torch.tanh(x)
     if activation_id == 101:
         return F.gelu(x)
     if activation_id == 102:
@@ -45,6 +47,10 @@ def _fused_cortical_step(
     if activation_id == 100:
         state = torch.tanh(hidden)
         output = state * g_out
+        return output, state
+    if activation_id == 103:
+        state = torch.tanh(hidden)
+        output = (1.0 + state) * g_out
         return output, state
     if activation_id == 101:
         state = F.gelu(hidden)
