@@ -5,6 +5,11 @@ runs/
 checkpoints/
 outputs/
 logs/
+experiments/**/*.csv
+experiments/**/*.md
+experiments/overall_summary
+experiments/all_results.csv
+experiments/overall_summary.md
 
 ############################
 # Model artifacts
