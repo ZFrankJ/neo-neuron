@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 import subprocess
 from pathlib import Path
 from typing import Any, Dict
+
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 
 def ensure_repo_root_on_path() -> Path:
