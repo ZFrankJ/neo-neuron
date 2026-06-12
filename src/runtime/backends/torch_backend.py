@@ -52,6 +52,7 @@ def build_model(cfg: Dict[str, Any], model_name: str):
     tie_embeddings = bool(cfg.get("tie_embeddings", True))
     recurrent_norm = _resolve_recurrent_norm(cfg)
     recurrent_norm_place = str(cfg.get("recurrent_norm_place", cfg.get("norm_place", "all")))
+    rmsnorm_eps = float(cfg.get("rmsnorm_eps", 1e-5))
 
     if model_name == "lstm":
         return LSTMLM(
@@ -79,6 +80,7 @@ def build_model(cfg: Dict[str, Any], model_name: str):
             cell_type=str(cfg.get("cell_type", "cortical")),
             output_norm=recurrent_norm,
             norm_place=recurrent_norm_place,
+            rmsnorm_eps=rmsnorm_eps,
             cell_kwargs=cell_kwargs,
             use_checkpoint=bool(cfg.get("use_checkpoint", False)),
         )
