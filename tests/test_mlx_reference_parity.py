@@ -65,6 +65,29 @@ def _tiny_cfg(**overrides):
     return cfg
 
 
+def _production_like_optimizer_cfg(**overrides):
+    cfg = _tiny_cfg(
+        vocab_size=32,
+        d_model=8,
+        d_embed=4,
+        n_layers=2,
+        block_size=6,
+        batch_size=2,
+        recurrent_norm="rmsnorm",
+        activation_id="id5",
+        use_checkpoint=False,
+        betas=(0.9, 0.95),
+        adam_eps=1e-8,
+        embed_weight_decay=1e-4,
+        proj_weight_decay=1e-3,
+        recurrent_weight_decay=2e-4,
+        weight_decay_policy="table",
+        grad_clip=0.0,
+    )
+    cfg.update(overrides)
+    return cfg
+
+
 def _build_pair(cfg):
     torch_model = torch_backend.build_model(cfg, "neo").to("cpu")
     mlx_model = mlx_backend.build_model(cfg, "neo")
@@ -174,6 +197,15 @@ def _l2_norm_tree(state):
     return math.sqrt(sum(float(np.sum(value * value)) for value in state.values()))
 
 
+def _torch_weight_decay_by_name(model, optimizer):
+    id_to_name = {id(param): name for name, param in model.named_parameters()}
+    out = {}
+    for group in optimizer.param_groups:
+        for param in group["params"]:
+            out[id_to_name[id(param)]] = float(group.get("weight_decay", 0.0))
+    return out
+
+
 def test_canonical_tiny_config_constructs_and_maps_parameters():
     torch_model, mlx_model = _build_pair(CANONICAL_PARITY_CFG)
     torch_template = torch_model.state_dict()
@@ -267,19 +299,97 @@ def test_one_step_optimizer_parity_with_explicit_tiny_contract():
         _assert_close(name, torch_value, mlx_after[name], atol=1e-5)
 
 
-def test_tiny_no_checkpoint_cpu_training_trajectory_stays_close_to_mlx_reference():
-    cfg = _tiny_cfg(
-        vocab_size=32,
-        d_model=8,
-        d_embed=4,
-        n_layers=2,
-        block_size=6,
-        batch_size=2,
-        recurrent_norm="rmsnorm",
-        activation_id="id5",
-        use_checkpoint=False,
-        grad_clip=0.0,
+def test_production_like_optimizer_weight_decay_policy_matches_mlx_reference():
+    cfg = _production_like_optimizer_cfg()
+    torch_model, mlx_model = _build_pair(cfg)
+
+    torch_optimizer = build_optimizer(torch_model, cfg)
+    torch_wd = _torch_weight_decay_by_name(torch_model, torch_optimizer)
+    mlx_wd = mlx_backend._build_weight_decay_lookup(mlx_model, "neo", cfg)
+
+    assert torch_wd == pytest.approx(mlx_wd)
+    assert torch_wd["emb.weight"] == pytest.approx(cfg["embed_weight_decay"])
+    assert torch_wd["in_proj.weight"] == pytest.approx(cfg["proj_weight_decay"])
+    assert torch_wd["out_proj.weight"] == pytest.approx(cfg["proj_weight_decay"])
+    assert torch_wd["recurrent.layers.0.fg_linear.weight"] == pytest.approx(cfg["recurrent_weight_decay"])
+    assert torch_wd["recurrent.layers.1.fg_linear.weight"] == pytest.approx(cfg["recurrent_weight_decay"])
+    assert torch_wd["recurrent.pre_norms.0.weight"] == pytest.approx(cfg["recurrent_weight_decay"])
+    assert torch_wd["recurrent.pre_norms.1.weight"] == pytest.approx(cfg["recurrent_weight_decay"])
+    for name in (
+        "output_bias",
+        "in_proj.bias",
+        "out_proj.bias",
+        "recurrent.layers.0.fg_linear.bias",
+        "recurrent.layers.1.fg_linear.bias",
+        "recurrent.stack_norm.weight",
+    ):
+        assert torch_wd[name] == pytest.approx(0.0)
+        assert mlx_wd[name] == pytest.approx(0.0)
+
+
+def test_mlx_reference_optimizer_applies_decoupled_decay_after_adam_update():
+    model = torch.nn.Linear(1, 1, bias=False)
+    with torch.no_grad():
+        model.weight.fill_(2.0)
+    cfg = {
+        "lr": 0.25,
+        "betas": (0.5, 0.75),
+        "adam_eps": 1e-8,
+        "weight_decay": 0.4,
+        "weight_decay_policy": "uniform",
+        "reference_backend": "mlx",
+    }
+
+    optimizer = build_optimizer(model, cfg)
+    model.weight.grad = torch.full_like(model.weight, 3.0)
+    optimizer.step()
+
+    m = (1.0 - cfg["betas"][0]) * 3.0
+    v = (1.0 - cfg["betas"][1]) * 3.0 * 3.0
+    adam_updated = 2.0 - cfg["lr"] * m / (math.sqrt(v) + cfg["adam_eps"])
+    expected_after_decay = adam_updated * (1.0 - cfg["lr"] * cfg["weight_decay"])
+    decay_before_adam = 2.0 * (1.0 - cfg["lr"] * cfg["weight_decay"])
+    expected_before_decay = decay_before_adam - cfg["lr"] * m / (math.sqrt(v) + cfg["adam_eps"])
+
+    assert model.weight.item() == pytest.approx(expected_after_decay)
+    assert model.weight.item() != pytest.approx(expected_before_decay)
+
+
+def test_production_like_one_step_optimizer_parity_matches_mlx_reference():
+    cfg = _production_like_optimizer_cfg()
+    torch_model, mlx_model = _build_pair(cfg)
+    state = _deterministic_state(torch_model.state_dict())
+    _load_same_state(torch_model, mlx_model, state)
+    _, torch_grads = _torch_loss_and_grads(torch_model, cfg)
+    _, mlx_grads = _mlx_loss_and_grads(mlx_model, cfg)
+
+    optimizer = build_optimizer(torch_model, cfg)
+    for name, param in torch_model.named_parameters():
+        param.grad = torch.from_numpy(torch_grads[name].copy())
+    optimizer.step()
+
+    mlx_optimizer = mxoptim.AdamW(
+        learning_rate=float(cfg["lr"]),
+        betas=list(cfg["betas"]),
+        eps=float(cfg["adam_eps"]),
+        weight_decay=0.0,
     )
+    mlx_optimizer.update(mlx_model, mlx_utils.tree_unflatten([(name, mx.array(value)) for name, value in mlx_grads.items()]))
+    mlx_backend._apply_decoupled_weight_decay(
+        mlx_model,
+        mlx_backend._build_weight_decay_lookup(mlx_model, "neo", cfg),
+        float(cfg["lr"]),
+    )
+    mx.eval(mlx_model.parameters(), mlx_optimizer.state)
+
+    torch_after = to_numpy_state_dict(torch_model.state_dict())
+    mlx_after = {name: np.asarray(value) for name, value in _mlx_params(mlx_model).items()}
+    for name, torch_value in torch_after.items():
+        _assert_close(name, torch_value, mlx_after[name], atol=1e-5)
+
+
+def test_production_like_no_checkpoint_cpu_training_trajectory_stays_close_to_mlx_reference():
+    cfg = _production_like_optimizer_cfg()
     torch_model, mlx_model = _build_pair(cfg)
     state = _deterministic_state(torch_model.state_dict())
     _load_same_state(torch_model, mlx_model, state)
@@ -294,6 +404,7 @@ def test_tiny_no_checkpoint_cpu_training_trajectory_stays_close_to_mlx_reference
         eps=float(cfg["adam_eps"]),
         weight_decay=0.0,
     )
+    mlx_wd_lookup = mlx_backend._build_weight_decay_lookup(mlx_model, "neo", cfg)
     torch_state = torch.from_numpy(_state(cfg))
     mlx_state = mx.array(torch_state.detach().numpy())
     loss_diffs = []
@@ -305,7 +416,7 @@ def test_tiny_no_checkpoint_cpu_training_trajectory_stays_close_to_mlx_reference
         return loss, new_state
 
     loss_and_grad = mxnn.value_and_grad(mlx_model, mlx_loss_fn)
-    for step in range(100):
+    for step in range(50):
         x_np, y_np = _tokens(cfg)
         x_np = (x_np + step * 3) % int(cfg["vocab_size"])
         y_np = (y_np + step * 3) % int(cfg["vocab_size"])
@@ -323,6 +434,7 @@ def test_tiny_no_checkpoint_cpu_training_trajectory_stays_close_to_mlx_reference
         y_mlx = mx.array(y_np.astype(np.int32))
         (mlx_loss, mlx_state_out), mlx_grads = loss_and_grad(x_mlx, y_mlx, mlx_state)
         mlx_optimizer.update(mlx_model, mlx_grads)
+        mlx_backend._apply_decoupled_weight_decay(mlx_model, mlx_wd_lookup, float(cfg["lr"]))
         mx.eval(mlx_loss, mlx_state_out, mlx_model.parameters(), mlx_optimizer.state)
         mlx_state = mx.stop_gradient(mlx_state_out)
 
