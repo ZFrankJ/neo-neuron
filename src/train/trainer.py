@@ -169,7 +169,7 @@ def train_model(
 
     resume_path = _cfg_get(cfg, "resume_path", "")
     if resume_path:
-        ckpt = load_checkpoint(resume_path, model, optimizer, scheduler, device=device)
+        ckpt = load_checkpoint(resume_path, model, optimizer, scheduler, device=device, expected_cfg=cfg)
         start_epoch = int(ckpt.get("epoch", 0)) + 1
         global_step = int(ckpt.get("global_step", 0))
         best_val = float(ckpt.get("best_val", best_val))

@@ -94,7 +94,7 @@ def main() -> None:
         raise ValueError("Transformer probing is not implemented.")
 
     model = build_model(cfg, model_name, backend_name=backend_name)
-    backend.load_checkpoint_entry(args.checkpoint, model, device=device)
+    backend.load_checkpoint_entry(args.checkpoint, model, device=device, cfg=cfg)
     model.to(device)
 
     idx = _make_probe_batch(val_ids, args.seq_len, args.batch_size, args.start).to(device)

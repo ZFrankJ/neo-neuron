@@ -45,7 +45,7 @@ def main() -> None:
 
     model_name = infer_model_name(cfg_path, cfg)
     model = build_model(cfg, model_name, backend_name=backend_name)
-    backend.load_checkpoint_entry(args.checkpoint, model, device=device)
+    backend.load_checkpoint_entry(args.checkpoint, model, device=device, cfg=cfg)
 
     ids = val_ids if args.split == "val" else test_ids
     metrics = backend.eval_metrics_entry(model, ids, cfg, device)

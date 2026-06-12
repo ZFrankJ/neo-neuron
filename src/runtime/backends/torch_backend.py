@@ -136,8 +136,9 @@ def load_checkpoint_entry(
     optimizer=None,
     scheduler=None,
     device=None,
+    cfg: Dict[str, Any] | None = None,
 ):
-    return load_checkpoint(str(path), model, optimizer=optimizer, scheduler=scheduler, device=device)
+    return load_checkpoint(str(path), model, optimizer=optimizer, scheduler=scheduler, device=device, expected_cfg=cfg)
 
 
 def save_checkpoint_entry(
