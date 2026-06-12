@@ -251,7 +251,8 @@ def train_model(
                 else:
                     state = None
 
-            torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+            if grad_clip > 0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
             optimizer.step()
             if scheduler is not None:
                 scheduler.step()
