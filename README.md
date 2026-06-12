@@ -44,6 +44,26 @@ python3 scripts/eval.py --config configs/wt103/neo_20m.yaml --checkpoint checkpo
   only tiny synthetic no-checkpoint probes and do not validate checkpointed MPS or
   large WT103 result production.
 
+## Development workflow
+
+This repo uses the local `codex-harness` workflow adapted for Neo.
+
+Standard local checks:
+
+```bash
+make check
+```
+
+Useful focused checks:
+
+```bash
+make test
+make mlx-parity
+make mps-probe
+```
+
+`make mps-probe` is opt-in Apple Silicon diagnostics only. It does not validate checkpointed MPS, WT103 training, or production result quality. The strict backend parity PR queue lives in `docs/IMPLEMENTATION_PLAN.md`.
+
 ## Full evaluation via PyTorch
 
 Full evaluation is still available through the PyTorch backend (including PPL, GFLOPs/token via THOP, and activation sparsity).
