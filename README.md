@@ -39,6 +39,10 @@ python3 scripts/eval.py --config configs/wt103/neo_20m.yaml --checkpoint checkpo
   `activation_id`, recurrent norm settings, `use_checkpoint`, and `weight_decay_policy`.
   Missing metadata is treated as legacy/provisional, while mismatches with the requested
   eval/resume config fail before evaluation.
+- PyTorch MPS diagnostics are optional and must be run explicitly with
+  `NEO_RUN_MPS_PROBE=1 pytest tests/test_mps_no_checkpoint_probe.py`. They cover
+  only tiny synthetic no-checkpoint probes and do not validate checkpointed MPS or
+  large WT103 result production.
 
 ## Full evaluation via PyTorch
 
