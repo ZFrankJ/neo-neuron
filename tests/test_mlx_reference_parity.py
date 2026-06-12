@@ -170,6 +170,10 @@ def _assert_close(name, got, expected, atol=1e-6):
     assert diff <= atol, f"{name} max_abs_diff={diff}"
 
 
+def _l2_norm_tree(state):
+    return math.sqrt(sum(float(np.sum(value * value)) for value in state.values()))
+
+
 def test_canonical_tiny_config_constructs_and_maps_parameters():
     torch_model, mlx_model = _build_pair(CANONICAL_PARITY_CFG)
     torch_template = torch_model.state_dict()
@@ -261,6 +265,81 @@ def test_one_step_optimizer_parity_with_explicit_tiny_contract():
     mlx_after = {name: np.asarray(value) for name, value in _mlx_params(mlx_model).items()}
     for name, torch_value in torch_after.items():
         _assert_close(name, torch_value, mlx_after[name], atol=1e-5)
+
+
+def test_tiny_no_checkpoint_cpu_training_trajectory_stays_close_to_mlx_reference():
+    cfg = _tiny_cfg(
+        vocab_size=32,
+        d_model=8,
+        d_embed=4,
+        n_layers=2,
+        block_size=6,
+        batch_size=2,
+        recurrent_norm="rmsnorm",
+        activation_id="id5",
+        use_checkpoint=False,
+        grad_clip=0.0,
+    )
+    torch_model, mlx_model = _build_pair(cfg)
+    state = _deterministic_state(torch_model.state_dict())
+    _load_same_state(torch_model, mlx_model, state)
+    assert cfg["use_checkpoint"] is False
+
+    torch_model.train()
+    mlx_model.train()
+    torch_optimizer = build_optimizer(torch_model, cfg)
+    mlx_optimizer = mxoptim.AdamW(
+        learning_rate=float(cfg["lr"]),
+        betas=list(cfg["betas"]),
+        eps=float(cfg["adam_eps"]),
+        weight_decay=0.0,
+    )
+    torch_state = torch.from_numpy(_state(cfg))
+    mlx_state = mx.array(torch_state.detach().numpy())
+    loss_diffs = []
+    state_norm_diffs = []
+
+    def mlx_loss_fn(batch_x, batch_y, batch_state):
+        logits, new_state = mlx_model(batch_x, batch_state)
+        loss = mx.mean(mxnn.losses.cross_entropy(logits.reshape(-1, int(cfg["vocab_size"])), batch_y.reshape(-1)))
+        return loss, new_state
+
+    loss_and_grad = mxnn.value_and_grad(mlx_model, mlx_loss_fn)
+    for step in range(100):
+        x_np, y_np = _tokens(cfg)
+        x_np = (x_np + step * 3) % int(cfg["vocab_size"])
+        y_np = (y_np + step * 3) % int(cfg["vocab_size"])
+
+        x_torch = torch.from_numpy(x_np).long()
+        y_torch = torch.from_numpy(y_np).long()
+        torch_optimizer.zero_grad(set_to_none=True)
+        torch_logits, torch_state_out = torch_model(x_torch, torch_state)
+        torch_loss = F.cross_entropy(torch_logits.reshape(-1, int(cfg["vocab_size"])), y_torch.reshape(-1))
+        torch_loss.backward()
+        torch_optimizer.step()
+        torch_state = torch_state_out.detach()
+
+        x_mlx = mx.array(x_np.astype(np.int32))
+        y_mlx = mx.array(y_np.astype(np.int32))
+        (mlx_loss, mlx_state_out), mlx_grads = loss_and_grad(x_mlx, y_mlx, mlx_state)
+        mlx_optimizer.update(mlx_model, mlx_grads)
+        mx.eval(mlx_loss, mlx_state_out, mlx_model.parameters(), mlx_optimizer.state)
+        mlx_state = mx.stop_gradient(mlx_state_out)
+
+        loss_diffs.append(abs(float(torch_loss.detach().item()) - float(mlx_loss.item())))
+        state_norm_diffs.append(abs(float(torch.linalg.vector_norm(torch_state).item()) - float(mx.linalg.norm(mlx_state).item())))
+
+    torch_after = to_numpy_state_dict(torch_model.state_dict())
+    mlx_after = {name: np.asarray(value) for name, value in _mlx_params(mlx_model).items()}
+    max_param_diff = max(float(np.max(np.abs(torch_after[name] - mlx_after[name]))) for name in torch_after)
+    param_norm_diff = abs(_l2_norm_tree(torch_after) - _l2_norm_tree(mlx_after))
+    final_state_diff = float(np.max(np.abs(torch_state.detach().numpy() - np.asarray(mlx_state))))
+
+    assert max(loss_diffs) <= 1e-5
+    assert max(state_norm_diffs) <= 1e-5
+    assert max_param_diff <= 1e-5
+    assert param_norm_diff <= 1e-5
+    assert final_state_diff <= 1e-5
 
 
 def test_checkpoint_roundtrip_loads_both_directions_and_preserves_eval_ce(tmp_path: Path):
