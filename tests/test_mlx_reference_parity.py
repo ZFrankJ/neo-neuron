@@ -15,6 +15,7 @@ mxnn = pytest.importorskip("mlx.nn")
 mxoptim = pytest.importorskip("mlx.optimizers")
 mlx_utils = pytest.importorskip("mlx.utils")
 
+from src.runtime import backend as runtime_backend
 from src.runtime.backends import mlx_backend, torch_backend
 from src.runtime.checkpoint_compat import map_model_state, to_numpy_state_dict
 from src.train.optim import build_optimizer
@@ -125,6 +126,14 @@ def _tokens(cfg):
     x = (np.arange(t * b, dtype=np.int64).reshape(t, b) * 7 + 3) % vocab
     y = (x + 5) % vocab
     return x, y
+
+
+def _token_stream(cfg, *, batches=4):
+    t = int(cfg["block_size"])
+    b = int(cfg["batch_size"])
+    vocab = int(cfg["vocab_size"])
+    n_tokens = t * b * batches + t + 1
+    return torch.from_numpy(((np.arange(n_tokens, dtype=np.int64) * 7 + 3) % vocab).astype(np.int64))
 
 
 def _state(cfg):
@@ -452,6 +461,60 @@ def test_production_like_no_checkpoint_cpu_training_trajectory_stays_close_to_ml
     assert max_param_diff <= 1e-5
     assert param_norm_diff <= 1e-5
     assert final_state_diff <= 1e-5
+
+
+def test_public_backend_training_loop_stays_close_to_mlx_reference(tmp_path: Path):
+    cfg = _production_like_optimizer_cfg(
+        epochs=1,
+        cosine=False,
+        train_regime="streaming",
+        stream_state=True,
+        run_dir=None,
+        save_each_epoch=False,
+        mem_report_interval=None,
+        mem_clear_interval=None,
+        use_checkpoint=False,
+    )
+    assert cfg["use_checkpoint"] is False
+
+    torch_runtime = runtime_backend.get_backend("torch")
+    mlx_runtime = runtime_backend.get_backend("mlx")
+    mlx_runtime.get_runtime_device("cpu")
+    torch_model = torch_runtime.build_model(cfg, "neo").to("cpu")
+    mlx_model = mlx_runtime.build_model(cfg, "neo")
+    state = _deterministic_state(torch_model.state_dict())
+    _load_same_state(torch_model, mlx_model, state)
+
+    train_ids = _token_stream(cfg, batches=4)
+    val_ids = _token_stream(cfg, batches=2)
+    initial_torch = torch_runtime.eval_metrics_entry(torch_model, val_ids, cfg, torch.device("cpu"))["ppl"]
+    initial_mlx = mlx_runtime.eval_metrics_entry(mlx_model, val_ids, cfg, "cpu")["ppl"]
+    assert abs(initial_torch - initial_mlx) <= 1e-5
+
+    torch_cfg = dict(cfg, save_dir=str(tmp_path / "torch"), run_tag="public_loop")
+    mlx_cfg = dict(cfg, save_dir=str(tmp_path / "mlx"), run_tag="public_loop")
+    torch_metrics = torch_runtime.train_entry(torch_model, torch_cfg, train_ids, val_ids, device=torch.device("cpu"))
+    mlx_metrics = mlx_runtime.train_entry(mlx_model, mlx_cfg, train_ids, val_ids, device="cpu")
+    assert abs(torch_metrics["val_ppl"] - mlx_metrics["val_ppl"]) <= 1e-5
+
+    final_torch = torch_runtime.eval_metrics_entry(torch_model, val_ids, cfg, torch.device("cpu"))["ppl"]
+    final_mlx = mlx_runtime.eval_metrics_entry(mlx_model, val_ids, cfg, "cpu")["ppl"]
+    assert abs(final_torch - final_mlx) <= 1e-5
+
+    reloaded_torch = torch_runtime.build_model(cfg, "neo").to("cpu")
+    reloaded_mlx = mlx_runtime.build_model(cfg, "neo")
+    torch_runtime.load_checkpoint_entry(
+        tmp_path / "torch" / "last_public_loop.pt",
+        reloaded_torch,
+        device=torch.device("cpu"),
+    )
+    mlx_runtime.load_checkpoint_entry(tmp_path / "mlx" / "last_public_loop.pt", reloaded_mlx)
+
+    reload_torch = torch_runtime.eval_metrics_entry(reloaded_torch, val_ids, cfg, torch.device("cpu"))["ppl"]
+    reload_mlx = mlx_runtime.eval_metrics_entry(reloaded_mlx, val_ids, cfg, "cpu")["ppl"]
+    assert abs(reload_torch - final_torch) <= 1e-9
+    assert abs(reload_mlx - final_mlx) <= 1e-9
+    assert abs(reload_torch - reload_mlx) <= 1e-5
 
 
 def test_checkpoint_roundtrip_loads_both_directions_and_preserves_eval_ce(tmp_path: Path):
