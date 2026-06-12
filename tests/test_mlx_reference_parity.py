@@ -1,0 +1,308 @@
+"""Small MLX-reference parity tests for the Neo PyTorch backend."""
+
+from __future__ import annotations
+
+import math
+from pathlib import Path
+
+import numpy as np
+import pytest
+import torch
+import torch.nn.functional as F
+
+mx = pytest.importorskip("mlx.core")
+mxnn = pytest.importorskip("mlx.nn")
+mxoptim = pytest.importorskip("mlx.optimizers")
+mlx_utils = pytest.importorskip("mlx.utils")
+
+from src.runtime.backends import mlx_backend, torch_backend
+from src.runtime.checkpoint_compat import map_model_state, to_numpy_state_dict
+from src.train.optim import build_optimizer
+
+
+CANONICAL_PARITY_CFG = {
+    "model_name": "neo",
+    "vocab_size": 2048,
+    "d_model": 128,
+    "d_embed": 64,
+    "n_layers": 2,
+    "dropout": 0.0,
+    "tie_embeddings": True,
+    "cell_type": "cortical",
+    "activation_id": "id5",
+    "recurrent_norm": "rmsnorm",
+    "recurrent_norm_place": "all",
+    "rmsnorm_eps": 1e-5,
+    "use_checkpoint": False,
+    "train_regime": "streaming",
+    "stream_state": True,
+    "block_size": 64,
+    "batch_size": 4,
+    "lr": 1e-3,
+    "weight_decay_policy": "table",
+    "seed": 42,
+    "reference_backend": "mlx",
+}
+
+
+def _tiny_cfg(**overrides):
+    cfg = dict(CANONICAL_PARITY_CFG)
+    cfg.update(
+        {
+            "vocab_size": 64,
+            "d_model": 16,
+            "d_embed": 8,
+            "block_size": 8,
+            "batch_size": 3,
+            "proj_weight_decay": 0.0,
+            "recurrent_weight_decay": 0.0,
+            "embed_weight_decay": 0.0,
+            "betas": (0.0, 0.0),
+            "adam_eps": 1e-8,
+        }
+    )
+    cfg.update(overrides)
+    return cfg
+
+
+def _build_pair(cfg):
+    torch_model = torch_backend.build_model(cfg, "neo").to("cpu")
+    mlx_model = mlx_backend.build_model(cfg, "neo")
+    return torch_model, mlx_model
+
+
+def _mlx_params(model):
+    return dict(mlx_utils.tree_flatten(model.parameters()))
+
+
+def _deterministic_state(template):
+    rng = np.random.default_rng(1234)
+    state = {}
+    for name, tensor in template.items():
+        values = rng.normal(0.0, 0.03, size=tuple(tensor.shape)).astype(np.float32)
+        if name.endswith("output_bias") or name.endswith(".bias"):
+            values.fill(0.0)
+        if "norm" in name and name.endswith(".weight"):
+            values = 1.0 + rng.normal(0.0, 0.01, size=tuple(tensor.shape)).astype(np.float32)
+        state[name] = values
+    return state
+
+
+def _load_same_state(torch_model, mlx_model, state):
+    torch_state = {name: torch.from_numpy(value.copy()) for name, value in state.items()}
+    torch_model.load_state_dict(torch_state)
+    mlx_model.update(mlx_utils.tree_unflatten([(name, mx.array(value)) for name, value in state.items()]))
+    mx.eval(mlx_model.parameters())
+
+
+def _tokens(cfg):
+    t = int(cfg["block_size"])
+    b = int(cfg["batch_size"])
+    vocab = int(cfg["vocab_size"])
+    x = (np.arange(t * b, dtype=np.int64).reshape(t, b) * 7 + 3) % vocab
+    y = (x + 5) % vocab
+    return x, y
+
+
+def _state(cfg):
+    rng = np.random.default_rng(5678)
+    return rng.normal(
+        0.0,
+        0.02,
+        size=(int(cfg["n_layers"]), int(cfg["batch_size"]), int(cfg["d_model"])),
+    ).astype(np.float32)
+
+
+def _forward_pair(torch_model, mlx_model, cfg):
+    x_np, _ = _tokens(cfg)
+    state_np = _state(cfg)
+    x_torch = torch.from_numpy(x_np).long()
+    state_torch = torch.from_numpy(state_np)
+    x_mlx = mx.array(x_np.astype(np.int32))
+    state_mlx = mx.array(state_np)
+
+    with torch.no_grad():
+        torch_logits, torch_state = torch_model(x_torch, state_torch)
+    mlx_logits, mlx_state = mlx_model(x_mlx, state_mlx)
+    mx.eval(mlx_logits, mlx_state)
+    return (
+        torch_logits.detach().numpy(),
+        np.asarray(mlx_logits),
+        torch_state.detach().numpy(),
+        np.asarray(mlx_state),
+    )
+
+
+def _torch_loss_and_grads(model, cfg):
+    model.train()
+    x_np, y_np = _tokens(cfg)
+    state_np = _state(cfg)
+    x = torch.from_numpy(x_np).long()
+    y = torch.from_numpy(y_np).long()
+    state = torch.from_numpy(state_np)
+    model.zero_grad(set_to_none=True)
+    logits, _ = model(x, state)
+    loss = F.cross_entropy(logits.reshape(-1, int(cfg["vocab_size"])), y.reshape(-1))
+    loss.backward()
+    grads = {name: param.grad.detach().numpy().copy() for name, param in model.named_parameters()}
+    return float(loss.detach().item()), grads
+
+
+def _mlx_loss_and_grads(model, cfg):
+    model.train()
+    x_np, y_np = _tokens(cfg)
+    state_np = _state(cfg)
+    x = mx.array(x_np.astype(np.int32))
+    y = mx.array(y_np.astype(np.int32))
+    state = mx.array(state_np)
+
+    def loss_fn(batch_x, batch_y, batch_state):
+        logits, _ = model(batch_x, batch_state)
+        return mx.mean(mxnn.losses.cross_entropy(logits.reshape(-1, int(cfg["vocab_size"])), batch_y.reshape(-1)))
+
+    loss, grads = mxnn.value_and_grad(model, loss_fn)(x, y, state)
+    mx.eval(loss, grads)
+    return float(loss.item()), {name: np.asarray(value) for name, value in mlx_utils.tree_flatten(grads)}
+
+
+def _assert_close(name, got, expected, atol=1e-6):
+    diff = float(np.max(np.abs(got - expected))) if got.size else 0.0
+    assert diff <= atol, f"{name} max_abs_diff={diff}"
+
+
+def test_canonical_tiny_config_constructs_and_maps_parameters():
+    torch_model, mlx_model = _build_pair(CANONICAL_PARITY_CFG)
+    torch_template = torch_model.state_dict()
+    mlx_template = _mlx_params(mlx_model)
+
+    assert CANONICAL_PARITY_CFG["use_checkpoint"] is False
+    assert torch_model.recurrent.pre_norms[0].eps == pytest.approx(1e-5)
+    assert set(torch_template) == set(mlx_template)
+    for name, tensor in torch_template.items():
+        assert tuple(tensor.shape) == tuple(mlx_template[name].shape)
+
+    mapped, warnings = map_model_state(
+        model_name="neo",
+        src_backend="mlx",
+        dst_backend="torch",
+        src_state_np={name: np.asarray(value) for name, value in mlx_template.items()},
+        dst_template=torch_template,
+        cfg=CANONICAL_PARITY_CFG,
+    )
+    assert warnings == []
+    assert set(mapped) == set(torch_template)
+
+
+@pytest.mark.parametrize("recurrent_norm", ["none", "layernorm", "rmsnorm"])
+@pytest.mark.parametrize("activation_id", ["id4", "id5"])
+@pytest.mark.parametrize("n_layers", [1, 2, 4])
+def test_forward_and_recurrent_state_match_mlx_reference(recurrent_norm, activation_id, n_layers):
+    cfg = _tiny_cfg(recurrent_norm=recurrent_norm, activation_id=activation_id, n_layers=n_layers)
+    torch_model, mlx_model = _build_pair(cfg)
+    state = _deterministic_state(torch_model.state_dict())
+    _load_same_state(torch_model, mlx_model, state)
+
+    torch_model.eval()
+    mlx_model.eval()
+    torch_logits, mlx_logits, torch_state, mlx_state = _forward_pair(torch_model, mlx_model, cfg)
+
+    _assert_close("logits", torch_logits, mlx_logits)
+    _assert_close("state", torch_state, mlx_state)
+
+
+def test_gradient_parity_uses_no_checkpoint_path():
+    cfg = _tiny_cfg(recurrent_norm="rmsnorm", activation_id="id5", n_layers=2, use_checkpoint=False)
+    torch_model, mlx_model = _build_pair(cfg)
+    state = _deterministic_state(torch_model.state_dict())
+    _load_same_state(torch_model, mlx_model, state)
+
+    torch_loss, torch_grads = _torch_loss_and_grads(torch_model, cfg)
+    mlx_loss, mlx_grads = _mlx_loss_and_grads(mlx_model, cfg)
+
+    assert abs(torch_loss - mlx_loss) <= 1e-6
+    total_diff_sq = 0.0
+    total_ref_sq = 0.0
+    max_diff = 0.0
+    assert set(torch_grads) == set(mlx_grads)
+    for name, torch_grad in torch_grads.items():
+        mlx_grad = mlx_grads[name]
+        diff = torch_grad - mlx_grad
+        max_diff = max(max_diff, float(np.max(np.abs(diff))))
+        total_diff_sq += float(np.sum(diff * diff))
+        total_ref_sq += float(np.sum(mlx_grad * mlx_grad))
+    rel_l2 = math.sqrt(total_diff_sq / max(total_ref_sq, 1e-30))
+    assert rel_l2 <= 1e-5
+    assert max_diff <= 1e-5
+
+
+def test_one_step_optimizer_parity_with_explicit_tiny_contract():
+    cfg = _tiny_cfg(recurrent_norm="rmsnorm", activation_id="id5", n_layers=2)
+    torch_model, mlx_model = _build_pair(cfg)
+    state = _deterministic_state(torch_model.state_dict())
+    _load_same_state(torch_model, mlx_model, state)
+    _, torch_grads = _torch_loss_and_grads(torch_model, cfg)
+    _, mlx_grads = _mlx_loss_and_grads(mlx_model, cfg)
+
+    optimizer = build_optimizer(torch_model, cfg)
+    for name, param in torch_model.named_parameters():
+        param.grad = torch.from_numpy(torch_grads[name].copy())
+    optimizer.step()
+
+    mlx_optimizer = mxoptim.AdamW(
+        learning_rate=float(cfg["lr"]),
+        betas=list(cfg["betas"]),
+        eps=float(cfg["adam_eps"]),
+        weight_decay=0.0,
+    )
+    mlx_optimizer.update(mlx_model, mlx_utils.tree_unflatten([(name, mx.array(value)) for name, value in mlx_grads.items()]))
+    mx.eval(mlx_model.parameters(), mlx_optimizer.state)
+
+    torch_after = to_numpy_state_dict(torch_model.state_dict())
+    mlx_after = {name: np.asarray(value) for name, value in _mlx_params(mlx_model).items()}
+    for name, torch_value in torch_after.items():
+        _assert_close(name, torch_value, mlx_after[name], atol=1e-5)
+
+
+def test_checkpoint_roundtrip_loads_both_directions_and_preserves_eval_ce(tmp_path: Path):
+    cfg = _tiny_cfg(recurrent_norm="rmsnorm", activation_id="id5", n_layers=2)
+    torch_model, mlx_model = _build_pair(cfg)
+    state = _deterministic_state(torch_model.state_dict())
+    _load_same_state(torch_model, mlx_model, state)
+
+    mlx_path = tmp_path / "reference_mlx.pkl"
+    mlx_backend.save_checkpoint_entry(mlx_path, mlx_model, None, None, epoch=1, global_step=2, cfg=cfg)
+    torch_from_mlx, _ = _build_pair(cfg)
+    ckpt = torch_backend.load_checkpoint_entry(mlx_path, torch_from_mlx, device=torch.device("cpu"))
+    for key in ("reference_backend", "rmsnorm_eps", "activation_id", "recurrent_norm", "use_checkpoint"):
+        assert ckpt["cfg"][key] == cfg[key]
+    torch_model.eval()
+    torch_from_mlx.eval()
+    ref_logits, _, ref_state, _ = _forward_pair(torch_model, mlx_model, cfg)
+    got_logits, _, got_state, _ = _forward_pair(torch_from_mlx, mlx_model, cfg)
+    _assert_close("mlx checkpoint to torch logits", got_logits, ref_logits)
+    _assert_close("mlx checkpoint to torch state", got_state, ref_state)
+
+    torch_path = tmp_path / "reference_torch.pkl"
+    torch_backend.save_checkpoint_entry(torch_path, torch_model, None, None, epoch=1, global_step=2, cfg=cfg)
+    _, mlx_from_torch = _build_pair(cfg)
+    mlx_backend.load_checkpoint_entry(torch_path, mlx_from_torch)
+    _, ref_mlx_logits, _, ref_mlx_state = _forward_pair(torch_model, mlx_model, cfg)
+    _, got_mlx_logits, _, got_mlx_state = _forward_pair(torch_model, mlx_from_torch, cfg)
+    _assert_close("torch checkpoint to mlx logits", got_mlx_logits, ref_mlx_logits)
+    _assert_close("torch checkpoint to mlx state", got_mlx_state, ref_mlx_state)
+
+
+def test_checkpointed_pytorch_neo_matches_no_checkpoint_gradients_after_closure_binding():
+    base_cfg = _tiny_cfg(recurrent_norm="rmsnorm", activation_id="id5", n_layers=2, use_checkpoint=False)
+    ckpt_cfg = dict(base_cfg, use_checkpoint=True)
+    no_ckpt = torch_backend.build_model(base_cfg, "neo")
+    ckpt = torch_backend.build_model(ckpt_cfg, "neo")
+    state = _deterministic_state(no_ckpt.state_dict())
+    no_ckpt.load_state_dict({name: torch.from_numpy(value.copy()) for name, value in state.items()})
+    ckpt.load_state_dict({name: torch.from_numpy(value.copy()) for name, value in state.items()})
+
+    _, no_ckpt_grads = _torch_loss_and_grads(no_ckpt, base_cfg)
+    _, ckpt_grads = _torch_loss_and_grads(ckpt, ckpt_cfg)
+
+    for name, expected in no_ckpt_grads.items():
+        _assert_close(name, ckpt_grads[name], expected, atol=1e-5)

@@ -14,7 +14,7 @@ CELL_REGISTRY: Dict[str, Type[BaseCorticalNeuron]] = {
 }
 
 
-def _build_output_norm(norm_type: str, d_model: int) -> nn.Module:
+def _build_output_norm(norm_type: str, d_model: int, rmsnorm_eps: float = 1e-5) -> nn.Module:
     norm = str(norm_type).strip().lower()
     if norm in ("none", "off", "identity"):
         return nn.Identity()
@@ -24,7 +24,7 @@ def _build_output_norm(norm_type: str, d_model: int) -> nn.Module:
         rms_norm = getattr(nn, "RMSNorm", None)
         if rms_norm is None:
             raise ValueError("RMSNorm is not available in this torch version.")
-        return rms_norm(d_model)
+        return rms_norm(d_model, eps=float(rmsnorm_eps))
     raise ValueError(f"Unsupported output_norm '{norm_type}'.")
 
 
@@ -45,6 +45,7 @@ class CorticalRecurrentStack(nn.Module):
         use_checkpoint=False,
         output_norm: str = "layernorm",
         norm_place: str = "all",
+        rmsnorm_eps: float = 1e-5,
     ):
         super().__init__()
         if cell_type not in CELL_REGISTRY:
@@ -57,11 +58,17 @@ class CorticalRecurrentStack(nn.Module):
         place = _parse_norm_place(norm_place)
         self.pre_norms = nn.ModuleList(
             [
-                _build_output_norm(output_norm, d_model) if place in ("all", "pre") else nn.Identity()
+                _build_output_norm(output_norm, d_model, rmsnorm_eps=rmsnorm_eps)
+                if place in ("all", "pre")
+                else nn.Identity()
                 for _ in range(n_layers)
             ]
         )
-        self.stack_norm = _build_output_norm(output_norm, d_model) if place in ("all", "stack") else nn.Identity()
+        self.stack_norm = (
+            _build_output_norm(output_norm, d_model, rmsnorm_eps=rmsnorm_eps)
+            if place in ("all", "stack")
+            else nn.Identity()
+        )
         self.n_layers = int(n_layers)
         self.d_model = int(d_model)
         self.use_checkpoint = bool(use_checkpoint)
@@ -103,8 +110,8 @@ class CorticalRecurrentStack(nn.Module):
                 reset_flag = state is None and t == 0
                 h_norm = self.pre_norms[i](h)
 
-                def step(h_in, ps_in):
-                    out, ns, _ = layer(h_in, prev_state=ps_in, reset=reset_flag)
+                def step(h_in, ps_in, *, current_layer=layer, current_reset=reset_flag):
+                    out, ns, _ = current_layer(h_in, prev_state=ps_in, reset=current_reset)
                     return out, ns
 
                 use_ckpt = self.training and self.use_checkpoint and h_norm.requires_grad and ps is not None
