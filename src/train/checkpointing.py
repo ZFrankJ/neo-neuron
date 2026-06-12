@@ -13,6 +13,7 @@ from ..runtime.checkpoint_compat import (
     map_model_state,
     to_numpy_state_dict,
     torch_template,
+    validate_checkpoint_metadata,
 )
 
 
@@ -58,6 +59,7 @@ def load_checkpoint(
     optimizer: Optional[torch.optim.Optimizer] = None,
     scheduler: Optional[torch.optim.lr_scheduler._LRScheduler] = None,
     device: Optional[torch.device] = None,
+    expected_cfg: Optional[dict] = None,
 ) -> dict:
     ckpt = load_checkpoint_payload(path, map_location=device)
     raw_state = ckpt.get("model_state_dict")
@@ -66,6 +68,7 @@ def load_checkpoint(
 
     src_backend = infer_checkpoint_backend(ckpt)
     model_name = infer_model_name_from_model(model)
+    validate_checkpoint_metadata(ckpt, expected_cfg=expected_cfg, model_name=model_name)
     dst_template, dtypes = torch_template(model)
     mapped_state, _ = map_model_state(
         model_name=model_name,

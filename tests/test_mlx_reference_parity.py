@@ -17,7 +17,7 @@ mlx_utils = pytest.importorskip("mlx.utils")
 
 from src.runtime import backend as runtime_backend
 from src.runtime.backends import mlx_backend, torch_backend
-from src.runtime.checkpoint_compat import map_model_state, to_numpy_state_dict
+from src.runtime.checkpoint_compat import REQUIRED_ALIGNED_NEO_CFG_KEYS, map_model_state, to_numpy_state_dict
 from src.train.optim import build_optimizer
 
 
@@ -527,7 +527,7 @@ def test_checkpoint_roundtrip_loads_both_directions_and_preserves_eval_ce(tmp_pa
     mlx_backend.save_checkpoint_entry(mlx_path, mlx_model, None, None, epoch=1, global_step=2, cfg=cfg)
     torch_from_mlx, _ = _build_pair(cfg)
     ckpt = torch_backend.load_checkpoint_entry(mlx_path, torch_from_mlx, device=torch.device("cpu"))
-    for key in ("reference_backend", "rmsnorm_eps", "activation_id", "recurrent_norm", "use_checkpoint"):
+    for key in REQUIRED_ALIGNED_NEO_CFG_KEYS:
         assert ckpt["cfg"][key] == cfg[key]
     torch_model.eval()
     torch_from_mlx.eval()
@@ -544,6 +544,23 @@ def test_checkpoint_roundtrip_loads_both_directions_and_preserves_eval_ce(tmp_pa
     _, got_mlx_logits, _, got_mlx_state = _forward_pair(torch_model, mlx_from_torch, cfg)
     _assert_close("torch checkpoint to mlx logits", got_mlx_logits, ref_mlx_logits)
     _assert_close("torch checkpoint to mlx state", got_mlx_state, ref_mlx_state)
+
+
+def test_mlx_train_resume_validates_checkpoint_metadata(tmp_path: Path):
+    cfg = _tiny_cfg(recurrent_norm="rmsnorm", activation_id="id5", n_layers=2)
+    _, mlx_model = _build_pair(cfg)
+    ckpt_path = tmp_path / "reference_mlx.pkl"
+    mlx_backend.save_checkpoint_entry(ckpt_path, mlx_model, None, None, epoch=1, global_step=2, cfg=cfg)
+
+    resume_model = mlx_backend.build_model(cfg, "neo")
+    resume_cfg = dict(cfg, activation_id="id4", resume_path=str(ckpt_path), save_dir=str(tmp_path / "resume"))
+    with pytest.raises(ValueError, match="activation_id"):
+        mlx_backend.train_entry(
+            resume_model,
+            resume_cfg,
+            _token_stream(resume_cfg, batches=2),
+            _token_stream(resume_cfg, batches=1),
+        )
 
 
 def test_checkpointed_pytorch_neo_matches_no_checkpoint_gradients_after_closure_binding():

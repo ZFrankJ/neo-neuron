@@ -94,7 +94,7 @@ def main() -> None:
             torch_backend = get_backend_api("torch")
             torch_device = torch_backend.get_runtime_device("cpu")
             torch_model = build_model(cfg, model_name, backend_name="torch")
-            torch_backend.load_checkpoint_entry(str(best_ckpt), torch_model, device=torch_device)
+            torch_backend.load_checkpoint_entry(str(best_ckpt), torch_model, device=torch_device, cfg=cfg)
             best_metrics = torch_backend.eval_metrics_entry(torch_model, test_ids, cfg, torch_device)
             metrics["best_ckpt_test_ppl_torch"] = best_metrics.get("ppl")
             metrics["best_ckpt_gflops_per_token_torch"] = best_metrics.get("gflops_per_token")

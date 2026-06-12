@@ -32,6 +32,7 @@ from ..checkpoint_compat import (
     load_checkpoint_payload,
     map_model_state,
     to_numpy_state_dict,
+    validate_checkpoint_metadata,
 )
 
 NAME = "mlx"
@@ -824,7 +825,14 @@ def save_checkpoint_entry(
         pickle.dump(payload, handle)
 
 
-def load_checkpoint_entry(path: str | Path, model, optimizer=None, scheduler=None, device=None) -> Dict[str, Any]:
+def load_checkpoint_entry(
+    path: str | Path,
+    model,
+    optimizer=None,
+    scheduler=None,
+    device=None,
+    cfg: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
     del device
     ckpt = load_checkpoint_payload(path, map_location="cpu")
     raw_state = ckpt.get("model_state_dict")
@@ -833,6 +841,7 @@ def load_checkpoint_entry(path: str | Path, model, optimizer=None, scheduler=Non
 
     src_backend = infer_checkpoint_backend(ckpt)
     model_name = infer_model_name_from_model(model)
+    validate_checkpoint_metadata(ckpt, expected_cfg=cfg, model_name=model_name)
     dst_template = dict(tree_flatten(model.parameters()))
     mapped_state, _ = map_model_state(
         model_name=model_name,
@@ -938,7 +947,7 @@ def train_entry(
 
     resume_path = str(_cfg_get(cfg, "resume_path", "") or "")
     if resume_path:
-        ckpt = load_checkpoint_entry(resume_path, model, optimizer=optimizer)
+        ckpt = load_checkpoint_entry(resume_path, model, optimizer=optimizer, cfg=cfg)
         start_epoch = int(ckpt.get("epoch", 0)) + 1
         global_step = int(ckpt.get("global_step", 0))
         best_val = float(ckpt.get("best_val", best_val))
