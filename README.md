@@ -49,6 +49,24 @@ python3 scripts/eval.py --config configs/wt103/neo_20m.yaml --checkpoint checkpo
   `make cuda-probe` on a CUDA machine. The baseline is full precision,
   no checkpoint, no `torch.compile`, no fused optimizer, and no TF32 speed path.
 
+## Reproduction GPU preflight
+
+Before making CUDA reproduction or performance claims, first verify that the
+CUDA probe actually runs on an Nvidia GPU:
+
+```bash
+python3 -m pytest -q tests/test_cuda_parity_harness.py
+NEO_RUN_CUDA_PROBE=1 python3 -m pytest -q tests/test_cuda_parity_harness.py
+```
+
+The first command should pass the skip-safe contract. The second command is the
+real CUDA preflight: on a valid CUDA machine it should run the optional CUDA
+single-step parity probe instead of skipping. If it skips with a CUDA unavailable
+message, this environment has not validated CUDA parity and should not be used
+for CUDA result claims. Standard GitHub-hosted runners for individual repos are
+not treated as Nvidia GPU runners here; use a real local Nvidia machine or an
+explicitly provisioned GPU runner.
+
 ## Development workflow
 
 This repo uses the local `codex-harness` workflow adapted for Neo.

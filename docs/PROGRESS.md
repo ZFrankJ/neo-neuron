@@ -10,13 +10,13 @@ Roadmap priority:
 
 Current position:
 
-- checkpoint 4 of 5 is active
-- MLX reference parity, optimizer parity, public training-loop parity, checkpoint metadata guards, CI, a seed optional MPS probe, the backend parity audit harness, MPS short trajectory parity, and MPS memory slope classification have merged through PR #13
-- remaining work is CUDA preparation and optional Nvidia CI enablement
+- checkpoint 4 of 5 is done
+- MLX reference parity, optimizer parity, public training-loop parity, checkpoint metadata guards, CI, a seed optional MPS probe, the backend parity audit harness, MPS short trajectory parity, MPS memory slope classification, and skip-safe CUDA harness preparation have merged through PR #14
+- no further local parity implementation is active until Nvidia GPU access exists
 
 Current active checkpoint:
 
-`CUDA harness preparation`
+`External CUDA GPU validation blocked`
 
 Current strict task queue:
 
@@ -34,16 +34,17 @@ Current strict task queue:
    - Status: done
    - Result wanted: MPS memory behavior is classified as flat, bounded, linear growth, or superlinear growth under a safe local probe.
 4. CUDA harness preparation
-   - Status: active
+   - Status: done
    - Result wanted: CUDA tests are skip-safe without hardware and reuse the same CPU bridge.
 5. Optional Nvidia CI enablement
-   - Status: pending
-   - Result wanted: GPU CI is manual/optional until a real Nvidia runner exists.
+   - Status: blocked on external Nvidia GPU access
+   - Result wanted: GPU CI or local CUDA validation is manual/optional until a real Nvidia runner exists.
 
 ## Remaining Scale Estimate
 
-- Approximately 2 to 4 focused PRs before a meaningful MPS/CUDA parity decision.
+- 0 local parity PRs are currently queued.
 - CUDA validation remains blocked on access to Nvidia hardware or a provisioned GPU runner.
+- Reproducers must run `NEO_RUN_CUDA_PROBE=1 python3 -m pytest -q tests/test_cuda_parity_harness.py` and confirm it does not skip before making CUDA claims.
 - WT103 revalidation is intentionally outside the active checkpoint chain.
 
 ## Update Rules

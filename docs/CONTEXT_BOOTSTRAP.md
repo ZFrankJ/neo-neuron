@@ -72,9 +72,11 @@ Specific checks:
 make test
 make mlx-parity
 make mps-probe
+make cuda-probe
 ```
 
 `make mps-probe` is opt-in and requires Apple Silicon MPS. It is not evidence for checkpointed MPS or WT103-scale result production.
+`make cuda-probe` is opt-in and requires a real Nvidia CUDA device to validate CUDA parity; if it skips, CUDA is not validated in that environment.
 
 ## 6. GitHub Workflow
 

@@ -2,6 +2,23 @@
 
 Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLAN.md`; keep broad priorities in `docs/ROADMAP.md`.
 
+## 2026-06-13 - Local Parity Queue Completed Pending Nvidia Access
+
+- Decision:
+  - Marked the local MLX/PyTorch/MPS/CUDA-preparation parity queue as complete until real Nvidia GPU access exists.
+- Why:
+  - The repo now has skip-safe CUDA harness preparation, but this machine has no Nvidia GPU and standard GitHub-hosted runners for individual repos are not treated as Nvidia GPU runners.
+- Scope:
+  - `README.md`
+  - `docs/ROADMAP.md`
+  - `docs/PROGRESS.md`
+  - `docs/IMPLEMENTATION_PLAN.md`
+  - `docs/CONTEXT_BOOTSTRAP.md`
+  - `docs/hardware.md`
+- Impact:
+  - Reproducers must first run `NEO_RUN_CUDA_PROBE=1 python3 -m pytest -q tests/test_cuda_parity_harness.py` on a real Nvidia CUDA machine and confirm it does not skip before making CUDA parity or result claims.
+  - No local implementation PR is currently active; optional Nvidia CI work should wait for a real GPU runner or an explicit manual-only placeholder request.
+
 ## 2026-06-13 - CUDA Parity Harness Preparation
 
 - Decision:

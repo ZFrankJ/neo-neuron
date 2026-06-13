@@ -8,18 +8,18 @@ GitHub issue: https://github.com/ZFrankJ/neo-neuron/issues/2
 
 ```text
 main == origin/main
-HEAD 1d44dbf Merge pull request #13 from ZFrankJ/codex/fix/mps-memory-slope-probe
+HEAD 948bfe3 Merge pull request #14 from ZFrankJ/codex/fix/cuda-parity-harness-prep
 ```
 
 MLX is the frozen scientific reference backend. Existing clean MLX result rows outside this repo remain authoritative.
 
-The previous alignment queue established MLX reference parity, optimizer parity, public training-loop parity, checkpoint metadata guards, CI, a seed optional MPS probe, a shared backend parity audit report helper, MPS short training trajectory parity, and MPS memory slope classification. The research goal continues with this ladder:
+The completed local alignment queue established MLX reference parity, optimizer parity, public training-loop parity, checkpoint metadata guards, CI, a seed optional MPS probe, a shared backend parity audit report helper, MPS short training trajectory parity, MPS memory slope classification, and skip-safe CUDA harness preparation. The research goal is now blocked on real Nvidia GPU access for CUDA validation:
 
 ```text
 MLX reference
   -> PyTorch CPU semantic bridge
   -> PyTorch MPS no-checkpoint parity
-  -> PyTorch CUDA parity when Nvidia hardware exists
+  -> PyTorch CUDA parity only after an Nvidia GPU preflight passes
 ```
 
 ## Goal Exits
@@ -38,7 +38,7 @@ MPS is parity-ready only when all of the following are true:
 
 ### CUDA Transfer Exit
 
-CUDA parity work is ready only after the MPS no-checkpoint ladder is stable and the same PyTorch CPU bridge can be reused unchanged for CUDA. CUDA must first pass full-precision, no-checkpoint, no-compile, no-fused-optimizer tests before speed features are considered.
+CUDA parity work is prepared but not validated in this repo because no Nvidia GPU is currently available. Reproducers must first run `NEO_RUN_CUDA_PROBE=1 python3 -m pytest -q tests/test_cuda_parity_harness.py` on a real Nvidia CUDA machine and confirm the optional CUDA test runs instead of skips. CUDA must pass full-precision, no-checkpoint, no-compile, no-fused-optimizer tests before speed features are considered.
 
 ## Global Rules
 
@@ -92,26 +92,21 @@ CUDA parity work is ready only after the MPS no-checkpoint ladder is stable and 
 - PR #13: https://github.com/ZFrankJ/neo-neuron/pull/13
   - Merge commit: `1d44dbf Merge pull request #13 from ZFrankJ/codex/fix/mps-memory-slope-probe`
   - Extended the optional MPS probe into a no-checkpoint endurance memory slope classification report.
+- PR #14: https://github.com/ZFrankJ/neo-neuron/pull/14
+  - Merge commit: `948bfe3 Merge pull request #14 from ZFrankJ/codex/fix/cuda-parity-harness-prep`
+  - Added skip-safe CUDA discovery, full-precision CUDA baseline policy reporting, and an opt-in CUDA single-step parity harness.
 
 ## Active PR Queue
 
-Work through this queue in order. Do not start a later PR until the earlier PR is merged or explicitly skipped.
+No local implementation PR is active.
 
-### PR #14: CUDA Parity Harness Preparation
+The next CUDA step is external validation, not normal local development. Before opening CUDA-result or CUDA-CI work, confirm an Nvidia CUDA environment with:
 
-- Branch:
-  - `codex/fix/cuda-parity-harness-prep`
-- Goal:
-  - Prepare the parity harness so Nvidia CUDA can reuse the same CPU bridge later, without requiring CUDA hardware now.
-- Required coverage:
-  - CUDA skip-safe test markers or helpers.
-  - `torch.cuda` device discovery/reporting.
-  - CUDA parity test file that skips when CUDA is unavailable.
-  - Full precision, no checkpoint, no `torch.compile`, no fused optimizer.
-- Exit criteria:
-  - `make check` passes on non-CUDA machines.
-  - GitHub Actions Ubuntu and macOS jobs pass without CUDA.
-  - PR body documents the exact command a CUDA machine should run later.
+```bash
+NEO_RUN_CUDA_PROBE=1 python3 -m pytest -q tests/test_cuda_parity_harness.py
+```
+
+If this command skips because CUDA is unavailable, CUDA parity has not been validated. Standard GitHub-hosted runners for individual repos are not treated as Nvidia GPU runners for this project.
 
 ### PR #15: Optional Nvidia GPU CI Workflow
 
@@ -127,6 +122,8 @@ Work through this queue in order. Do not start a later PR until the earlier PR i
   - Existing Ubuntu and macOS CI stays green.
   - CUDA workflow is manual or otherwise impossible to run accidentally on CPU-only runners.
   - Branch protection does not require CUDA.
+- Start condition:
+  - A real Nvidia GPU runner exists or the user explicitly asks to document a manual-only placeholder.
 
 ### PR #16: Branch Protection And Required Checks Policy
 
