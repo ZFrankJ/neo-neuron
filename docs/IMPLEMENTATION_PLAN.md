@@ -8,7 +8,7 @@ GitHub issue: https://github.com/ZFrankJ/neo-neuron/issues/2
 
 ```text
 main == origin/main
-HEAD 948bfe3 Merge pull request #14 from ZFrankJ/codex/fix/cuda-parity-harness-prep
+HEAD e24d5a7 docs: clarify CUDA reproduction preflight
 ```
 
 MLX is the frozen scientific reference backend. Existing clean MLX result rows outside this repo remain authoritative.
@@ -98,7 +98,7 @@ CUDA parity work is prepared but not validated in this repo because no Nvidia GP
 
 ## Active PR Queue
 
-No local implementation PR is active.
+No local implementation PR is active. The strict parity queue is empty.
 
 The next CUDA step is external validation, not normal local development. Before opening CUDA-result or CUDA-CI work, confirm an Nvidia CUDA environment with:
 
@@ -108,37 +108,19 @@ NEO_RUN_CUDA_PROBE=1 python3 -m pytest -q tests/test_cuda_parity_harness.py
 
 If this command skips because CUDA is unavailable, CUDA parity has not been validated. Standard GitHub-hosted runners for individual repos are not treated as Nvidia GPU runners for this project.
 
-### PR #15: Optional Nvidia GPU CI Workflow
+## Standing CI And Branch Protection Policy
 
-- Branch:
-  - `codex/ci/optional-nvidia-gpu-ci`
-- Goal:
-  - Add a third optional GitHub Actions test lane for Nvidia CUDA parity, gated behind an explicitly provisioned GPU runner.
-- Current runner reality:
-  - Standard GitHub-hosted Ubuntu runners do not provide Nvidia CUDA hardware.
-  - Nvidia CI is not necessary for the current MPS parity goal.
-  - Do not make CUDA CI a required PR status until a GPU runner is intentionally provisioned.
-- Exit criteria:
-  - Existing Ubuntu and macOS CI stays green.
-  - CUDA workflow is manual or otherwise impossible to run accidentally on CPU-only runners.
-  - Branch protection does not require CUDA.
-- Start condition:
-  - A real Nvidia GPU runner exists or the user explicitly asks to document a manual-only placeholder.
+Required checks should remain limited to currently available runners:
 
-### PR #16: Branch Protection And Required Checks Policy
+- Ubuntu tests
+- macOS MLX parity
 
-- Branch:
-  - `codex/docs/branch-protection-policy`
-- Goal:
-  - Document intended branch protection so parity checks are hard to bypass.
-- Required checks should initially be:
-  - Ubuntu tests
-  - macOS MLX parity
-- Optional checks should initially be:
-  - opt-in MPS probe
-  - optional CUDA GPU workflow
-- Exit criteria:
-  - The policy matches the current runner reality and does not require unavailable GPU hardware.
+Do not add required CUDA CI while this project has no Nvidia GPU runner. Standard GitHub-hosted Ubuntu runners for individual repos do not provide Nvidia CUDA hardware. A future CUDA workflow should be manual-only or optional until a real Nvidia runner is provisioned and explicitly approved.
+
+Optional hardware probes remain local/manual:
+
+- MPS: `NEO_RUN_MPS_PROBE=1 python3 -m pytest -q tests/test_mps_no_checkpoint_probe.py`
+- CUDA: `NEO_RUN_CUDA_PROBE=1 python3 -m pytest -q tests/test_cuda_parity_harness.py`
 
 ## Parked Work
 
@@ -159,7 +141,7 @@ Follow-up to #2.
 
 ## Queue Item
 
-- PR queue item: `<PR #11 / #12 / #13 / #14 / #15 / #16 name>`
+- PR queue item: `<none unless the queue is explicitly reopened>`
 - Depends on: `<merged PRs>`
 
 ## Summary
@@ -186,7 +168,7 @@ Follow-up to #2.
 
 ## Remaining Follow-Up
 
-- `<next queue item or none>`
+- `<none unless the queue is explicitly reopened>`
 ```
 
 ## Merge Review Checklist

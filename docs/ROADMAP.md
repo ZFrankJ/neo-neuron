@@ -23,16 +23,16 @@ This roadmap lists broad project priorities only. Checkpoint state belongs in `d
 
 ## 2. CUDA Parity And Runner Enablement
 
-- Status: blocked on external Nvidia GPU access
+- Status: no active queue; blocked on external Nvidia GPU access
 - Why now:
   - The long-term target is PyTorch CUDA parity against MLX, but this repo does not currently have local CUDA hardware and standard GitHub-hosted runners for individual repos are not Nvidia GPU runners.
 - Focus:
   - Reuse the PyTorch CPU bridge and parity audit harness.
   - Keep CUDA tests full precision, no checkpoint, no compile, and no fused optimizer until baseline parity is proven.
-  - Keep Nvidia GitHub CI optional until a real GPU runner is intentionally provisioned.
+  - Do not queue Nvidia GitHub CI while no real GPU runner exists.
   - Require reproducers to confirm `NEO_RUN_CUDA_PROBE=1 python3 -m pytest -q tests/test_cuda_parity_harness.py` runs instead of skips before making CUDA claims.
 - Exit condition:
-  - CUDA parity tests run on an Nvidia device and pass the same small-scale parity envelope used for MPS.
+  - CUDA parity tests run on an Nvidia device and pass the same small-scale parity envelope used for MPS. Until then, the active PR queue stays empty.
 - Expanded plan:
   - `docs/IMPLEMENTATION_PLAN.md`
 

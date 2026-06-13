@@ -12,15 +12,15 @@ Current position:
 
 - checkpoint 4 of 5 is done
 - MLX reference parity, optimizer parity, public training-loop parity, checkpoint metadata guards, CI, a seed optional MPS probe, the backend parity audit harness, MPS short trajectory parity, MPS memory slope classification, and skip-safe CUDA harness preparation have merged through PR #14
-- no further local parity implementation is active until Nvidia GPU access exists
+- no active parity PR queue remains; CUDA validation is blocked until Nvidia GPU access exists
 
 Current active checkpoint:
 
 `External CUDA GPU validation blocked`
 
-Current strict task queue:
+Current implementation plan:
 
-`docs/IMPLEMENTATION_PLAN.md`
+`docs/IMPLEMENTATION_PLAN.md` with an empty active PR queue.
 
 ## Checkpoint Chain
 
@@ -36,15 +36,16 @@ Current strict task queue:
 4. CUDA harness preparation
    - Status: done
    - Result wanted: CUDA tests are skip-safe without hardware and reuse the same CPU bridge.
-5. Optional Nvidia CI enablement
-   - Status: blocked on external Nvidia GPU access
-   - Result wanted: GPU CI or local CUDA validation is manual/optional until a real Nvidia runner exists.
+5. External Nvidia CUDA validation
+   - Status: blocked outside the local queue
+   - Result wanted: CUDA parity is claimed only after the opt-in CUDA probe runs, not skips, on a real Nvidia CUDA machine.
 
 ## Remaining Scale Estimate
 
 - 0 local parity PRs are currently queued.
 - CUDA validation remains blocked on access to Nvidia hardware or a provisioned GPU runner.
 - Reproducers must run `NEO_RUN_CUDA_PROBE=1 python3 -m pytest -q tests/test_cuda_parity_harness.py` and confirm it does not skip before making CUDA claims.
+- Standard GitHub-hosted runners for individual repos are not an acceptable substitute for Nvidia GPU validation.
 - WT103 revalidation is intentionally outside the active checkpoint chain.
 
 ## Update Rules

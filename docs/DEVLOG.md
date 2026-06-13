@@ -2,6 +2,22 @@
 
 Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLAN.md`; keep broad priorities in `docs/ROADMAP.md`.
 
+## 2026-06-13 - Active Parity PR Queue Closed
+
+- Decision:
+  - Closed the active parity PR queue after CUDA harness preparation and converted unavailable Nvidia CI work into standing policy instead of queued PR work.
+- Why:
+  - This repo has no Nvidia GPU access, and standard GitHub-hosted runners for individual repos are not treated as valid CUDA validation hardware.
+  - Keeping optional Nvidia CI and branch-protection cleanup as active queue items would invite agents to open PRs that cannot prove the intended hardware contract.
+- Scope:
+  - `docs/IMPLEMENTATION_PLAN.md`
+  - `docs/PROGRESS.md`
+  - `docs/ROADMAP.md`
+- Impact:
+  - The strict parity queue is empty until the user explicitly reopens it or a real Nvidia GPU runner exists.
+  - Required CI should remain limited to available Ubuntu tests and macOS MLX parity.
+  - CUDA parity claims still require `NEO_RUN_CUDA_PROBE=1 python3 -m pytest -q tests/test_cuda_parity_harness.py` to run, not skip, on a real Nvidia CUDA machine.
+
 ## 2026-06-13 - Local Parity Queue Completed Pending Nvidia Access
 
 - Decision:
@@ -17,7 +33,7 @@ Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLA
   - `docs/hardware.md`
 - Impact:
   - Reproducers must first run `NEO_RUN_CUDA_PROBE=1 python3 -m pytest -q tests/test_cuda_parity_harness.py` on a real Nvidia CUDA machine and confirm it does not skip before making CUDA parity or result claims.
-  - No local implementation PR is currently active; optional Nvidia CI work should wait for a real GPU runner or an explicit manual-only placeholder request.
+  - No local implementation PR is currently active; optional Nvidia CI is not queued unless a real GPU runner exists or the user explicitly reopens that work.
 
 ## 2026-06-13 - CUDA Parity Harness Preparation
 
