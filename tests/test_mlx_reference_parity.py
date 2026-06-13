@@ -18,6 +18,7 @@ mlx_utils = pytest.importorskip("mlx.utils")
 from src.runtime import backend as runtime_backend
 from src.runtime.backends import mlx_backend, torch_backend
 from src.runtime.checkpoint_compat import REQUIRED_ALIGNED_NEO_CFG_KEYS, map_model_state, to_numpy_state_dict
+from src.runtime.parity_audit import make_backend_parity_report
 from src.train.optim import build_optimizer
 
 
@@ -126,6 +127,17 @@ def _tokens(cfg):
     x = (np.arange(t * b, dtype=np.int64).reshape(t, b) * 7 + 3) % vocab
     y = (x + 5) % vocab
     return x, y
+
+
+def _audit_model_shape(cfg):
+    return {
+        "vocab_size": int(cfg["vocab_size"]),
+        "d_model": int(cfg["d_model"]),
+        "d_embed": int(cfg["d_embed"]),
+        "n_layers": int(cfg["n_layers"]),
+        "block_size": int(cfg["block_size"]),
+        "batch_size": int(cfg["batch_size"]),
+    }
 
 
 def _token_stream(cfg, *, batches=4):
@@ -251,8 +263,19 @@ def test_forward_and_recurrent_state_match_mlx_reference(recurrent_norm, activat
     mlx_model.eval()
     torch_logits, mlx_logits, torch_state, mlx_state = _forward_pair(torch_model, mlx_model, cfg)
 
-    _assert_close("logits", torch_logits, mlx_logits)
-    _assert_close("state", torch_state, mlx_state)
+    report = make_backend_parity_report(
+        backend_pair=("torch", "mlx"),
+        device_pair=("cpu", "cpu"),
+        seed=int(cfg["seed"]),
+        model_shape=_audit_model_shape(cfg),
+        use_checkpoint=bool(cfg["use_checkpoint"]),
+        logits_pair=(torch_logits, mlx_logits),
+        state_pair=(torch_state, mlx_state),
+    )
+    assert report.logits_max_diff <= 1e-6
+    assert report.state_max_diff <= 1e-6
+    assert report.nan_count == 0
+    assert report.inf_count == 0
 
 
 def test_gradient_parity_uses_no_checkpoint_path():
@@ -264,20 +287,23 @@ def test_gradient_parity_uses_no_checkpoint_path():
     torch_loss, torch_grads = _torch_loss_and_grads(torch_model, cfg)
     mlx_loss, mlx_grads = _mlx_loss_and_grads(mlx_model, cfg)
 
-    assert abs(torch_loss - mlx_loss) <= 1e-6
-    total_diff_sq = 0.0
-    total_ref_sq = 0.0
-    max_diff = 0.0
-    assert set(torch_grads) == set(mlx_grads)
-    for name, torch_grad in torch_grads.items():
-        mlx_grad = mlx_grads[name]
-        diff = torch_grad - mlx_grad
-        max_diff = max(max_diff, float(np.max(np.abs(diff))))
-        total_diff_sq += float(np.sum(diff * diff))
-        total_ref_sq += float(np.sum(mlx_grad * mlx_grad))
+    report = make_backend_parity_report(
+        backend_pair=("torch", "mlx"),
+        device_pair=("cpu", "cpu"),
+        seed=int(cfg["seed"]),
+        model_shape=_audit_model_shape(cfg),
+        use_checkpoint=bool(cfg["use_checkpoint"]),
+        loss_pair=(torch_loss, mlx_loss),
+        gradient_pair=(torch_grads, mlx_grads),
+    )
+    total_diff_sq = sum(float(np.sum((torch_grads[name] - mlx_grads[name]) ** 2)) for name in torch_grads)
+    total_ref_sq = sum(float(np.sum(mlx_grad * mlx_grad)) for mlx_grad in mlx_grads.values())
     rel_l2 = math.sqrt(total_diff_sq / max(total_ref_sq, 1e-30))
+    assert report.loss_diff <= 1e-6
     assert rel_l2 <= 1e-5
-    assert max_diff <= 1e-5
+    assert report.gradient_max_diff <= 1e-5
+    assert report.nan_count == 0
+    assert report.inf_count == 0
 
 
 def test_one_step_optimizer_parity_with_explicit_tiny_contract():
@@ -304,8 +330,17 @@ def test_one_step_optimizer_parity_with_explicit_tiny_contract():
 
     torch_after = to_numpy_state_dict(torch_model.state_dict())
     mlx_after = {name: np.asarray(value) for name, value in _mlx_params(mlx_model).items()}
-    for name, torch_value in torch_after.items():
-        _assert_close(name, torch_value, mlx_after[name], atol=1e-5)
+    report = make_backend_parity_report(
+        backend_pair=("torch", "mlx"),
+        device_pair=("cpu", "cpu"),
+        seed=int(cfg["seed"]),
+        model_shape=_audit_model_shape(cfg),
+        use_checkpoint=bool(cfg["use_checkpoint"]),
+        update_pair=(torch_after, mlx_after),
+    )
+    assert report.update_max_diff <= 1e-5
+    assert report.nan_count == 0
+    assert report.inf_count == 0
 
 
 def test_production_like_optimizer_weight_decay_policy_matches_mlx_reference():
