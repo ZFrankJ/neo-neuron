@@ -100,6 +100,14 @@ def test_memory_slope_classification_contract():
     bounded = _classify_memory_slope([100 * mb, 130 * mb, 105 * mb, 132 * mb, 110 * mb])
     assert bounded["classification"] == "bounded_sawtooth"
 
+    capped_monotonic_growth = _classify_memory_slope(
+        [100 * mb + step * 64 * 1024 for step in range(5)]
+    )
+    assert capped_monotonic_growth["classification"] == "bounded_sawtooth"
+
+    small_monotonic_growth = _classify_memory_slope([100 * mb, 101 * mb, 102 * mb, 103 * mb, 104 * mb])
+    assert small_monotonic_growth["classification"] == "linear_growth"
+
     linear = _classify_memory_slope([100 * mb, 150 * mb, 200 * mb, 250 * mb, 300 * mb])
     assert linear["classification"] == "linear_growth"
 
@@ -354,6 +362,10 @@ def _linear_slope_per_step(values: list[int]) -> float:
     return float(np.polyfit(x, y, deg=1)[0])
 
 
+def _has_tail_drop(values: list[int]) -> bool:
+    return any(current < previous for previous, current in zip(values, values[1:]))
+
+
 def _classify_memory_slope(
     samples: list[int],
     *,
@@ -375,9 +387,26 @@ def _classify_memory_slope(
     slope_bytes_per_step = _linear_slope_per_step(tail)
     projected_growth_1000_steps_bytes = int(max(0.0, slope_bytes_per_step) * 1000)
 
-    if range_bytes <= flat_threshold_bytes and abs(slope_bytes_per_step) <= flat_threshold_bytes:
+    has_tail_drop = _has_tail_drop(tail)
+    if (
+        range_bytes <= flat_threshold_bytes
+        and (
+            net_growth_bytes <= 0
+            or has_tail_drop
+            or projected_growth_1000_steps_bytes <= flat_threshold_bytes
+        )
+        and abs(slope_bytes_per_step) <= flat_threshold_bytes
+    ):
         classification = "flat"
-    elif range_bytes <= bounded_threshold_bytes and net_growth_bytes <= bounded_threshold_bytes:
+    elif (
+        range_bytes <= bounded_threshold_bytes
+        and net_growth_bytes <= bounded_threshold_bytes
+        and (
+            net_growth_bytes <= 0
+            or has_tail_drop
+            or projected_growth_1000_steps_bytes <= bounded_threshold_bytes
+        )
+    ):
         classification = "bounded_sawtooth"
     else:
         first_half_slope = _linear_slope_per_step(tail[: max(2, len(tail) // 2)])
