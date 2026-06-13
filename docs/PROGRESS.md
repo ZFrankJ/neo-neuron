@@ -28,10 +28,10 @@ Current strict task queue:
    - Status: done
    - Result wanted: MLX stays frozen as reference; PyTorch CPU proves semantic parity on tiny deterministic tests.
 2. MPS no-checkpoint parity ladder
-   - Status: active
+   - Status: done
    - Result wanted: PyTorch CPU vs PyTorch MPS proves forward, backward, optimizer, training-trajectory, checkpoint, and memory behavior without activation checkpointing.
 3. MPS endurance classification
-   - Status: pending
+   - Status: active
    - Result wanted: MPS memory behavior is classified as flat, bounded, linear growth, or superlinear growth under a safe local probe.
 4. CUDA harness preparation
    - Status: pending
