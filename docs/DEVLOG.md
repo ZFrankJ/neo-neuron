@@ -2,6 +2,21 @@
 
 Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLAN.md`; keep broad priorities in `docs/ROADMAP.md`.
 
+## 2026-06-13 - Backend Parity Audit Harness
+
+- Decision:
+  - Added a shared backend parity audit report helper for deterministic CPU, MLX, MPS, and future CUDA parity measurements.
+- Why:
+  - MPS and CUDA parity work need one structured measurement contract instead of bespoke per-test diff accounting.
+- Scope:
+  - `src/runtime/parity_audit.py`
+  - `tests/test_backend_parity_audit.py`
+  - `tests/test_mlx_reference_parity.py`
+- Impact:
+  - Audit reports now carry backend pair, device pair, seed, model shape, `use_checkpoint`, loss diff, logits diff, recurrent-state diff, gradient diff, update diff, gradient norm, non-finite counts, and memory samples.
+  - CPU self-parity validates the auditor itself before optional hardware probes consume it.
+  - Existing MLX-vs-PyTorch CPU reference tests now exercise the shared report helper without changing MLX runtime semantics.
+
 ## 2026-06-12 - Codex Harness Workflow Adapted For Neo
 
 - Decision:
