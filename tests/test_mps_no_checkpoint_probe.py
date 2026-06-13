@@ -69,6 +69,20 @@ SINGLE_STEP_TOLERANCES = {
 }
 
 
+SHORT_TRAJECTORY_STEPS = 8
+SHORT_TRAJECTORY_TOLERANCES = {
+    "initial_eval_loss_diff": 5e-3,
+    "initial_eval_logits_max_diff": 5e-3,
+    "initial_eval_state_max_diff": 5e-3,
+    "max_step_loss_diff": 2e-2,
+    "final_eval_loss_diff": 2e-2,
+    "final_eval_logits_max_diff": 2e-2,
+    "final_param_max_diff": 5e-2,
+    "final_state_max_diff": 2e-2,
+    "max_gradient_norm_diff": 5e-2,
+}
+
+
 def _mps_device() -> torch.device:
     return torch.device("mps")
 
@@ -147,6 +161,33 @@ def _tokens(device: torch.device) -> tuple[torch.Tensor, torch.Tensor, torch.Ten
     )
 
 
+def _shifted_tokens(device: torch.device, step: int) -> tuple[torch.Tensor, torch.Tensor]:
+    x, y, _ = _tokens(device)
+    shift = int(step) * 3
+    vocab = int(TINY_NO_CHECKPOINT_CFG["vocab_size"])
+    return (x + shift) % vocab, (y + shift) % vocab
+
+
+def _eval_outputs(
+    model: torch.nn.Module,
+    device: torch.device,
+    state: torch.Tensor | None = None,
+) -> tuple[float, np.ndarray, np.ndarray]:
+    model.eval()
+    x, y, base_state = _tokens(device)
+    eval_state = base_state if state is None else state
+    with torch.no_grad():
+        logits, next_state = model(x, eval_state)
+        loss = F.cross_entropy(logits.reshape(-1, int(TINY_NO_CHECKPOINT_CFG["vocab_size"])), y.reshape(-1))
+    if device.type == "mps":
+        _sync_mps()
+    return (
+        float(loss.detach().cpu().item()),
+        logits.detach().cpu().numpy().copy(),
+        next_state.detach().cpu().numpy().copy(),
+    )
+
+
 def _loss_grads_and_outputs(
     model: torch.nn.Module,
     device: torch.device,
@@ -173,6 +214,14 @@ def _loss_grads_and_outputs(
 
 def _named_parameter_arrays(model: torch.nn.Module) -> dict[str, np.ndarray]:
     return {name: param.detach().cpu().numpy().copy() for name, param in model.named_parameters()}
+
+
+def _gradient_l2_norm(values: dict[str, np.ndarray]) -> float:
+    total = 0.0
+    for value in values.values():
+        finite = value[np.isfinite(value)]
+        total += float(np.sum(finite * finite))
+    return float(np.sqrt(total))
 
 
 def _gradient_rel_l2(got: dict[str, np.ndarray], expected: dict[str, np.ndarray]) -> float:
@@ -229,6 +278,146 @@ def _single_step_cpu_mps_report() -> tuple[BackendParityAuditReport, float, str]
         update_pair=(mps_params, cpu_params),
     )
     return report, grad_rel_l2, largest_update_name
+
+
+def _train_step(
+    model: torch.nn.Module,
+    optimizer: torch.optim.Optimizer,
+    device: torch.device,
+    state: torch.Tensor,
+    step: int,
+) -> tuple[float, torch.Tensor, dict[str, np.ndarray], float]:
+    model.train()
+    x, y = _shifted_tokens(device, step)
+    optimizer.zero_grad(set_to_none=True)
+    logits, next_state = model(x, state)
+    loss = F.cross_entropy(logits.reshape(-1, int(TINY_NO_CHECKPOINT_CFG["vocab_size"])), y.reshape(-1))
+    loss.backward()
+    if device.type == "mps":
+        _sync_mps()
+    grads = {}
+    for name, param in model.named_parameters():
+        assert param.grad is not None, name
+        grads[name] = param.grad.detach().cpu().numpy().copy()
+    grad_norm = _gradient_l2_norm(grads)
+    optimizer.step()
+    if device.type == "mps":
+        _sync_mps()
+    return float(loss.detach().cpu().item()), next_state.detach(), grads, grad_norm
+
+
+def _max_named_array_diff(got: dict[str, np.ndarray], expected: dict[str, np.ndarray]) -> tuple[float, str]:
+    assert set(got) == set(expected)
+    largest_name = ""
+    largest_diff = 0.0
+    for name in sorted(got):
+        diff = float(np.max(np.abs(got[name] - expected[name])))
+        if diff >= largest_diff:
+            largest_name = name
+            largest_diff = diff
+    return largest_diff, largest_name
+
+
+def _nonfinite_count(*arrays: np.ndarray, named_arrays: dict[str, np.ndarray] | None = None) -> int:
+    count = 0
+    for array in arrays:
+        count += int(np.isnan(array).sum() + np.isinf(array).sum())
+    if named_arrays is not None:
+        for array in named_arrays.values():
+            count += int(np.isnan(array).sum() + np.isinf(array).sum())
+    return count
+
+
+def _short_trajectory_cpu_mps_report() -> dict[str, float | int | str | dict]:
+    cfg = _trusted_mps_cfg()
+    cpu_device = torch.device("cpu")
+    mps_device = _mps_device()
+    cpu_model = _build_model(cpu_device, cfg)
+    mps_model = _build_model(mps_device, cfg)
+    state = _deterministic_state_dict(cpu_model.state_dict())
+    cpu_model.load_state_dict(state)
+    mps_model.load_state_dict({name: value.to(mps_device) for name, value in state.items()})
+
+    cpu_initial_loss, cpu_initial_logits, cpu_initial_eval_state = _eval_outputs(cpu_model, cpu_device)
+    mps_initial_loss, mps_initial_logits, mps_initial_eval_state = _eval_outputs(mps_model, mps_device)
+    initial_report = make_backend_parity_report(
+        backend_pair=("torch", "torch"),
+        device_pair=("cpu", "mps"),
+        seed=int(cfg["seed"]),
+        model_shape=_audit_model_shape(cfg),
+        use_checkpoint=bool(cfg["use_checkpoint"]),
+        loss_pair=(cpu_initial_loss, mps_initial_loss),
+        logits_pair=(cpu_initial_logits, mps_initial_logits),
+        state_pair=(cpu_initial_eval_state, mps_initial_eval_state),
+    )
+
+    cpu_optimizer = build_optimizer(cpu_model, cfg)
+    mps_optimizer = build_optimizer(mps_model, cfg)
+    cpu_state = _tokens(cpu_device)[2]
+    mps_state = _tokens(mps_device)[2]
+    step_loss_diffs = []
+    gradient_norm_diffs = []
+    nonfinite_count = initial_report.nan_count + initial_report.inf_count
+
+    for step in range(SHORT_TRAJECTORY_STEPS):
+        cpu_loss, cpu_state, cpu_grads, cpu_grad_norm = _train_step(
+            cpu_model,
+            cpu_optimizer,
+            cpu_device,
+            cpu_state,
+            step,
+        )
+        mps_loss, mps_state, mps_grads, mps_grad_norm = _train_step(
+            mps_model,
+            mps_optimizer,
+            mps_device,
+            mps_state,
+            step,
+        )
+        step_loss_diffs.append(abs(cpu_loss - mps_loss))
+        gradient_norm_diffs.append(abs(cpu_grad_norm - mps_grad_norm))
+        nonfinite_count += _nonfinite_count(
+            np.asarray([cpu_loss, mps_loss, cpu_grad_norm, mps_grad_norm], dtype=np.float64),
+            named_arrays=cpu_grads,
+        )
+        nonfinite_count += _nonfinite_count(named_arrays=mps_grads)
+
+    cpu_final_loss, cpu_final_logits, _ = _eval_outputs(cpu_model, cpu_device)
+    mps_final_loss, mps_final_logits, _ = _eval_outputs(mps_model, mps_device)
+    cpu_params = _named_parameter_arrays(cpu_model)
+    mps_params = _named_parameter_arrays(mps_model)
+    final_param_max_diff, largest_param = _max_named_array_diff(mps_params, cpu_params)
+    final_state_max_diff = float(np.max(np.abs(mps_state.detach().cpu().numpy() - cpu_state.detach().cpu().numpy())))
+
+    final_report = make_backend_parity_report(
+        backend_pair=("torch", "torch"),
+        device_pair=("cpu", "mps"),
+        seed=int(cfg["seed"]),
+        model_shape=_audit_model_shape(cfg),
+        use_checkpoint=bool(cfg["use_checkpoint"]),
+        loss_pair=(cpu_final_loss, mps_final_loss),
+        logits_pair=(cpu_final_logits, mps_final_logits),
+        state_pair=(cpu_state.detach().cpu().numpy(), mps_state.detach().cpu().numpy()),
+        update_pair=(cpu_params, mps_params),
+    )
+    nonfinite_count += final_report.nan_count + final_report.inf_count
+
+    return {
+        "steps": SHORT_TRAJECTORY_STEPS,
+        "initial_eval_loss_diff": initial_report.loss_diff,
+        "initial_eval_logits_max_diff": initial_report.logits_max_diff,
+        "initial_eval_state_max_diff": initial_report.state_max_diff,
+        "max_step_loss_diff": max(step_loss_diffs),
+        "final_eval_loss_diff": final_report.loss_diff,
+        "final_eval_logits_max_diff": final_report.logits_max_diff,
+        "final_param_max_diff": final_param_max_diff,
+        "final_state_max_diff": final_state_max_diff,
+        "max_gradient_norm_diff": max(gradient_norm_diffs),
+        "nonfinite_count": nonfinite_count,
+        "largest_parameter": largest_param,
+        "initial_report": initial_report.to_dict(),
+        "final_report": final_report.to_dict(),
+    }
 
 
 @requires_mps_probe
@@ -294,6 +483,25 @@ def test_optional_no_checkpoint_mps_single_step_parity_envelope():
 def test_trusted_mps_probe_rejects_checkpointed_path():
     with pytest.raises(ValueError, match="use_checkpoint=false"):
         _trusted_mps_cfg(use_checkpoint=True)
+
+
+@requires_mps_probe
+@requires_mps_backend
+def test_optional_no_checkpoint_mps_short_training_trajectory_stays_inside_envelope():
+    trajectory = _short_trajectory_cpu_mps_report()
+
+    assert trajectory["nonfinite_count"] == 0, trajectory
+    over_tolerance = {
+        name: trajectory[name]
+        for name in SHORT_TRAJECTORY_TOLERANCES
+        if trajectory[name] > SHORT_TRAJECTORY_TOLERANCES[name]
+    }
+    assert not over_tolerance, {
+        "over_tolerance": over_tolerance,
+        "tolerances": SHORT_TRAJECTORY_TOLERANCES,
+        "largest_parameter": trajectory["largest_parameter"],
+        "trajectory": trajectory,
+    }
 
 
 @requires_mps_probe
