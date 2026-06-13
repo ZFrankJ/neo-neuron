@@ -2,6 +2,25 @@
 
 Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLAN.md`; keep broad priorities in `docs/ROADMAP.md`.
 
+## 2026-06-13 - CUDA Parity Harness Preparation
+
+- Decision:
+  - Added a skip-safe CUDA parity harness preparation path that reuses the PyTorch CPU bridge without requiring CUDA hardware in normal local or CI checks.
+- Why:
+  - CUDA parity should inherit the same boring baseline as MPS before any speed features are considered.
+- Scope:
+  - `src/runtime/parity_audit.py`
+  - `tests/test_cuda_parity_harness.py`
+  - `Makefile`
+  - `justfile`
+  - `README.md`
+  - `docs/IMPLEMENTATION_PLAN.md`
+  - `docs/PROGRESS.md`
+- Impact:
+  - CUDA discovery now reports device availability, device count, current device metadata, PyTorch/CUDA runtime versions, and full-precision policy state without forcing CUDA hardware.
+  - `make cuda-probe` runs the optional CUDA probe with `NEO_RUN_CUDA_PROBE=1`, while normal `make check` remains skip-safe on non-CUDA machines.
+  - The trusted CUDA baseline is full precision, `use_checkpoint: false`, `use_compile: false`, no fused optimizer, and no TF32 speed path.
+
 ## 2026-06-13 - MPS Memory Slope Classification Probe
 
 - Decision:

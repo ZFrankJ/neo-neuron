@@ -21,6 +21,9 @@ mlx-parity:
 mps-probe:
   make mps-probe
 
+cuda-probe:
+  make cuda-probe
+
 pr-status:
   gh pr status
 

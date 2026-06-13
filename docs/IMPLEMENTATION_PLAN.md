@@ -8,12 +8,12 @@ GitHub issue: https://github.com/ZFrankJ/neo-neuron/issues/2
 
 ```text
 main == origin/main
-HEAD c4f1f96 Merge pull request #12 from ZFrankJ/codex/fix/mps-short-trajectory-parity
+HEAD 1d44dbf Merge pull request #13 from ZFrankJ/codex/fix/mps-memory-slope-probe
 ```
 
 MLX is the frozen scientific reference backend. Existing clean MLX result rows outside this repo remain authoritative.
 
-The previous alignment queue established MLX reference parity, optimizer parity, public training-loop parity, checkpoint metadata guards, CI, a seed optional MPS probe, a shared backend parity audit report helper, and MPS short training trajectory parity. The research goal continues with this ladder:
+The previous alignment queue established MLX reference parity, optimizer parity, public training-loop parity, checkpoint metadata guards, CI, a seed optional MPS probe, a shared backend parity audit report helper, MPS short training trajectory parity, and MPS memory slope classification. The research goal continues with this ladder:
 
 ```text
 MLX reference
@@ -89,28 +89,13 @@ CUDA parity work is ready only after the MPS no-checkpoint ladder is stable and 
 - PR #12: https://github.com/ZFrankJ/neo-neuron/pull/12
   - Merge commit: `c4f1f96 Merge pull request #12 from ZFrankJ/codex/fix/mps-short-trajectory-parity`
   - Extended the optional MPS probe into a short no-checkpoint CPU-vs-MPS training trajectory envelope.
+- PR #13: https://github.com/ZFrankJ/neo-neuron/pull/13
+  - Merge commit: `1d44dbf Merge pull request #13 from ZFrankJ/codex/fix/mps-memory-slope-probe`
+  - Extended the optional MPS probe into a no-checkpoint endurance memory slope classification report.
 
 ## Active PR Queue
 
 Work through this queue in order. Do not start a later PR until the earlier PR is merged or explicitly skipped.
-
-### PR #13: MPS Endurance And Memory Slope Probe
-
-- Branch:
-  - `codex/fix/mps-memory-slope-probe`
-- Goal:
-  - Quantify whether no-checkpoint MPS memory behavior is flat, bounded, or growing under the longest safe local probe.
-- Required coverage:
-  - RSS samples.
-  - MPS allocated-memory samples where PyTorch exposes them.
-  - Loss samples.
-  - Gradient norm samples.
-  - NaN/Inf guard.
-  - Memory slope classification: `flat`, `bounded_sawtooth`, `linear_growth`, or `superlinear_growth`.
-- Exit criteria:
-  - Probe can run locally without exhausting this machine.
-  - Probe estimates memory growth per step and extrapolates cautiously without claiming WT103 validation.
-  - CI remains skip-safe.
 
 ### PR #14: CUDA Parity Harness Preparation
 

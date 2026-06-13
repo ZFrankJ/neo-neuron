@@ -45,6 +45,42 @@ class DeviceAvailability:
 
 
 @dataclass(frozen=True)
+class CudaDeviceReport:
+    """CUDA discovery plus baseline policy for future parity runs."""
+
+    availability: DeviceAvailability
+    device_count: int = 0
+    current_device: int | None = None
+    device_name: str = ""
+    capability: tuple[int, int] | None = None
+    torch_version: str = ""
+    cuda_runtime_version: str | None = None
+    allow_tf32_matmul: bool | None = None
+    allow_tf32_cudnn: bool | None = None
+    float32_matmul_precision: str | None = None
+    use_checkpoint: bool = False
+    torch_compile: bool = False
+    fused_optimizer: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "availability": self.availability.to_dict(),
+            "device_count": self.device_count,
+            "current_device": self.current_device,
+            "device_name": self.device_name,
+            "capability": None if self.capability is None else list(self.capability),
+            "torch_version": self.torch_version,
+            "cuda_runtime_version": self.cuda_runtime_version,
+            "allow_tf32_matmul": self.allow_tf32_matmul,
+            "allow_tf32_cudnn": self.allow_tf32_cudnn,
+            "float32_matmul_precision": self.float32_matmul_precision,
+            "use_checkpoint": self.use_checkpoint,
+            "torch_compile": self.torch_compile,
+            "fused_optimizer": self.fused_optimizer,
+        }
+
+
+@dataclass(frozen=True)
 class BackendParityAuditReport:
     """Structured parity measurements shared by backend tests and probes."""
 
@@ -92,11 +128,15 @@ def collect_array_metrics(got: ArrayLike, expected: ArrayLike) -> ArrayDiffMetri
     got_array = _as_float_array(got)
     expected_array = _as_float_array(expected)
     if got_array.shape != expected_array.shape:
-        raise ValueError(f"Shape mismatch: got {got_array.shape}, expected {expected_array.shape}")
+        raise ValueError(
+            f"Shape mismatch: got {got_array.shape}, expected {expected_array.shape}"
+        )
 
     finite_mask = np.isfinite(got_array) & np.isfinite(expected_array)
     if np.any(finite_mask):
-        max_abs_diff = float(np.max(np.abs(got_array[finite_mask] - expected_array[finite_mask])))
+        max_abs_diff = float(
+            np.max(np.abs(got_array[finite_mask] - expected_array[finite_mask]))
+        )
     else:
         max_abs_diff = 0.0
     return ArrayDiffMetrics(
@@ -106,7 +146,9 @@ def collect_array_metrics(got: ArrayLike, expected: ArrayLike) -> ArrayDiffMetri
     )
 
 
-def collect_named_array_metrics(got: NamedArrayMap, expected: NamedArrayMap) -> ArrayDiffMetrics:
+def collect_named_array_metrics(
+    got: NamedArrayMap, expected: NamedArrayMap
+) -> ArrayDiffMetrics:
     got_keys = set(got)
     expected_keys = set(expected)
     if got_keys != expected_keys:
@@ -122,7 +164,9 @@ def collect_named_array_metrics(got: NamedArrayMap, expected: NamedArrayMap) -> 
         max_abs_diff = max(max_abs_diff, metrics.max_abs_diff)
         nan_count += metrics.nan_count
         inf_count += metrics.inf_count
-    return ArrayDiffMetrics(max_abs_diff=max_abs_diff, nan_count=nan_count, inf_count=inf_count)
+    return ArrayDiffMetrics(
+        max_abs_diff=max_abs_diff, nan_count=nan_count, inf_count=inf_count
+    )
 
 
 def collect_named_array_l2_norm(values: NamedArrayMap) -> float:
@@ -213,18 +257,123 @@ def device_availability(device: str) -> DeviceAvailability:
     if normalized == "cpu":
         return DeviceAvailability(device="cpu", available=True)
     if normalized not in {"mps", "cuda"}:
-        return DeviceAvailability(device=normalized, available=False, skip_reason=f"unsupported device '{normalized}'")
+        return DeviceAvailability(
+            device=normalized,
+            available=False,
+            skip_reason=f"unsupported device '{normalized}'",
+        )
 
     try:
         import torch
-    except Exception as exc:  # pragma: no cover - only hit if torch import itself is broken.
-        return DeviceAvailability(device=normalized, available=False, skip_reason=f"PyTorch unavailable: {exc}")
+    except (
+        Exception
+    ) as exc:  # pragma: no cover - only hit if torch import itself is broken.
+        return DeviceAvailability(
+            device=normalized,
+            available=False,
+            skip_reason=f"PyTorch unavailable: {exc}",
+        )
 
     if normalized == "cuda":
         available = bool(torch.cuda.is_available())
         reason = "" if available else "PyTorch CUDA backend is not available"
-        return DeviceAvailability(device="cuda", available=available, skip_reason=reason)
+        return DeviceAvailability(
+            device="cuda", available=available, skip_reason=reason
+        )
 
     has_mps = hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
     reason = "" if has_mps else "PyTorch MPS backend is not available"
     return DeviceAvailability(device="mps", available=bool(has_mps), skip_reason=reason)
+
+
+def configure_cuda_full_precision_baseline() -> dict[str, bool | str | None]:
+    """Disable CUDA speed features that would weaken first-pass parity evidence."""
+
+    import torch
+
+    if hasattr(torch.backends, "cuda") and hasattr(torch.backends.cuda, "matmul"):
+        torch.backends.cuda.matmul.allow_tf32 = False
+    if hasattr(torch.backends, "cudnn"):
+        torch.backends.cudnn.allow_tf32 = False
+    if hasattr(torch, "set_float32_matmul_precision"):
+        torch.set_float32_matmul_precision("highest")
+
+    return {
+        "allow_tf32_matmul": (
+            bool(torch.backends.cuda.matmul.allow_tf32)
+            if hasattr(torch.backends, "cuda")
+            and hasattr(torch.backends.cuda, "matmul")
+            else None
+        ),
+        "allow_tf32_cudnn": bool(torch.backends.cudnn.allow_tf32)
+        if hasattr(torch.backends, "cudnn")
+        else None,
+        "float32_matmul_precision": (
+            str(torch.get_float32_matmul_precision())
+            if hasattr(torch, "get_float32_matmul_precision")
+            else None
+        ),
+    }
+
+
+def cuda_device_report(
+    *, apply_full_precision_baseline: bool = False
+) -> CudaDeviceReport:
+    """Return skip-safe CUDA discovery metadata without requiring CUDA hardware."""
+
+    availability = device_availability("cuda")
+    try:
+        import torch
+    except (
+        Exception
+    ):  # pragma: no cover - device_availability already carries the reason.
+        return CudaDeviceReport(availability=availability)
+
+    policy = (
+        configure_cuda_full_precision_baseline()
+        if apply_full_precision_baseline and availability.available
+        else {
+            "allow_tf32_matmul": (
+                bool(torch.backends.cuda.matmul.allow_tf32)
+                if hasattr(torch.backends, "cuda")
+                and hasattr(torch.backends.cuda, "matmul")
+                else None
+            ),
+            "allow_tf32_cudnn": (
+                bool(torch.backends.cudnn.allow_tf32)
+                if hasattr(torch.backends, "cudnn")
+                else None
+            ),
+            "float32_matmul_precision": (
+                str(torch.get_float32_matmul_precision())
+                if hasattr(torch, "get_float32_matmul_precision")
+                else None
+            ),
+        }
+    )
+
+    if not availability.available:
+        return CudaDeviceReport(
+            availability=availability,
+            torch_version=str(torch.__version__),
+            cuda_runtime_version=torch.version.cuda,
+            allow_tf32_matmul=policy["allow_tf32_matmul"],
+            allow_tf32_cudnn=policy["allow_tf32_cudnn"],
+            float32_matmul_precision=policy["float32_matmul_precision"],
+        )
+
+    current_device = int(torch.cuda.current_device())
+    return CudaDeviceReport(
+        availability=availability,
+        device_count=int(torch.cuda.device_count()),
+        current_device=current_device,
+        device_name=str(torch.cuda.get_device_name(current_device)),
+        capability=tuple(
+            int(value) for value in torch.cuda.get_device_capability(current_device)
+        ),
+        torch_version=str(torch.__version__),
+        cuda_runtime_version=torch.version.cuda,
+        allow_tf32_matmul=policy["allow_tf32_matmul"],
+        allow_tf32_cudnn=policy["allow_tf32_cudnn"],
+        float32_matmul_precision=policy["float32_matmul_precision"],
+    )

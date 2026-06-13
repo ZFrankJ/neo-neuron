@@ -44,6 +44,10 @@ python3 scripts/eval.py --config configs/wt103/neo_20m.yaml --checkpoint checkpo
   only tiny synthetic no-checkpoint single-step parity, short trajectory parity,
   and memory slope classification, and do not validate checkpointed MPS or large
   WT103 result production.
+- PyTorch CUDA diagnostics are optional and must be run explicitly with
+  `NEO_RUN_CUDA_PROBE=1 pytest tests/test_cuda_parity_harness.py` or
+  `make cuda-probe` on a CUDA machine. The baseline is full precision,
+  no checkpoint, no `torch.compile`, no fused optimizer, and no TF32 speed path.
 
 ## Development workflow
 
@@ -61,9 +65,11 @@ Useful focused checks:
 make test
 make mlx-parity
 make mps-probe
+make cuda-probe
 ```
 
 `make mps-probe` is opt-in Apple Silicon diagnostics only. It does not validate checkpointed MPS, WT103 training, or production result quality. The strict backend parity PR queue lives in `docs/IMPLEMENTATION_PLAN.md`.
+`make cuda-probe` is opt-in Nvidia CUDA diagnostics only. It skips without CUDA and does not make CUDA a required local or CI gate.
 
 ## Full evaluation via PyTorch
 
