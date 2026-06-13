@@ -8,12 +8,12 @@ GitHub issue: https://github.com/ZFrankJ/neo-neuron/issues/2
 
 ```text
 main == origin/main
-HEAD 62ebfc2 Add optional no-checkpoint MPS probe (#9)
+HEAD d188b0e test(runtime): add backend parity audit harness (#10)
 ```
 
 MLX is the frozen scientific reference backend. Existing clean MLX result rows outside this repo remain authoritative.
 
-The previous alignment queue established MLX reference parity, optimizer parity, public training-loop parity, checkpoint metadata guards, CI, and a seed optional MPS probe. The research goal continues with this ladder:
+The previous alignment queue established MLX reference parity, optimizer parity, public training-loop parity, checkpoint metadata guards, CI, a seed optional MPS probe, and a shared backend parity audit report helper. The research goal continues with this ladder:
 
 ```text
 MLX reference
@@ -80,31 +80,13 @@ CUDA parity work is ready only after the MPS no-checkpoint ladder is stable and 
 - PR #9: https://github.com/ZFrankJ/neo-neuron/pull/9
   - Merge commit: `62ebfc2 Add optional no-checkpoint MPS probe (#9)`
   - Added opt-in no-checkpoint MPS diagnostics for tiny gradients and memory trend.
+- PR #10: https://github.com/ZFrankJ/neo-neuron/pull/10
+  - Merge commit: `d188b0e test(runtime): add backend parity audit harness (#10)`
+  - Added a shared structured parity audit report helper for CPU, MLX, MPS, and future CUDA measurements.
 
 ## Active PR Queue
 
 Work through this queue in order. Do not start a later PR until the earlier PR is merged or explicitly skipped.
-
-### PR #10: Backend Parity Audit Harness
-
-- Branch:
-  - `codex/fix/backend-parity-audit-harness`
-- Goal:
-  - Create one shared deterministic audit layer for backend parity measurements so MPS and CUDA work reuse the same metrics.
-- Expected scope:
-  - Test utilities or a small internal probe helper used only by tests/probes.
-  - Structured report fields for backend pair, device pair, seed, model shape, `use_checkpoint`, loss diff, logits max diff, state diff, gradient diff, update diff, grad norm, NaN/Inf counts, and memory samples when available.
-  - No production training behavior changes.
-  - No MLX semantic changes.
-- Required coverage:
-  - CPU self-parity sanity test proves the auditor itself can pass exact or near-exact comparisons.
-  - Existing MLX vs PyTorch CPU reference tests either use the helper directly or remain compatible with it.
-  - MPS/CUDA unavailable paths skip cleanly.
-- Exit criteria:
-  - `make check` passes.
-  - Existing GitHub Actions jobs pass.
-  - The PR body shows one sample audit output from a tiny CPU or MLX/CPU run.
-  - No WT103/main-machine/result/`neo.csv` changes.
 
 ### PR #11: MPS Single-Step Parity Envelope
 
@@ -225,7 +207,7 @@ Follow-up to #2.
 
 ## Queue Item
 
-- PR queue item: `<PR #10 / #11 / #12 / #13 / #14 / #15 / #16 name>`
+- PR queue item: `<PR #11 / #12 / #13 / #14 / #15 / #16 name>`
 - Depends on: `<merged PRs>`
 
 ## Summary

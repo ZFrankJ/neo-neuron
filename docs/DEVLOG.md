@@ -2,6 +2,20 @@
 
 Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLAN.md`; keep broad priorities in `docs/ROADMAP.md`.
 
+## 2026-06-13 - MPS Single-Step Parity Envelope
+
+- Decision:
+  - Extended the opt-in no-checkpoint MPS probe into a strict CPU-vs-MPS single-step parity envelope.
+- Why:
+  - MPS parity claims need explicit forward, recurrent-state, backward, and optimizer-update measurements against the PyTorch CPU bridge before longer trajectory work.
+- Scope:
+  - `tests/test_mps_no_checkpoint_probe.py`
+  - `README.md`
+- Impact:
+  - The opt-in MPS probe now reports structured audit fields for loss, logits, recurrent state, gradients, optimizer update, non-finite counts, and the largest offending update parameter on failure.
+  - Trusted MPS parity probes reject `use_checkpoint=true`; checkpointed MPS remains outside scientific claims.
+  - Default CI remains skip-safe without the MPS opt-in environment.
+
 ## 2026-06-13 - Backend Parity Audit Harness
 
 - Decision:

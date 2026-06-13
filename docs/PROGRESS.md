@@ -11,7 +11,7 @@ Roadmap priority:
 Current position:
 
 - checkpoint 2 of 5 is active
-- MLX reference parity, optimizer parity, public training-loop parity, checkpoint metadata guards, CI, and a seed optional MPS probe have merged through PR #9
+- MLX reference parity, optimizer parity, public training-loop parity, checkpoint metadata guards, CI, a seed optional MPS probe, and the backend parity audit harness have merged through PR #10
 - remaining work is the MPS parity ladder, then CUDA preparation
 
 Current active checkpoint:
@@ -42,7 +42,7 @@ Current strict task queue:
 
 ## Remaining Scale Estimate
 
-- Approximately 4 to 6 focused PRs before a meaningful MPS parity decision.
+- Approximately 3 to 5 focused PRs before a meaningful MPS parity decision.
 - CUDA validation remains blocked on access to Nvidia hardware or a provisioned GPU runner.
 - WT103 revalidation is intentionally outside the active checkpoint chain.
 
