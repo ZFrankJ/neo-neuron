@@ -1,4 +1,4 @@
-.PHONY: check test docs-check mlx-parity mps-probe help
+.PHONY: check test docs-check mlx-parity mps-probe cuda-probe help
 
 PYTHON ?= python3
 
@@ -26,6 +26,9 @@ mlx-parity:
 mps-probe:
 	NEO_RUN_MPS_PROBE=1 $(PYTHON) -m pytest -q tests/test_mps_no_checkpoint_probe.py
 
+cuda-probe:
+	NEO_RUN_CUDA_PROBE=1 $(PYTHON) -m pytest -q tests/test_cuda_parity_harness.py
+
 help:
 	@echo "Targets:"
 	@echo "  check       - docs contract plus full pytest suite"
@@ -33,3 +36,4 @@ help:
 	@echo "  docs-check  - required harness docs/workflow files exist"
 	@echo "  mlx-parity  - MLX reference parity tests"
 	@echo "  mps-probe   - opt-in tiny PyTorch MPS no-checkpoint probe"
+	@echo "  cuda-probe  - opt-in tiny PyTorch CUDA no-checkpoint probe"
