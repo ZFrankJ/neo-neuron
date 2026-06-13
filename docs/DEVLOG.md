@@ -2,6 +2,20 @@
 
 Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLAN.md`; keep broad priorities in `docs/ROADMAP.md`.
 
+## 2026-06-13 - MPS Short Training Trajectory Parity Probe
+
+- Decision:
+  - Extended the opt-in no-checkpoint MPS probe from single-step parity into a short CPU-vs-MPS training trajectory envelope.
+- Why:
+  - MPS parity needs evidence that forward, backward, recurrent state, optimizer, and eval behavior stay aligned over repeated no-checkpoint updates, not only one isolated optimizer step.
+- Scope:
+  - `tests/test_mps_no_checkpoint_probe.py`
+  - `README.md`
+  - `docs/IMPLEMENTATION_PLAN.md`
+- Impact:
+  - The opt-in MPS probe now reports initial eval parity, stepwise loss drift, final eval parity, final parameter diff, final recurrent-state diff, gradient norm drift, non-finite counts, and the largest offending parameter on failure.
+  - The trajectory remains tiny, synthetic, no-checkpoint, and opt-in through `NEO_RUN_MPS_PROBE=1`; it is not WT103 or production-result validation.
+
 ## 2026-06-13 - MPS Single-Step Parity Envelope
 
 - Decision:

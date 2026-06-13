@@ -8,7 +8,7 @@ GitHub issue: https://github.com/ZFrankJ/neo-neuron/issues/2
 
 ```text
 main == origin/main
-HEAD d188b0e test(runtime): add backend parity audit harness (#10)
+HEAD 9781470 Merge pull request #11 from ZFrankJ/codex/fix/mps-single-step-parity-envelope
 ```
 
 MLX is the frozen scientific reference backend. Existing clean MLX result rows outside this repo remain authoritative.
@@ -83,27 +83,13 @@ CUDA parity work is ready only after the MPS no-checkpoint ladder is stable and 
 - PR #10: https://github.com/ZFrankJ/neo-neuron/pull/10
   - Merge commit: `d188b0e test(runtime): add backend parity audit harness (#10)`
   - Added a shared structured parity audit report helper for CPU, MLX, MPS, and future CUDA measurements.
+- PR #11: https://github.com/ZFrankJ/neo-neuron/pull/11
+  - Merge commit: `9781470 Merge pull request #11 from ZFrankJ/codex/fix/mps-single-step-parity-envelope`
+  - Extended the optional MPS probe into a strict CPU-vs-MPS single-step parity envelope with checkpointed MPS rejection.
 
 ## Active PR Queue
 
 Work through this queue in order. Do not start a later PR until the earlier PR is merged or explicitly skipped.
-
-### PR #11: MPS Single-Step Parity Envelope
-
-- Branch:
-  - `codex/fix/mps-single-step-parity-envelope`
-- Goal:
-  - Extend the optional MPS probe into a strict single-step CPU-vs-MPS parity envelope.
-- Required coverage:
-  - CPU vs MPS forward parity.
-  - CPU vs MPS recurrent-state parity.
-  - CPU vs MPS backward parity.
-  - CPU vs MPS optimizer-update parity.
-  - Explicit failure or xfail if `use_checkpoint=true` is attempted in the trusted MPS suite.
-- Exit criteria:
-  - Default CI still passes without MPS.
-  - On Apple Silicon, `NEO_RUN_MPS_PROBE=1 python3 -m pytest -q tests/test_mps_no_checkpoint_probe.py` passes or reports a concrete blocker.
-  - PR body reports max diffs and the largest offending parameter if any.
 
 ### PR #12: MPS Short Training Trajectory Parity
 
