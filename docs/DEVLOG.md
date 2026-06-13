@@ -2,6 +2,22 @@
 
 Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLAN.md`; keep broad priorities in `docs/ROADMAP.md`.
 
+## 2026-06-13 - MPS Memory Slope Classification Probe
+
+- Decision:
+  - Extended the opt-in no-checkpoint MPS probe from a short trajectory check into an endurance-style memory slope classification report.
+- Why:
+  - MPS parity needs bounded memory evidence over a longer safe local probe before the result path can be trusted beyond tiny single-step behavior.
+- Scope:
+  - `tests/test_mps_no_checkpoint_probe.py`
+  - `README.md`
+  - `docs/IMPLEMENTATION_PLAN.md`
+  - `docs/PROGRESS.md`
+- Impact:
+  - The opt-in MPS probe now samples RSS, PyTorch MPS allocated memory when available, loss, and gradient norm across a 32-step no-checkpoint trajectory.
+  - Memory behavior is classified as `flat`, `bounded_sawtooth`, `linear_growth`, or `superlinear_growth`, with passing claims limited to flat or bounded sawtooth behavior.
+  - The probe remains synthetic, opt-in through `NEO_RUN_MPS_PROBE=1`, and does not validate WT103-scale training, checkpointed MPS, or production result rows.
+
 ## 2026-06-13 - MPS Short Training Trajectory Parity Probe
 
 - Decision:

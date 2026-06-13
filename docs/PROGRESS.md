@@ -10,13 +10,13 @@ Roadmap priority:
 
 Current position:
 
-- checkpoint 2 of 5 is active
-- MLX reference parity, optimizer parity, public training-loop parity, checkpoint metadata guards, CI, a seed optional MPS probe, and the backend parity audit harness have merged through PR #10
+- checkpoint 3 of 5 is active
+- MLX reference parity, optimizer parity, public training-loop parity, checkpoint metadata guards, CI, a seed optional MPS probe, the backend parity audit harness, and MPS short trajectory parity have merged through PR #12
 - remaining work is the MPS parity ladder, then CUDA preparation
 
 Current active checkpoint:
 
-`MPS no-checkpoint parity ladder`
+`MPS endurance classification`
 
 Current strict task queue:
 
