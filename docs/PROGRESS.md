@@ -10,13 +10,13 @@ Roadmap priority:
 
 Current position:
 
-- checkpoint 2 of 5 is active
-- MLX reference parity, optimizer parity, public training-loop parity, checkpoint metadata guards, CI, a seed optional MPS probe, and the backend parity audit harness have merged through PR #10
+- checkpoint 3 of 5 is active
+- MLX reference parity, optimizer parity, public training-loop parity, checkpoint metadata guards, CI, a seed optional MPS probe, the backend parity audit harness, and MPS short trajectory parity have merged through PR #12
 - remaining work is the MPS parity ladder, then CUDA preparation
 
 Current active checkpoint:
 
-`MPS no-checkpoint parity ladder`
+`MPS endurance classification`
 
 Current strict task queue:
 
@@ -28,10 +28,10 @@ Current strict task queue:
    - Status: done
    - Result wanted: MLX stays frozen as reference; PyTorch CPU proves semantic parity on tiny deterministic tests.
 2. MPS no-checkpoint parity ladder
-   - Status: active
+   - Status: done
    - Result wanted: PyTorch CPU vs PyTorch MPS proves forward, backward, optimizer, training-trajectory, checkpoint, and memory behavior without activation checkpointing.
 3. MPS endurance classification
-   - Status: pending
+   - Status: active
    - Result wanted: MPS memory behavior is classified as flat, bounded, linear growth, or superlinear growth under a safe local probe.
 4. CUDA harness preparation
    - Status: pending

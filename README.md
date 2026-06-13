@@ -42,8 +42,8 @@ python3 scripts/eval.py --config configs/wt103/neo_20m.yaml --checkpoint checkpo
 - PyTorch MPS diagnostics are optional and must be run explicitly with
   `NEO_RUN_MPS_PROBE=1 pytest tests/test_mps_no_checkpoint_probe.py`. They cover
   only tiny synthetic no-checkpoint single-step parity, short trajectory parity,
-  and memory probes, and do not validate checkpointed MPS or large WT103 result
-  production.
+  and memory slope classification, and do not validate checkpointed MPS or large
+  WT103 result production.
 
 ## Development workflow
 

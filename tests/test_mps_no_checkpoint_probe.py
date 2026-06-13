@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 
 import numpy as np
+import psutil
 import pytest
 import torch
 import torch.nn.functional as F
@@ -82,6 +83,37 @@ SHORT_TRAJECTORY_TOLERANCES = {
     "max_gradient_norm_diff": 5e-2,
 }
 
+MEMORY_SLOPE_STEPS = 32
+MEMORY_WARMUP_STEPS = 4
+MEMORY_FLAT_THRESHOLD_BYTES = 8 * 1024 * 1024
+MEMORY_BOUNDED_THRESHOLD_BYTES = 64 * 1024 * 1024
+MEMORY_ALLOWED_CLASSIFICATIONS = {"flat", "bounded_sawtooth"}
+
+
+def test_memory_slope_classification_contract():
+    mb = 1024 * 1024
+
+    flat = _classify_memory_slope([100 * mb, 101 * mb, 100 * mb, 101 * mb, 100 * mb])
+    assert flat["classification"] == "flat"
+    assert flat["projected_growth_1000_steps_bytes"] == 0
+
+    bounded = _classify_memory_slope([100 * mb, 130 * mb, 105 * mb, 132 * mb, 110 * mb])
+    assert bounded["classification"] == "bounded_sawtooth"
+
+    capped_monotonic_growth = _classify_memory_slope(
+        [100 * mb + step * 64 * 1024 for step in range(5)]
+    )
+    assert capped_monotonic_growth["classification"] == "bounded_sawtooth"
+
+    small_monotonic_growth = _classify_memory_slope([100 * mb, 101 * mb, 102 * mb, 103 * mb, 104 * mb])
+    assert small_monotonic_growth["classification"] == "linear_growth"
+
+    linear = _classify_memory_slope([100 * mb, 150 * mb, 200 * mb, 250 * mb, 300 * mb])
+    assert linear["classification"] == "linear_growth"
+
+    superlinear = _classify_memory_slope([100 * mb, 120 * mb, 160 * mb, 240 * mb, 400 * mb])
+    assert superlinear["classification"] == "superlinear_growth"
+
 
 def _mps_device() -> torch.device:
     return torch.device("mps")
@@ -92,11 +124,15 @@ def _sync_mps() -> None:
         torch.mps.synchronize()
 
 
-def _mps_allocated_bytes() -> int:
+def _mps_allocated_bytes_or_none() -> int | None:
     current_allocated = getattr(torch.mps, "current_allocated_memory", None)
     if current_allocated is None:
-        pytest.skip("torch.mps.current_allocated_memory is unavailable")
+        return None
     return int(current_allocated())
+
+
+def _process_rss_bytes() -> int:
+    return int(psutil.Process().memory_info().rss)
 
 
 def _deterministic_state_dict(template: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
@@ -318,6 +354,166 @@ def _max_named_array_diff(got: dict[str, np.ndarray], expected: dict[str, np.nda
     return largest_diff, largest_name
 
 
+def _linear_slope_per_step(values: list[int]) -> float:
+    if len(values) < 2:
+        return 0.0
+    x = np.arange(len(values), dtype=np.float64)
+    y = np.asarray(values, dtype=np.float64)
+    return float(np.polyfit(x, y, deg=1)[0])
+
+
+def _has_tail_drop(values: list[int]) -> bool:
+    return any(current < previous for previous, current in zip(values, values[1:]))
+
+
+def _classify_memory_slope(
+    samples: list[int],
+    *,
+    warmup_steps: int = 0,
+    flat_threshold_bytes: int = MEMORY_FLAT_THRESHOLD_BYTES,
+    bounded_threshold_bytes: int = MEMORY_BOUNDED_THRESHOLD_BYTES,
+) -> dict[str, float | int | str]:
+    if not samples:
+        raise ValueError("memory slope classification requires at least one sample")
+
+    tail = [int(value) for value in samples[int(warmup_steps) :]]
+    if not tail:
+        tail = [int(samples[-1])]
+
+    min_bytes = min(tail)
+    max_bytes = max(tail)
+    range_bytes = max_bytes - min_bytes
+    net_growth_bytes = tail[-1] - tail[0]
+    slope_bytes_per_step = _linear_slope_per_step(tail)
+    projected_growth_1000_steps_bytes = int(max(0.0, slope_bytes_per_step) * 1000)
+
+    has_tail_drop = _has_tail_drop(tail)
+    if (
+        range_bytes <= flat_threshold_bytes
+        and (
+            net_growth_bytes <= 0
+            or has_tail_drop
+            or projected_growth_1000_steps_bytes <= flat_threshold_bytes
+        )
+        and abs(slope_bytes_per_step) <= flat_threshold_bytes
+    ):
+        classification = "flat"
+    elif (
+        range_bytes <= bounded_threshold_bytes
+        and net_growth_bytes <= bounded_threshold_bytes
+        and (
+            net_growth_bytes <= 0
+            or has_tail_drop
+            or projected_growth_1000_steps_bytes <= bounded_threshold_bytes
+        )
+    ):
+        classification = "bounded_sawtooth"
+    else:
+        first_half_slope = _linear_slope_per_step(tail[: max(2, len(tail) // 2)])
+        second_half_slope = _linear_slope_per_step(tail[max(0, len(tail) // 2 - 1) :])
+        if (
+            second_half_slope > max(first_half_slope * 1.75, flat_threshold_bytes)
+            and second_half_slope > 0
+        ):
+            classification = "superlinear_growth"
+        else:
+            classification = "linear_growth"
+
+    return {
+        "classification": classification,
+        "sample_count": len(samples),
+        "tail_sample_count": len(tail),
+        "warmup_steps": int(warmup_steps),
+        "start_bytes": int(tail[0]),
+        "end_bytes": int(tail[-1]),
+        "min_bytes": int(min_bytes),
+        "max_bytes": int(max_bytes),
+        "range_bytes": int(range_bytes),
+        "net_growth_bytes": int(net_growth_bytes),
+        "slope_bytes_per_step": slope_bytes_per_step,
+        "projected_growth_1000_steps_bytes": projected_growth_1000_steps_bytes,
+    }
+
+
+def _memory_slope_probe_report() -> dict[str, float | int | str | list | dict]:
+    if hasattr(torch.mps, "empty_cache"):
+        torch.mps.empty_cache()
+    _sync_mps()
+
+    cfg = _trusted_mps_cfg()
+    device = _mps_device()
+    model = _build_model(device, cfg)
+    optimizer = build_optimizer(model, cfg)
+    state = _tokens(device)[2]
+
+    samples = []
+    rss_samples = []
+    mps_allocated_samples = []
+    loss_samples = []
+    gradient_norm_samples = []
+    nonfinite_count = 0
+
+    for step in range(MEMORY_SLOPE_STEPS):
+        loss, state, grads, grad_norm = _train_step(model, optimizer, device, state, step)
+        _sync_mps()
+
+        rss_bytes = _process_rss_bytes()
+        mps_allocated_bytes = _mps_allocated_bytes_or_none()
+        rss_samples.append(rss_bytes)
+        if mps_allocated_bytes is not None:
+            mps_allocated_samples.append(mps_allocated_bytes)
+        loss_samples.append(loss)
+        gradient_norm_samples.append(grad_norm)
+        nonfinite_count += _nonfinite_count(
+            np.asarray([loss, grad_norm], dtype=np.float64),
+            named_arrays=grads,
+        )
+        samples.append(
+            {
+                "step": step,
+                "rss_bytes": rss_bytes,
+                "mps_allocated_bytes": mps_allocated_bytes,
+                "loss": loss,
+                "gradient_norm": grad_norm,
+            }
+        )
+
+    rss_slope = _classify_memory_slope(rss_samples, warmup_steps=MEMORY_WARMUP_STEPS)
+    if mps_allocated_samples:
+        mps_allocated_slope = _classify_memory_slope(
+            mps_allocated_samples,
+            warmup_steps=min(MEMORY_WARMUP_STEPS, len(mps_allocated_samples) - 1),
+        )
+    else:
+        mps_allocated_slope = {
+            "classification": "unavailable",
+            "sample_count": 0,
+            "tail_sample_count": 0,
+            "warmup_steps": 0,
+            "start_bytes": 0,
+            "end_bytes": 0,
+            "min_bytes": 0,
+            "max_bytes": 0,
+            "range_bytes": 0,
+            "net_growth_bytes": 0,
+            "slope_bytes_per_step": 0.0,
+            "projected_growth_1000_steps_bytes": 0,
+        }
+
+    return {
+        "steps": MEMORY_SLOPE_STEPS,
+        "warmup_steps": MEMORY_WARMUP_STEPS,
+        "rss_samples": rss_samples,
+        "mps_allocated_samples": mps_allocated_samples,
+        "loss_samples": loss_samples,
+        "gradient_norm_samples": gradient_norm_samples,
+        "nonfinite_count": nonfinite_count,
+        "rss_slope": rss_slope,
+        "mps_allocated_slope": mps_allocated_slope,
+        "samples": samples,
+    }
+
+
 def _nonfinite_count(*arrays: np.ndarray, named_arrays: dict[str, np.ndarray] | None = None) -> int:
     count = 0
     for array in arrays:
@@ -506,33 +702,16 @@ def test_optional_no_checkpoint_mps_short_training_trajectory_stays_inside_envel
 
 @requires_mps_probe
 @requires_mps_backend
-def test_optional_no_checkpoint_mps_memory_trend_is_bounded_for_tiny_probe():
-    if hasattr(torch.mps, "empty_cache"):
-        torch.mps.empty_cache()
-    _sync_mps()
+def test_optional_no_checkpoint_mps_memory_slope_probe_stays_bounded():
+    report = _memory_slope_probe_report()
 
-    device = _mps_device()
-    model = _build_model(device)
-    optimizer = build_optimizer(model, TINY_NO_CHECKPOINT_CFG)
-    state = _tokens(device)[2]
-    allocated = []
-
-    for step in range(8):
-        x, y, _ = _tokens(device)
-        x = (x + step * 3) % int(TINY_NO_CHECKPOINT_CFG["vocab_size"])
-        y = (y + step * 3) % int(TINY_NO_CHECKPOINT_CFG["vocab_size"])
-        optimizer.zero_grad(set_to_none=True)
-        logits, next_state = model(x, state)
-        loss = F.cross_entropy(logits.reshape(-1, int(TINY_NO_CHECKPOINT_CFG["vocab_size"])), y.reshape(-1))
-        loss.backward()
-        optimizer.step()
-        state = next_state.detach()
-        del logits, next_state, loss
-        _sync_mps()
-        allocated.append(_mps_allocated_bytes())
-
-    assert len(allocated) == 8
-    assert all(value >= 0 for value in allocated)
-    warm_tail = allocated[3:]
-    tail_growth = max(warm_tail) - warm_tail[0]
-    assert tail_growth <= 64 * 1024 * 1024
+    assert report["steps"] == MEMORY_SLOPE_STEPS
+    assert len(report["rss_samples"]) == MEMORY_SLOPE_STEPS
+    assert len(report["loss_samples"]) == MEMORY_SLOPE_STEPS
+    assert len(report["gradient_norm_samples"]) == MEMORY_SLOPE_STEPS
+    assert report["nonfinite_count"] == 0, report
+    assert report["rss_slope"]["classification"] in MEMORY_ALLOWED_CLASSIFICATIONS, report
+    if report["mps_allocated_samples"]:
+        assert report["mps_allocated_slope"]["classification"] in MEMORY_ALLOWED_CLASSIFICATIONS, report
+    else:
+        assert report["mps_allocated_slope"]["classification"] == "unavailable", report

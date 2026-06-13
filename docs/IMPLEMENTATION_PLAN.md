@@ -8,12 +8,12 @@ GitHub issue: https://github.com/ZFrankJ/neo-neuron/issues/2
 
 ```text
 main == origin/main
-HEAD 9781470 Merge pull request #11 from ZFrankJ/codex/fix/mps-single-step-parity-envelope
+HEAD c4f1f96 Merge pull request #12 from ZFrankJ/codex/fix/mps-short-trajectory-parity
 ```
 
 MLX is the frozen scientific reference backend. Existing clean MLX result rows outside this repo remain authoritative.
 
-The previous alignment queue established MLX reference parity, optimizer parity, public training-loop parity, checkpoint metadata guards, CI, a seed optional MPS probe, and a shared backend parity audit report helper. The research goal continues with this ladder:
+The previous alignment queue established MLX reference parity, optimizer parity, public training-loop parity, checkpoint metadata guards, CI, a seed optional MPS probe, a shared backend parity audit report helper, and MPS short training trajectory parity. The research goal continues with this ladder:
 
 ```text
 MLX reference
@@ -86,29 +86,13 @@ CUDA parity work is ready only after the MPS no-checkpoint ladder is stable and 
 - PR #11: https://github.com/ZFrankJ/neo-neuron/pull/11
   - Merge commit: `9781470 Merge pull request #11 from ZFrankJ/codex/fix/mps-single-step-parity-envelope`
   - Extended the optional MPS probe into a strict CPU-vs-MPS single-step parity envelope with checkpointed MPS rejection.
+- PR #12: https://github.com/ZFrankJ/neo-neuron/pull/12
+  - Merge commit: `c4f1f96 Merge pull request #12 from ZFrankJ/codex/fix/mps-short-trajectory-parity`
+  - Extended the optional MPS probe into a short no-checkpoint CPU-vs-MPS training trajectory envelope.
 
 ## Active PR Queue
 
 Work through this queue in order. Do not start a later PR until the earlier PR is merged or explicitly skipped.
-
-### PR #12: MPS Short Training Trajectory Parity
-
-- Branch:
-  - `codex/fix/mps-short-trajectory-parity`
-- Goal:
-  - Prove PyTorch MPS can follow PyTorch CPU over a short no-checkpoint training path after MLX vs PyTorch CPU parity is established.
-- Required coverage:
-  - Initial eval parity.
-  - Stepwise loss drift.
-  - Final eval parity.
-  - Final parameter diff.
-  - Final recurrent-state diff.
-  - Gradient norm drift.
-  - NaN/Inf guard.
-- Exit criteria:
-  - Default CI still passes without MPS.
-  - Opt-in local MPS run reports pass/fail with exact tolerance values.
-  - No WT103/main-machine/result/`neo.csv` changes.
 
 ### PR #13: MPS Endurance And Memory Slope Probe
 
