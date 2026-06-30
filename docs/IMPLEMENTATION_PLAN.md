@@ -8,10 +8,14 @@ GitHub issue: https://github.com/ZFrankJ/neo-neuron/issues/2
 
 ```text
 main == origin/main
-HEAD e24d5a7 docs: clarify CUDA reproduction preflight
+HEAD 1e0e21a docs: close active parity queue
 ```
 
 MLX is the frozen scientific reference backend. Existing clean MLX result rows outside this repo remain authoritative.
+
+The dependency reproducibility maintenance slice constrains macOS Apple Silicon
+MLX parity installs to a tested package stack. MLX runtime semantics and strict
+parity thresholds remain unchanged.
 
 The completed local alignment queue established MLX reference parity, optimizer parity, public training-loop parity, checkpoint metadata guards, CI, a seed optional MPS probe, a shared backend parity audit report helper, MPS short training trajectory parity, MPS memory slope classification, and skip-safe CUDA harness preparation. The research goal is now blocked on real Nvidia GPU access for CUDA validation:
 
@@ -98,9 +102,12 @@ CUDA parity work is prepared but not validated in this repo because no Nvidia GP
 
 ## Active PR Queue
 
-No local implementation PR is active. The strict parity queue is empty.
+No local implementation PR is active. The strict parity queue is empty after the
+dependency reproducibility maintenance slice.
 
-The next CUDA step is external validation, not normal local development. Before opening CUDA-result or CUDA-CI work, confirm an Nvidia CUDA environment with:
+The next CUDA step remains external validation, not normal local development.
+Before opening CUDA-result or CUDA-CI work, confirm an
+Nvidia CUDA environment with:
 
 ```bash
 NEO_RUN_CUDA_PROBE=1 python3 -m pytest -q tests/test_cuda_parity_harness.py

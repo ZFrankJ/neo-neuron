@@ -89,6 +89,18 @@ make cuda-probe
 `make mps-probe` is opt-in Apple Silicon diagnostics only. It does not validate checkpointed MPS, WT103 training, or production result quality. The strict backend parity PR queue lives in `docs/IMPLEMENTATION_PLAN.md`.
 `make cuda-probe` is opt-in Nvidia CUDA diagnostics only. It skips without CUDA and does not make CUDA a required local or CI gate.
 
+For macOS Apple Silicon MLX parity work, install dependencies with the pinned
+parity constraints before running `make mlx-parity`:
+
+```bash
+python3 -m pip install -c requirements-lock/constraints-macos-mlx.txt -r requirements.txt
+python3 -m pip install -c requirements-lock/constraints-macos-mlx.txt pytest
+```
+
+The constraints file pins the tested Torch/NumPy/MLX stack for macOS MLX parity.
+Ubuntu CI continues to install plain `requirements.txt` and does not consume
+macOS-only MLX constraints.
+
 ## Full evaluation via PyTorch
 
 Full evaluation is still available through the PyTorch backend (including PPL, GFLOPs/token via THOP, and activation sparsity).

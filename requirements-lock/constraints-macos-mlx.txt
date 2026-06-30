@@ -1,0 +1,19 @@
+# macOS Apple Silicon MLX/PyTorch parity constraints.
+#
+# Verified on 2026-06-30 with Python 3.11.15 on arm64 macOS.
+# These pins keep the strict MLX reference parity suite meaningful while
+# avoiding MLX 0.30+ numerical drift observed against the current test
+# thresholds.
+
+torch==2.12.1
+numpy==2.4.6
+datasets==5.0.0
+transformers==5.12.1
+PyYAML==6.0.3
+psutil==7.2.2
+matplotlib==3.11.0
+thop==0.1.1.post2209072238
+pytest==9.1.1
+
+mlx==0.29.4; platform_system=="Darwin" and platform_machine=="arm64"
+mlx-metal==0.29.4; platform_system=="Darwin" and platform_machine=="arm64"
