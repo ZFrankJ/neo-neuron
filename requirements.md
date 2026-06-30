@@ -25,3 +25,15 @@ packages as needed.
 ```
 pip install -r requirements.txt
 ```
+
+For macOS Apple Silicon MLX parity work, install with the pinned parity
+constraints:
+
+```
+pip install -c requirements-lock/constraints-macos-mlx.txt -r requirements.txt
+pip install -c requirements-lock/constraints-macos-mlx.txt pytest
+```
+
+The macOS parity constraints pin the tested Torch, NumPy, MLX, and MLX-Metal
+stack used by CI. Linux CI intentionally does not use this constraints file so
+it is not tied to macOS-only MLX wheels.

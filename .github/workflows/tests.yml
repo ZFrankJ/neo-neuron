@@ -21,6 +21,7 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
+          cache-dependency-path: requirements.txt
 
       - name: Install dependencies
         run: |
@@ -44,12 +45,15 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-lock/constraints-macos-mlx.txt
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pytest
-          python -m pip install -r requirements.txt
+          python -m pip install -c requirements-lock/constraints-macos-mlx.txt pytest
+          python -m pip install -c requirements-lock/constraints-macos-mlx.txt -r requirements.txt
 
       - name: Run MLX reference parity tests
         run: make mlx-parity

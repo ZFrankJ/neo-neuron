@@ -2,6 +2,24 @@
 
 Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLAN.md`; keep broad priorities in `docs/ROADMAP.md`.
 
+## 2026-06-30 - macOS MLX Parity Dependency Constraints
+
+- Decision:
+  - Added macOS Apple Silicon parity constraints for the tested Torch, NumPy, MLX, and MLX-Metal dependency stack, and wired macOS MLX CI to install with those constraints.
+- Why:
+  - Fresh unpinned installs resolved to MLX 0.31.2 and failed the strict MLX reference parity suite with small but repeated numerical threshold misses.
+  - Local matrix checks showed MLX 0.30.0 and 0.30.6 still failed, while MLX 0.29.4 passed with the current Torch 2.12.1 and NumPy 2.4.6 stack.
+- Scope:
+  - `requirements.txt`
+  - `requirements-lock/constraints-macos-mlx.txt`
+  - `.github/workflows/tests.yml`
+  - `README.md`
+  - `requirements.md`
+- Impact:
+  - macOS MLX parity installs are reproducible against the tested stack.
+  - Linux CI remains on plain `requirements.txt` and is not constrained to macOS-only MLX packages.
+  - MLX runtime semantics and parity thresholds are unchanged.
+
 ## 2026-06-13 - Active Parity PR Queue Closed
 
 - Decision:
