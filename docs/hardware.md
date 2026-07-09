@@ -26,6 +26,26 @@ make mps-probe
 `make mps-probe` is synthetic, no-checkpoint, opt-in diagnostics. It does not
 validate checkpointed MPS, WT103-scale training, or production result rows.
 
+## Main Training Mac Mini Exception
+
+The portable macOS parity lock remains
+`requirements-lock/constraints-macos-mlx.txt`. Do not loosen that lock for
+machine-specific local behavior.
+
+The main training Mac mini has a separate local constraints record:
+
+```bash
+requirements-lock/constraints-mac-mini-training.txt
+```
+
+This record accepts `mlx==0.30.6` and `mlx-metal==0.30.6` only for that machine,
+and only after `make mlx-parity` passes on that machine. It is not evidence that
+MLX 0.30.6 is portable across Apple Silicon hosts.
+
+PyTorch MPS remains rejected for scientific result runs on this machine because
+the local no-checkpoint MPS memory slope probe failed. A passing MLX parity check
+does not change the MPS status.
+
 ## CUDA Preflight
 
 Before making CUDA reproduction, parity, or performance claims, confirm the CUDA
