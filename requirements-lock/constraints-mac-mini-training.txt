@@ -1,0 +1,25 @@
+# Main training Mac mini local constraints.
+#
+# This is a machine-specific validation record, not the portable reproducibility
+# lock. Keep requirements-lock/constraints-macos-mlx.txt unchanged as the PR #15
+# macOS parity lock.
+#
+# Acceptance rule:
+# - mlx==0.30.6 and mlx-metal==0.30.6 are accepted only on the main training
+#   Mac mini after `make mlx-parity` passes on that machine.
+# - This file does not generalize MLX 0.30.6 to other Apple Silicon machines.
+# - PyTorch MPS is not accepted for scientific result runs because the local
+#   no-checkpoint MPS memory slope probe failed.
+
+torch==2.8.0.dev20250614
+numpy==1.26.4
+datasets==3.6.0
+transformers==4.53.0.dev0
+PyYAML==6.0.2
+psutil==7.0.0
+matplotlib==3.10.1
+thop==0.1.1.post2209072238
+pytest==9.0.2
+
+mlx==0.30.6; platform_system=="Darwin" and platform_machine=="arm64"
+mlx-metal==0.30.6; platform_system=="Darwin" and platform_machine=="arm64"
