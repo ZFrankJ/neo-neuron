@@ -30,7 +30,7 @@ cuda-probe:
 	NEO_RUN_CUDA_PROBE=1 $(PYTHON) -m pytest -q tests/test_cuda_parity_harness.py
 
 torch-validate:
-	./scripts/validate_torch_path.sh
+	bash scripts/validate_torch_path.sh
 
 help:
 	@echo "Targets:"
