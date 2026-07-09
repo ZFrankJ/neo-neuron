@@ -1,4 +1,4 @@
-.PHONY: check test docs-check mlx-parity mps-probe cuda-probe help
+.PHONY: check test docs-check mlx-parity mps-probe cuda-probe torch-validate help
 
 PYTHON ?= python3
 
@@ -29,6 +29,9 @@ mps-probe:
 cuda-probe:
 	NEO_RUN_CUDA_PROBE=1 $(PYTHON) -m pytest -q tests/test_cuda_parity_harness.py
 
+torch-validate:
+	./scripts/validate_torch_path.sh
+
 help:
 	@echo "Targets:"
 	@echo "  check       - docs contract plus full pytest suite"
@@ -37,3 +40,4 @@ help:
 	@echo "  mlx-parity  - MLX reference parity tests"
 	@echo "  mps-probe   - opt-in tiny PyTorch MPS no-checkpoint probe"
 	@echo "  cuda-probe  - opt-in tiny PyTorch CUDA no-checkpoint probe"
+	@echo "  torch-validate - Torch CPU checks plus MLX/MPS parity preflights"
