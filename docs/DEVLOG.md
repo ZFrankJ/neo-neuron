@@ -2,6 +2,24 @@
 
 Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLAN.md`; keep broad priorities in `docs/ROADMAP.md`.
 
+## 2026-07-09 - Main Training Mac Mini Constraints Record
+
+- Decision:
+  - Kept the portable macOS MLX parity lock unchanged and added a separate main training Mac mini constraints record.
+  - Accepted `mlx==0.30.6` only as a machine-specific exception after `make mlx-parity` passes on that machine.
+  - Kept PyTorch MPS rejected for scientific result runs because the local no-checkpoint memory slope probe failed.
+- Why:
+  - The PR #15 lock exists for reproducible portable parity and should not be loosened by a single-machine result.
+  - The main training machine can still have a documented local stack if it proves parity locally.
+- Scope:
+  - `requirements-lock/constraints-mac-mini-training.txt`
+  - `docs/hardware.md`
+  - `Makefile`
+  - `scripts/validate_torch_path.sh`
+- Impact:
+  - `make torch-validate` records Torch CPU, MLX, and MPS validation status without promoting MPS to a trusted production path.
+  - MLX 0.30.6 remains non-portable and does not supersede `requirements-lock/constraints-macos-mlx.txt`.
+
 ## 2026-06-30 - macOS MLX Parity Dependency Constraints
 
 - Decision:
