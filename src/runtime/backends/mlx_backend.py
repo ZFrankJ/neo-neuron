@@ -884,6 +884,7 @@ def _eval_perplexity(model, ids: np.ndarray, cfg: Any) -> float:
     state = None
 
     if regime == "streaming":
+        batch = min(batch, max(1, (n - 1) // t_len))
         lane_len = n // batch
         usable_steps = ((lane_len - 1) // t_len) * t_len
         lanes = ids[: lane_len * batch].reshape(batch, lane_len)
@@ -1107,7 +1108,12 @@ def train_entry(
             },
         )
 
-    metrics: Dict[str, Optional[float]] = {"val_ppl": best_val}
+    from src.runtime.eval_semantics import resolve_eval_regime
+
+    metrics: Dict[str, Any] = {
+        "val_ppl": best_val,
+        "eval_regime": resolve_eval_regime(cfg),
+    }
     if test_np is not None:
         test_metrics = eval_metrics_entry(model, test_np, cfg)
         metrics["test_ppl"] = test_metrics["ppl"]

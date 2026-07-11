@@ -60,6 +60,16 @@ def test_recurrent_eval_regime_rejects_unknown_value():
         )
 
 
+def test_streaming_eval_reduces_batch_size_for_short_split():
+    model = _StateSentinel()
+    cfg = {"block_size": 128, "batch_size": 16, "vocab_size": 2, "eval_regime": "streaming"}
+
+    ppl = eval_perplexity(model, torch.tensor([0, 1] * 150), cfg, torch.device("cpu"))
+
+    assert ppl == pytest.approx(2.0)
+    assert len(model.seen_states) == 1
+
+
 @pytest.mark.parametrize(
     ("regime", "expected_states"),
     [
@@ -95,3 +105,32 @@ def test_mlx_recurrent_eval_regime_controls_state_lifetime(regime, expected_stat
     assert metrics["eval_regime"] == regime
     assert metrics["ppl"] == pytest.approx(2.0)
     assert model.seen_states == expected_states
+
+
+def test_mlx_streaming_eval_reduces_batch_size_for_short_split():
+    mx = pytest.importorskip("mlx.core")
+    from src.runtime.backends import mlx_backend
+
+    class MlxStateSentinel:
+        def __init__(self):
+            self.call_count = 0
+
+        def eval(self):
+            return self
+
+        def init_state(self, batch_size):
+            return mx.zeros((1, batch_size, 1))
+
+        def __call__(self, idx, state):
+            self.call_count += 1
+            return mx.zeros((*idx.shape, 2)), state + 1
+
+    model = MlxStateSentinel()
+    metrics = mlx_backend.eval_metrics_entry(
+        model,
+        torch.tensor([0, 1] * 150),
+        {"block_size": 128, "batch_size": 16, "vocab_size": 2, "eval_regime": "streaming"},
+    )
+
+    assert metrics["ppl"] == pytest.approx(2.0)
+    assert model.call_count == 1

@@ -23,6 +23,7 @@ def init_state_for_model(model, batch_size: int, device: torch.device):
 
 def _eval_batches(ids: torch.Tensor, block_size: int, batch_size: int, regime: str):
     if regime == "streaming":
+        batch_size = min(batch_size, max(1, (ids.size(0) - 1) // block_size))
         lane_len = ids.size(0) // batch_size
         usable_steps = ((lane_len - 1) // block_size) * block_size
         if usable_steps <= 0:
