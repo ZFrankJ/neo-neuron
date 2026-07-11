@@ -68,6 +68,19 @@ def _looks_like_neo(model_name: str | None, cfg: Any, expected_cfg: Any) -> bool
     return False
 
 
+def _looks_like_transformer(model_name: str | None, cfg: Any, expected_cfg: Any) -> bool:
+    if model_name == "transformer":
+        return True
+    if isinstance(cfg, dict) and str(cfg.get("model_name", "")).lower() == "transformer":
+        return True
+    if (
+        isinstance(expected_cfg, dict)
+        and str(expected_cfg.get("model_name", "")).lower() == "transformer"
+    ):
+        return True
+    return False
+
+
 def _metadata_values_match(key: str, checkpoint_value: Any, expected_value: Any) -> bool:
     if key == "rmsnorm_eps":
         return bool(np.isclose(float(checkpoint_value), float(expected_value), rtol=0.0, atol=1e-12))
@@ -85,6 +98,25 @@ def validate_checkpoint_metadata(
     model_name: str | None = None,
 ) -> List[str]:
     cfg = payload.get("cfg")
+    if _looks_like_transformer(model_name, cfg, expected_cfg):
+        if not expected_cfg:
+            return []
+        checkpoint_variant = (
+            str(cfg.get("transformer_variant", "legacy")).strip().lower()
+            if isinstance(cfg, dict)
+            else "legacy"
+        )
+        expected_variant = str(
+            expected_cfg.get("transformer_variant", "legacy")
+        ).strip().lower()
+        if checkpoint_variant != expected_variant:
+            raise ValueError(
+                "Checkpoint metadata is incompatible with requested config: "
+                "transformer_variant: "
+                f"checkpoint={checkpoint_variant!r}, expected={expected_variant!r}"
+            )
+        return []
+
     if not _looks_like_neo(model_name, cfg, expected_cfg):
         return []
 
@@ -473,7 +505,11 @@ def _map_transformer_torch_to_mlx(
         out[f"encoder.layers.{i}.linear1.bias"] = src[f"blocks.{i}.mlp.0.bias"]
         out[f"encoder.layers.{i}.linear2.weight"] = src[f"blocks.{i}.mlp.3.weight"]
         out[f"encoder.layers.{i}.linear2.bias"] = src[f"blocks.{i}.mlp.3.bias"]
-        warn.append(f"Dropping torch attention biases for layer {i} (MLX transformer has no attention bias params).")
+        if f"blocks.{i}.attn.qkv.bias" in src:
+            warn.append(
+                f"Dropping torch attention biases for layer {i} "
+                "(MLX transformer has no attention bias params)."
+            )
 
     missing = sorted(set(dst_template.keys()) - set(out.keys()))
     if missing:
@@ -505,9 +541,11 @@ def _map_transformer_mlx_to_torch(
         kw = src[f"encoder.layers.{i}.attention.key_proj.weight"]
         vw = src[f"encoder.layers.{i}.attention.value_proj.weight"]
         out[f"blocks.{i}.attn.qkv.weight"] = np.concatenate([qw, kw, vw], axis=0)
-        out[f"blocks.{i}.attn.qkv.bias"] = np.zeros((3 * d_model,), dtype=qw.dtype)
+        if f"blocks.{i}.attn.qkv.bias" in dst_template:
+            out[f"blocks.{i}.attn.qkv.bias"] = np.zeros((3 * d_model,), dtype=qw.dtype)
         out[f"blocks.{i}.attn.out_proj.weight"] = src[f"encoder.layers.{i}.attention.out_proj.weight"]
-        out[f"blocks.{i}.attn.out_proj.bias"] = np.zeros((d_model,), dtype=qw.dtype)
+        if f"blocks.{i}.attn.out_proj.bias" in dst_template:
+            out[f"blocks.{i}.attn.out_proj.bias"] = np.zeros((d_model,), dtype=qw.dtype)
         out[f"blocks.{i}.ln1.weight"] = src[f"encoder.layers.{i}.ln1.weight"]
         out[f"blocks.{i}.ln1.bias"] = src[f"encoder.layers.{i}.ln1.bias"]
         out[f"blocks.{i}.ln2.weight"] = src[f"encoder.layers.{i}.ln2.weight"]
@@ -516,7 +554,11 @@ def _map_transformer_mlx_to_torch(
         out[f"blocks.{i}.mlp.0.bias"] = src[f"encoder.layers.{i}.linear1.bias"]
         out[f"blocks.{i}.mlp.3.weight"] = src[f"encoder.layers.{i}.linear2.weight"]
         out[f"blocks.{i}.mlp.3.bias"] = src[f"encoder.layers.{i}.linear2.bias"]
-        warn.append(f"Filling torch attention biases with zeros for layer {i} (MLX source has no attention bias params).")
+        if f"blocks.{i}.attn.qkv.bias" in dst_template:
+            warn.append(
+                f"Filling torch attention biases with zeros for layer {i} "
+                "(MLX source has no attention bias params)."
+            )
 
     missing = sorted(set(dst_template.keys()) - set(out.keys()))
     if missing:

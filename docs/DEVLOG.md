@@ -2,6 +2,29 @@
 
 Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLAN.md`; keep broad priorities in `docs/ROADMAP.md`.
 
+## 2026-07-11 - GPT-2-Style Transformer Control
+
+- Decision:
+  - Added an opt-in `transformer_variant: gpt2` with pre-norm GELU blocks, optimized causal attention, 0.02 normal initialization, and depth-scaled residual projections.
+  - Kept missing `transformer_variant` mapped to `legacy` so old configs and checkpoints retain their historical interpretation.
+  - Reject checkpoint loads when the recorded Transformer variant conflicts with the requested variant; missing historical metadata is interpreted as `legacy`.
+- Why:
+  - The hand-rolled Transformer was useful as an internal smoke control but was too weakly specified for paper-facing Transformer comparisons.
+  - Torch and MLX need one explicit architecture and checkpoint contract rather than similarly named but behaviorally divergent controls.
+- Scope:
+  - `src/models/transformer_lm.py`
+  - `src/runtime/backends/torch_backend.py`
+  - `src/runtime/backends/mlx_backend.py`
+  - `src/runtime/checkpoint_compat.py`
+  - `configs/wt103/transformer_30m.yaml`
+  - `tests/test_gpt2_transformer_control.py`
+  - `README.md`
+  - `docs/training.md`
+- Impact:
+  - The checked-in WT103 Transformer template is clearly labeled GPT-2-style and maps checkpoints across Torch and MLX with tested causal forward parity.
+  - Historical Transformer runs remain lightweight internal controls and are not relabeled.
+  - No WT103 training, dataset download, checkpoint artifact, or `neo.csv` change was performed.
+
 ## 2026-07-11 - Config Labels And Neo Activation Provenance
 
 - Decision:

@@ -82,6 +82,21 @@ filenames remain as compatibility paths but are legacy labels, not exact
 parameter counts. See `docs/training.md` for exact counts and paper-facing
 small/large reporting labels.
 
+## Transformer baseline
+
+`configs/wt103/transformer_30m.yaml` is the opt-in `GPT-2-style Transformer
+control`. It uses pre-norm causal blocks, GELU feed-forwards, learned absolute
+positions, GPT-style 0.02 normal initialization with depth-scaled attention and
+MLP residual projections, and the optimized causal attention primitive provided
+by Torch or MLX. Torch and MLX checkpoint mapping is covered by a forward-parity
+test.
+
+Transformer configs without `transformer_variant` retain the historical
+`legacy` implementation and checkpoint interpretation. Historical Transformer
+runs are lightweight internal controls and must not be relabeled as GPT-2-style.
+Checkpoint loading rejects an explicit legacy/GPT-2-style variant mismatch;
+checkpoints without variant metadata are interpreted as historical `legacy`.
+
 ## Reproduction GPU preflight
 
 Before making CUDA reproduction or performance claims, first verify that the

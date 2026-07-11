@@ -102,6 +102,7 @@ def build_model(cfg: Dict[str, Any], model_name: str):
             dropout=dropout,
             tie_embeddings=tie_embeddings,
             max_seq_len=int(cfg.get("block_size", 2048)),
+            transformer_variant=str(cfg.get("transformer_variant", "legacy")),
         )
 
     raise ValueError(f"Unknown model name '{model_name}'.")

@@ -51,6 +51,19 @@ parameter initialization and therefore only apply when starting a new PyTorch
 LSTM run; loaded checkpoint weights remain authoritative. MLX LSTM semantics are
 unchanged by this control path.
 
+## Transformer baseline taxonomy
+
+Transformer configs without `transformer_variant` are the historical
+`lightweight Transformer internal control`. They retain the old initialization
+and checkpoint contract and are not a GPT-2 comparison baseline.
+
+`transformer_variant: gpt2` selects the `GPT-2-style Transformer control`:
+pre-norm blocks, learned absolute positions, GELU, optimized causal attention,
+0.02 normal initialization, and `1 / sqrt(2 * n_layers)` scaling for attention
+and MLP residual-projection initialization. Torch and MLX use their respective
+optimized attention primitives and share checkpoint-compatible parameter
+shapes. Paper-facing tables must state which Transformer variant was used.
+
 ## Recurrent evaluation regimes
 
 Evaluation reports an explicit `eval_regime` for Neo and LSTM models:
