@@ -87,8 +87,8 @@ def test_unknown_transformer_variant_is_rejected():
 
 
 def test_gpt2_mlx_and_torch_checkpoint_forward_parity(tmp_path):
-    mlx_backend = pytest.importorskip("src.runtime.backends.mlx_backend")
-    import mlx.core as mx
+    mx = pytest.importorskip("mlx.core")
+    from src.runtime.backends import mlx_backend
 
     cfg = {
         "backend": "torch",
@@ -128,7 +128,8 @@ def test_gpt2_mlx_and_torch_checkpoint_forward_parity(tmp_path):
 
 
 def test_gpt2_checkpoint_rejects_legacy_mlx_interpretation(tmp_path):
-    mlx_backend = pytest.importorskip("src.runtime.backends.mlx_backend")
+    pytest.importorskip("mlx.core")
+    from src.runtime.backends import mlx_backend
 
     gpt2_cfg = {
         "backend": "torch",
