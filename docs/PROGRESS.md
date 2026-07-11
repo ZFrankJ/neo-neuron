@@ -14,6 +14,7 @@ Current position:
 - the first paper-facing baseline slice is merged and provides opt-in standard-init PyTorch LSTM controls while preserving historical config behavior
 - recurrent evaluation now has merged compatibility-default block-reset and opt-in streaming semantics
 - config/result labeling now records exact WT2 parameter counts and makes tanh explicit for future WT103 Neo runs
+- a GPT-2-style Transformer control is implemented with aligned Torch/MLX causal checkpoint behavior and is pending review
 - old result rows stay provenance-bound; do not silently reinterpret them after baseline changes
 
 Current active checkpoint:
@@ -48,7 +49,7 @@ Current implementation plan:
    - Status: done
    - Result wanted: recurrent block-reset versus streaming-state eval is explicit, WT2 labels stop implying inaccurate parameter counts, and Neo tanh activation runs are labeled separately from older custom-activation runs.
 8. Transformer control strengthening
-   - Status: active planning
+   - Status: implementation pending review
    - Result wanted: Transformer comparisons use either a clearly limited internal control or a GPT-2-style baseline with modern enough defaults.
 
 ## Remaining Scale Estimate

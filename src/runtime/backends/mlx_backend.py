@@ -490,6 +490,7 @@ class MlxTransformerLM(mxnn.Module):
         dropout: float,
         tie_embeddings: bool,
         max_seq_len: int,
+        transformer_variant: str = "legacy",
     ):
         super().__init__()
         self.vocab_size = int(vocab_size)
@@ -498,6 +499,9 @@ class MlxTransformerLM(mxnn.Module):
         self.n_heads = int(n_heads)
         self.ff_mult = int(ff_mult)
         self.tie_embeddings = bool(tie_embeddings)
+        self.transformer_variant = str(transformer_variant).strip().lower()
+        if self.transformer_variant not in {"legacy", "gpt2"}:
+            raise ValueError("transformer_variant must be 'legacy' or 'gpt2'")
 
         self.emb = mxnn.Embedding(vocab_size, d_model)
         self.pos_emb = mxnn.Embedding(max_seq_len, d_model)
@@ -508,6 +512,7 @@ class MlxTransformerLM(mxnn.Module):
             num_heads=n_heads,
             mlp_dims=ff_mult * d_model,
             dropout=dropout,
+            activation=mxnn.gelu if self.transformer_variant == "gpt2" else mxnn.relu,
             norm_first=True,
         )
         if self.tie_embeddings:
@@ -517,6 +522,23 @@ class MlxTransformerLM(mxnn.Module):
             self.head = mxnn.Linear(d_model, vocab_size)
             self.output_bias = None
 
+        if self.transformer_variant == "gpt2":
+            residual_std = 0.02 / math.sqrt(2 * n_layers)
+            initialized = {}
+            for name, value in tree_flatten(self.parameters()):
+                if name.endswith("bias"):
+                    initialized[name] = mx.zeros_like(value)
+                elif ".ln" in name and name.endswith("weight"):
+                    initialized[name] = mx.ones_like(value)
+                elif name.endswith("weight"):
+                    std = residual_std if name.endswith(
+                        ("attention.out_proj.weight", "linear2.weight")
+                    ) else 0.02
+                    initialized[name] = mx.random.normal(value.shape) * std
+                else:
+                    initialized[name] = value
+            self.update(tree_unflatten(list(initialized.items())))
+
     def __call__(self, idx: mx.array, state=None):
         t, _ = idx.shape
         idx_bt = mx.swapaxes(idx, 0, 1)  # [B, T]
@@ -524,7 +546,11 @@ class MlxTransformerLM(mxnn.Module):
         pos_emb = self.pos_emb(pos)[None, :, :]
         x = self.emb(idx_bt) + pos_emb
         x = self.drop(x)
-        mask = mx.triu(mx.ones((t, t), dtype=mx.bool_), k=1)
+        mask = (
+            "causal"
+            if self.transformer_variant == "gpt2"
+            else mx.triu(mx.ones((t, t), dtype=mx.bool_), k=1)
+        )
         x = self.encoder(x, mask)
 
         if self.tie_embeddings:
@@ -593,6 +619,7 @@ def build_model(cfg: Dict[str, Any], model_name: str):
             dropout=dropout,
             tie_embeddings=tie_embeddings,
             max_seq_len=int(cfg.get("block_size", 2048)),
+            transformer_variant=str(cfg.get("transformer_variant", "legacy")),
         )
     raise ValueError(f"Unknown model name '{model_name}'.")
 

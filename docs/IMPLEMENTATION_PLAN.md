@@ -7,8 +7,8 @@ GitHub issue: https://github.com/ZFrankJ/neo-neuron/issues/2
 ## Current State
 
 ```text
-branch codex/docs/config-labels-activation-provenance from origin/main
-base 58c484b Merge pull request #19 from ZFrankJ/codex/feat/recurrent-eval-semantics
+branch codex/feat/gpt2-style-transformer-control from origin/main
+base 1e7830d Merge pull request #20 from ZFrankJ/codex/docs/config-labels-activation-provenance
 ```
 
 MLX is the frozen scientific reference backend. Existing clean MLX result rows outside this repo remain authoritative.
@@ -111,6 +111,9 @@ CUDA parity work is prepared but not validated in this repo because no Nvidia GP
 - PR #19: https://github.com/ZFrankJ/neo-neuron/pull/19
   - Merge commit: `58c484b Merge pull request #19 from ZFrankJ/codex/feat/recurrent-eval-semantics`
   - Added explicit compatibility-default block-reset and opt-in streaming recurrent evaluation regimes.
+- PR #20: https://github.com/ZFrankJ/neo-neuron/pull/20
+  - Merge commit: `1e7830d Merge pull request #20 from ZFrankJ/codex/docs/config-labels-activation-provenance`
+  - Added exact WT2 parameter-count reporting labels and explicit activation provenance for future tanh runs.
 
 ## Active PR Queue
 
@@ -183,7 +186,7 @@ acceptance semantics for later approved experiment runs.
 ### PR #20: Config Labels And Activation Provenance
 
 - Status:
-  - implemented on `codex/docs/config-labels-activation-provenance`; pending review and merge
+  - merged as PR #20; retained here until the baseline-alignment queue closes
 
 - Branch:
   - `codex/docs/config-labels-activation-provenance`
@@ -206,6 +209,9 @@ acceptance semantics for later approved experiment runs.
   - `make check` passes.
 
 ### PR #21: GPT-Style Transformer Control
+
+- Status:
+  - implemented on `codex/feat/gpt2-style-transformer-control`; pending review and merge
 
 - Branch:
   - `codex/feat/gpt2-style-transformer-control`
