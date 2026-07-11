@@ -68,6 +68,19 @@ def _looks_like_neo(model_name: str | None, cfg: Any, expected_cfg: Any) -> bool
     return False
 
 
+def _looks_like_transformer(model_name: str | None, cfg: Any, expected_cfg: Any) -> bool:
+    if model_name == "transformer":
+        return True
+    if isinstance(cfg, dict) and str(cfg.get("model_name", "")).lower() == "transformer":
+        return True
+    if (
+        isinstance(expected_cfg, dict)
+        and str(expected_cfg.get("model_name", "")).lower() == "transformer"
+    ):
+        return True
+    return False
+
+
 def _metadata_values_match(key: str, checkpoint_value: Any, expected_value: Any) -> bool:
     if key == "rmsnorm_eps":
         return bool(np.isclose(float(checkpoint_value), float(expected_value), rtol=0.0, atol=1e-12))
@@ -85,6 +98,25 @@ def validate_checkpoint_metadata(
     model_name: str | None = None,
 ) -> List[str]:
     cfg = payload.get("cfg")
+    if _looks_like_transformer(model_name, cfg, expected_cfg):
+        if not expected_cfg:
+            return []
+        checkpoint_variant = (
+            str(cfg.get("transformer_variant", "legacy")).strip().lower()
+            if isinstance(cfg, dict)
+            else "legacy"
+        )
+        expected_variant = str(
+            expected_cfg.get("transformer_variant", "legacy")
+        ).strip().lower()
+        if checkpoint_variant != expected_variant:
+            raise ValueError(
+                "Checkpoint metadata is incompatible with requested config: "
+                "transformer_variant: "
+                f"checkpoint={checkpoint_variant!r}, expected={expected_variant!r}"
+            )
+        return []
+
     if not _looks_like_neo(model_name, cfg, expected_cfg):
         return []
 

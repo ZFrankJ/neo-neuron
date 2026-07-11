@@ -7,6 +7,7 @@ Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLA
 - Decision:
   - Added an opt-in `transformer_variant: gpt2` with pre-norm GELU blocks, optimized causal attention, 0.02 normal initialization, and depth-scaled residual projections.
   - Kept missing `transformer_variant` mapped to `legacy` so old configs and checkpoints retain their historical interpretation.
+  - Reject checkpoint loads when the recorded Transformer variant conflicts with the requested variant; missing historical metadata is interpreted as `legacy`.
 - Why:
   - The hand-rolled Transformer was useful as an internal smoke control but was too weakly specified for paper-facing Transformer comparisons.
   - Torch and MLX need one explicit architecture and checkpoint contract rather than similarly named but behaviorally divergent controls.

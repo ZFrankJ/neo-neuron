@@ -94,6 +94,8 @@ test.
 Transformer configs without `transformer_variant` retain the historical
 `legacy` implementation and checkpoint interpretation. Historical Transformer
 runs are lightweight internal controls and must not be relabeled as GPT-2-style.
+Checkpoint loading rejects an explicit legacy/GPT-2-style variant mismatch;
+checkpoints without variant metadata are interpreted as historical `legacy`.
 
 ## Reproduction GPU preflight
 

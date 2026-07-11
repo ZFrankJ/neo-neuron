@@ -7,6 +7,7 @@ import yaml
 
 from src.models import TransformerLM
 from src.runtime.backends import torch_backend
+from src.runtime.checkpoint_compat import validate_checkpoint_metadata
 
 
 def _tiny_model(**overrides):
@@ -124,3 +125,53 @@ def test_gpt2_mlx_and_torch_checkpoint_forward_parity(tmp_path):
         rtol=2e-4,
         atol=2e-5,
     )
+
+
+def test_gpt2_checkpoint_rejects_legacy_mlx_interpretation(tmp_path):
+    mlx_backend = pytest.importorskip("src.runtime.backends.mlx_backend")
+
+    gpt2_cfg = {
+        "backend": "torch",
+        "model_name": "transformer",
+        "transformer_variant": "gpt2",
+        "vocab_size": 31,
+        "d_model": 16,
+        "n_layers": 2,
+        "n_heads": 4,
+        "ff_mult": 2,
+        "dropout": 0.0,
+        "tie_embeddings": True,
+        "block_size": 16,
+        "recurrent_norm": "none",
+    }
+    checkpoint = tmp_path / "gpt2.pt"
+    torch_backend.save_checkpoint_entry(
+        checkpoint,
+        torch_backend.build_model(gpt2_cfg, "transformer"),
+        None,
+        None,
+        epoch=0,
+        global_step=0,
+        cfg=gpt2_cfg,
+    )
+    legacy_cfg = dict(gpt2_cfg, backend="mlx", transformer_variant="legacy")
+    legacy_model = mlx_backend.build_model(legacy_cfg, "transformer")
+
+    with pytest.raises(ValueError, match="transformer_variant"):
+        mlx_backend.load_checkpoint_entry(checkpoint, legacy_model, cfg=legacy_cfg)
+
+
+def test_transformer_checkpoint_without_variant_metadata_is_legacy():
+    legacy_payload = {"cfg": {"model_name": "transformer"}}
+
+    assert validate_checkpoint_metadata(
+        legacy_payload,
+        expected_cfg={"model_name": "transformer", "transformer_variant": "legacy"},
+        model_name="transformer",
+    ) == []
+    with pytest.raises(ValueError, match="checkpoint='legacy'.*expected='gpt2'"):
+        validate_checkpoint_metadata(
+            legacy_payload,
+            expected_cfg={"model_name": "transformer", "transformer_variant": "gpt2"},
+            model_name="transformer",
+        )
