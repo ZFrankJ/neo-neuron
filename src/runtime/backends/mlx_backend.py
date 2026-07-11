@@ -561,6 +561,17 @@ def build_model(cfg: Dict[str, Any], model_name: str):
             norm_place=recurrent_norm_place,
         )
     if model_name == "lstm":
+        uses_torch_init_controls = (
+            float(cfg.get("forget_bias_init", 0.0)) != 0.0
+            or str(cfg.get("recurrent_init", "xavier_uniform")).strip().lower()
+            != "xavier_uniform"
+            or cfg.get("lstm_layer_dropout") is not None
+        )
+        if uses_torch_init_controls:
+            raise ValueError(
+                "forget_bias_init, recurrent_init, and lstm_layer_dropout are "
+                "PyTorch-only LSTM controls; MLX runtime semantics are frozen."
+            )
         return MlxLSTMLM(
             vocab_size=vocab_size,
             d_model=d_model,

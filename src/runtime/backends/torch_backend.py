@@ -55,6 +55,7 @@ def build_model(cfg: Dict[str, Any], model_name: str):
     rmsnorm_eps = float(cfg.get("rmsnorm_eps", 1e-5))
 
     if model_name == "lstm":
+        lstm_layer_dropout = cfg.get("lstm_layer_dropout")
         return LSTMLM(
             vocab_size=vocab_size,
             d_model=d_model,
@@ -64,6 +65,11 @@ def build_model(cfg: Dict[str, Any], model_name: str):
             tie_embeddings=tie_embeddings,
             output_norm=recurrent_norm,
             norm_place=recurrent_norm_place,
+            forget_bias_init=float(cfg.get("forget_bias_init", 0.0)),
+            recurrent_init=str(cfg.get("recurrent_init", "xavier_uniform")),
+            lstm_layer_dropout=(
+                None if lstm_layer_dropout is None else float(lstm_layer_dropout)
+            ),
         )
 
     if model_name == "neo":

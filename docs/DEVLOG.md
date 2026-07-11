@@ -2,6 +2,24 @@
 
 Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLAN.md`; keep broad priorities in `docs/ROADMAP.md`.
 
+## 2026-07-11 - Opt-In Standard-Init LSTM Control
+
+- Decision:
+  - Added opt-in PyTorch LSTM controls for positive forget-gate bias, gate-wise orthogonal recurrent initialization, and independent inter-layer dropout.
+  - Preserved zero forget bias, Xavier-uniform recurrence, and `dropout`-as-layer-dropout as compatibility defaults.
+- Why:
+  - A stronger LSTM comparator should follow common LSTM initialization practice without silently changing historical control configs or implying one-to-one Neo equivalents.
+  - Reusing output dropout between LSTM layers must be an explicit policy choice for future result labels.
+- Scope:
+  - `src/models/lstm_lm.py`
+  - `src/runtime/backends/torch_backend.py`
+  - `tests/test_lstm_init_controls.py`
+  - `README.md`
+  - `docs/training.md`
+- Impact:
+  - Future PyTorch runs can be labeled `standard-init RMSNorm-LSTM` with `forget_bias_init: 1.0`, `recurrent_init: orthogonal`, and explicit `lstm_layer_dropout`.
+  - Historical runs remain `RMSNorm-LSTM matched control`; MLX runtime semantics and existing checkpoint interpretation are unchanged.
+
 ## 2026-07-11 - Baseline Alignment Queue Reopened
 
 - Decision:

@@ -49,6 +49,30 @@ python3 scripts/eval.py --config configs/wt103/neo_20m.yaml --checkpoint checkpo
   `make cuda-probe` on a CUDA machine. The baseline is full precision,
   no checkpoint, no `torch.compile`, no fused optimizer, and no TF32 speed path.
 
+## LSTM baseline controls
+
+Existing LSTM configs retain the historical matched-control behavior: zero gate
+biases, Xavier-uniform recurrent matrices, and `dropout` applied both between
+recurrent layers and before the output projection. For a stronger, explicitly
+labeled PyTorch LSTM baseline, configs can opt into:
+
+```yaml
+backend: torch
+model_name: lstm
+recurrent_norm: rmsnorm
+forget_bias_init: 1.0
+recurrent_init: orthogonal
+lstm_layer_dropout: 0.0
+dropout: 0.1
+```
+
+This path is the `standard-init RMSNorm-LSTM`. It uses a positive forget-gate
+bias, gate-wise orthogonal hidden-to-hidden initialization, no LSTM-only
+inter-layer dropout, and retains `dropout` before the language-model output.
+The historical `RMSNorm-LSTM matched control` remains loadable and is not
+silently reinterpreted. These initialization controls are PyTorch-only; MLX
+runtime semantics remain unchanged.
+
 ## Reproduction GPU preflight
 
 Before making CUDA reproduction or performance claims, first verify that the
