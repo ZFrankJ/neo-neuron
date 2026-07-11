@@ -6,6 +6,8 @@ from typing import Any, Dict, Optional
 import torch
 import torch.nn.functional as F
 
+from src.runtime.eval_semantics import resolve_eval_regime
+
 
 def _cfg_get(cfg: Any, key: str, default=None):
     if isinstance(cfg, dict):
@@ -17,6 +19,31 @@ def init_state_for_model(model, batch_size: int, device: torch.device):
     if hasattr(model, "init_state"):
         return model.init_state(batch_size, device)
     return None
+
+
+def _eval_batches(ids: torch.Tensor, block_size: int, batch_size: int, regime: str):
+    if regime == "streaming":
+        lane_len = ids.size(0) // batch_size
+        usable_steps = ((lane_len - 1) // block_size) * block_size
+        if usable_steps <= 0:
+            return
+        lanes = ids[: lane_len * batch_size].reshape(batch_size, lane_len)
+        for start in range(0, usable_steps, block_size):
+            yield (
+                lanes[:, start : start + block_size].t().contiguous(),
+                lanes[:, start + 1 : start + block_size + 1].t().contiguous(),
+                batch_size,
+            )
+        return
+
+    n_tokens = ids.size(0)
+    for start in range(0, n_tokens - (block_size + 1), block_size * batch_size):
+        cur_batch = min(batch_size, (n_tokens - (start + block_size + 1)) // block_size)
+        if cur_batch <= 0:
+            break
+        x = torch.stack([ids[start + i * block_size : start + i * block_size + block_size] for i in range(cur_batch)])
+        y = torch.stack([ids[start + i * block_size + 1 : start + i * block_size + block_size + 1] for i in range(cur_batch)])
+        yield x.t().contiguous(), y.t().contiguous(), cur_batch
 
 
 def activation_sparsity_eps(cfg: Any) -> float:
@@ -95,20 +122,18 @@ def eval_perplexity(model: torch.nn.Module, ids: torch.Tensor, cfg: Any, device:
     T = int(_cfg_get(cfg, "block_size", 128))
     B = int(_cfg_get(cfg, "batch_size", 16))
     vocab_size = int(_cfg_get(cfg, "vocab_size", 0))
+    regime = resolve_eval_regime(cfg)
     total_loss = 0.0
     total_tokens = 0
+    state = None
     with torch.no_grad():
-        N = ids.size(0)
-        for start in range(0, N - (T + 1), T * B):
-            cur_B = min(B, (N - (start + T + 1)) // T)
-            if cur_B <= 0:
-                break
-            x = torch.stack([ids[start + i * T: start + i * T + T] for i in range(cur_B)]).to(device)
-            y = torch.stack([ids[start + i * T + 1: start + i * T + T + 1] for i in range(cur_B)]).to(device)
-            x = x.t().contiguous()
-            y = y.t().contiguous()
-            state = init_state_for_model(model, cur_B, device)
-            logits, _ = model(x, state)
+        for x, y, cur_B in _eval_batches(ids, T, B, regime):
+            x = x.to(device)
+            y = y.to(device)
+            if regime == "block_reset" or state is None:
+                state = init_state_for_model(model, cur_B, device)
+            logits, state_out = model(x, state)
+            state = state_out if regime == "streaming" else None
             loss = F.cross_entropy(logits.reshape(-1, vocab_size), y.reshape(-1), reduction="sum")
             total_loss += loss.item()
             total_tokens += cur_B * T
@@ -126,33 +151,27 @@ def measure_activation_sparsity(
     model.eval()
     T = int(_cfg_get(cfg, "block_size", 128))
     B = min(int(_cfg_get(cfg, "batch_size", 16)), 16)
+    regime = resolve_eval_regime(cfg)
     with torch.no_grad():
         if hasattr(model, "blocks"):
             meter.attach_transformer(model)
-            N = ids.size(0)
             batches = 0
-            for start in range(0, N - (T + 1), T * B):
+            for x, _, _ in _eval_batches(ids, T, B, regime):
                 if batches >= max_batches:
                     break
-                cur_B = min(B, (N - (start + T + 1)) // T)
-                if cur_B <= 0:
-                    break
-                x = torch.stack([ids[start + i * T: start + i * T + T] for i in range(cur_B)]).to(device)
-                _ = model(x.t().contiguous(), None)
+                _ = model(x.to(device), None)
                 batches += 1
         else:
             meter.attach_recurrent(model)
-            N = ids.size(0)
             batches = 0
-            for start in range(0, N - (T + 1), T * B):
+            state = None
+            for x, _, cur_B in _eval_batches(ids, T, B, regime):
                 if batches >= max_batches:
                     break
-                cur_B = min(B, (N - (start + T + 1)) // T)
-                if cur_B <= 0:
-                    break
-                x = torch.stack([ids[start + i * T: start + i * T + T] for i in range(cur_B)]).to(device)
-                state = init_state_for_model(model, cur_B, device)
-                _ = model(x.t().contiguous(), state)
+                if regime == "block_reset" or state is None:
+                    state = init_state_for_model(model, cur_B, device)
+                _, state_out = model(x.to(device), state)
+                state = state_out if regime == "streaming" else None
                 batches += 1
     sparsity = meter.summary()
     meter.clear()
@@ -238,7 +257,8 @@ def profile_real_flops_transformer(model: torch.nn.Module, cfg: Any) -> Optional
         return None
 
 
-def evaluate_metrics(model: torch.nn.Module, ids: torch.Tensor, cfg: Any, device: torch.device) -> Dict[str, Optional[float]]:
+def evaluate_metrics(model: torch.nn.Module, ids: torch.Tensor, cfg: Any, device: torch.device) -> Dict[str, Any]:
+    regime = resolve_eval_regime(cfg)
     ppl = eval_perplexity(model, ids, cfg, device)
     sparsity = measure_activation_sparsity(model, ids, cfg, device, max_batches=50)
     if hasattr(model, "blocks"):
@@ -246,6 +266,7 @@ def evaluate_metrics(model: torch.nn.Module, ids: torch.Tensor, cfg: Any, device
     else:
         gflops = profile_real_flops_recurrent(model, cfg)
     return {
+        "eval_regime": regime,
         "ppl": ppl,
         "act_sparsity": sparsity,
         "act_sparsity_eps": activation_sparsity_eps(cfg),
