@@ -36,13 +36,32 @@ This roadmap lists broad project priorities only. Checkpoint state belongs in `d
 - Expanded plan:
   - `docs/IMPLEMENTATION_PLAN.md`
 
-## 3. Result Production And WT103 Revalidation
+## 3. Baseline Alignment And Result Readiness
+
+- Status: active planning
+- Why now:
+  - Backend parity is locally complete, but paper-facing claims also need defensible baselines, explicit evaluation semantics, and result provenance.
+  - The current LSTM control is a normalized recurrent baseline, not a vanilla LSTM baseline; that is acceptable only if named and tested as such.
+  - Neo is moving toward a tanh activation framing, so future result labels must separate cell-structure claims from older custom-activation runs.
+- Focus:
+  - Strengthen the LSTM baseline without changing old result interpretation.
+  - Decide whether recurrent evaluation should use block-reset or streaming-state semantics, and report both if needed.
+  - Keep WT2 labels honest by using small/large names plus exact parameter counts.
+  - Upgrade the Transformer control toward a GPT-2-style internal baseline before making Transformer comparison claims.
+  - Fix optimizer grouping edge cases that could silently make Torch/MLX parity or LSTM comparisons misleading.
+- Exit condition:
+  - A short PR queue defines baseline taxonomy, config labels, eval semantics, optimizer grouping, and Transformer baseline scope before new paper-quality runs are scheduled.
+- Expanded plan:
+  - `docs/PROGRESS.md`
+  - `docs/IMPLEMENTATION_PLAN.md`
+
+## 4. Result Production And WT103 Revalidation
 
 - Status: later
 - Why now:
-  - Old PyTorch MPS WT103 rows are not trusted, but revalidating large training is expensive and should wait for backend parity evidence.
+  - Old PyTorch MPS WT103 rows are not trusted, and new result production should wait until baseline alignment is explicit.
 - Focus:
-  - Do not rerun WT103 or rehabilitate old PyTorch result rows until the parity ladder is complete.
+  - Do not rerun WT103 or rehabilitate old PyTorch result rows until the parity ladder and baseline-alignment queue are complete.
 - Exit condition:
   - A separate approved plan defines hardware, configs, result labels, and acceptance criteria.
 - Expanded plan:

@@ -6,21 +6,21 @@ Checkpoint tracker for the active large goal. This file sits between `docs/ROADM
 
 Roadmap priority:
 
-`1. Backend Parity Against MLX`
+`3. Baseline Alignment And Result Readiness`
 
 Current position:
 
-- checkpoint 4 of 5 is done
-- MLX reference parity, optimizer parity, public training-loop parity, checkpoint metadata guards, CI, a seed optional MPS probe, the backend parity audit harness, MPS short trajectory parity, MPS memory slope classification, and skip-safe CUDA harness preparation have merged through PR #14
-- no active parity PR queue remains; CUDA validation is blocked until Nvidia GPU access exists
+- backend parity is locally complete, with CUDA validation still blocked outside the local queue
+- current work is planning the paper-facing baseline and evaluation alignment queue
+- old result rows stay provenance-bound; do not silently reinterpret them after baseline changes
 
 Current active checkpoint:
 
-`External CUDA GPU validation blocked`
+`Baseline and evaluation alignment queue`
 
 Current implementation plan:
 
-`docs/IMPLEMENTATION_PLAN.md` with an empty active PR queue.
+`docs/IMPLEMENTATION_PLAN.md`
 
 ## Checkpoint Chain
 
@@ -39,10 +39,20 @@ Current implementation plan:
 5. External Nvidia CUDA validation
    - Status: blocked outside the local queue
    - Result wanted: CUDA parity is claimed only after the opt-in CUDA probe runs, not skips, on a real Nvidia CUDA machine.
+6. Baseline taxonomy and LSTM strengthening
+   - Status: active planning
+   - Result wanted: LSTM is named as a normalized/matched recurrent control, and a stronger LSTM variant covers standard init and dropout-policy concerns.
+7. Evaluation semantics and config/result labels
+   - Status: active planning
+   - Result wanted: recurrent block-reset versus streaming-state eval is explicit, WT2 labels stop implying inaccurate parameter counts, and Neo tanh activation runs are labeled separately from older custom-activation runs.
+8. Transformer control strengthening
+   - Status: active planning
+   - Result wanted: Transformer comparisons use either a clearly limited internal control or a GPT-2-style baseline with modern enough defaults.
 
 ## Remaining Scale Estimate
 
 - 0 local parity PRs are currently queued.
+- Baseline alignment has a new local docs queue before paper-quality result production.
 - CUDA validation remains blocked on access to Nvidia hardware or a provisioned GPU runner.
 - Reproducers must run `NEO_RUN_CUDA_PROBE=1 python3 -m pytest -q tests/test_cuda_parity_harness.py` and confirm it does not skip before making CUDA claims.
 - Standard GitHub-hosted runners for individual repos are not an acceptable substitute for Nvidia GPU validation.

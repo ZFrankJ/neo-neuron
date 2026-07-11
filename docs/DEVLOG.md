@@ -2,6 +2,24 @@
 
 Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLAN.md`; keep broad priorities in `docs/ROADMAP.md`.
 
+## 2026-07-11 - Baseline Alignment Queue Reopened
+
+- Decision:
+  - Reopened the active execution queue for baseline-alignment planning before new paper-facing result production.
+  - Classified the current LSTM as a normalized/matched recurrent control, not a vanilla LSTM baseline.
+  - Planned separate PRs for standard LSTM init controls, recurrent eval semantics, config/result labels, Transformer control strength, and LSTM optimizer grouping parity.
+- Why:
+  - Backend parity is locally complete, but paper claims also depend on baseline strength, evaluation semantics, and result provenance.
+  - LSTM-specific best practices such as positive forget bias and orthogonal recurrent init have no direct Neo counterpart but can materially affect baseline strength.
+  - Neo's move toward tanh activation requires explicit run labeling rather than relabeling older custom-activation results.
+- Scope:
+  - `docs/ROADMAP.md`
+  - `docs/PROGRESS.md`
+  - `docs/IMPLEMENTATION_PLAN.md`
+- Impact:
+  - Future agents should take one baseline-alignment PR at a time.
+  - No WT103/main-machine experiment, `neo.csv` edit, or old-result reinterpretation is authorized by this planning update.
+
 ## 2026-07-09 - Main Training Mac Mini Constraints Record
 
 - Decision:

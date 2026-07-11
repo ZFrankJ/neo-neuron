@@ -1,6 +1,6 @@
 # Implementation Plan
 
-Strict execution contract for Issue #2 backend parity work.
+Strict execution contract for Neo backend parity and baseline-alignment work.
 
 GitHub issue: https://github.com/ZFrankJ/neo-neuron/issues/2
 
@@ -8,7 +8,7 @@ GitHub issue: https://github.com/ZFrankJ/neo-neuron/issues/2
 
 ```text
 main == origin/main
-HEAD 1e0e21a docs: close active parity queue
+HEAD e84d6c9 Merge pull request #17 from ZFrankJ/codex/maint/torch-validation-preflight
 ```
 
 MLX is the frozen scientific reference backend. Existing clean MLX result rows outside this repo remain authoritative.
@@ -17,7 +17,7 @@ The dependency reproducibility maintenance slice constrains macOS Apple Silicon
 MLX parity installs to a tested package stack. MLX runtime semantics and strict
 parity thresholds remain unchanged.
 
-The completed local alignment queue established MLX reference parity, optimizer parity, public training-loop parity, checkpoint metadata guards, CI, a seed optional MPS probe, a shared backend parity audit report helper, MPS short training trajectory parity, MPS memory slope classification, and skip-safe CUDA harness preparation. The research goal is now blocked on real Nvidia GPU access for CUDA validation:
+The completed local backend alignment queue established MLX reference parity, optimizer parity, public training-loop parity, checkpoint metadata guards, CI, a seed optional MPS probe, a shared backend parity audit report helper, MPS short training trajectory parity, MPS memory slope classification, skip-safe CUDA harness preparation, and machine-specific Mac mini backend provenance. CUDA validation remains blocked on real Nvidia GPU access:
 
 ```text
 MLX reference
@@ -99,11 +99,144 @@ CUDA parity work is prepared but not validated in this repo because no Nvidia GP
 - PR #14: https://github.com/ZFrankJ/neo-neuron/pull/14
   - Merge commit: `948bfe3 Merge pull request #14 from ZFrankJ/codex/fix/cuda-parity-harness-prep`
   - Added skip-safe CUDA discovery, full-precision CUDA baseline policy reporting, and an opt-in CUDA single-step parity harness.
+- PR #15: https://github.com/ZFrankJ/neo-neuron/pull/15
+  - Merge commit: `5792670 Merge pull request #15 from ZFrankJ/codex/fix/macos-mlx-dependency-reproducibility`
+  - Added the portable macOS Apple Silicon MLX parity dependency lock and wired macOS MLX CI to use it.
+- PR #17: https://github.com/ZFrankJ/neo-neuron/pull/17
+  - Merge commit: `e84d6c9 Merge pull request #17 from ZFrankJ/codex/maint/torch-validation-preflight`
+  - Added `make torch-validate` and a machine-specific main Mac mini constraints record without loosening the portable parity lock.
 
 ## Active PR Queue
 
-No local implementation PR is active. The strict parity queue is empty after the
-dependency reproducibility maintenance slice.
+The strict parity queue is empty. The active queue is now baseline-alignment
+planning for paper-facing results. These PRs must not run WT103, mutate
+`neo.csv`, or reinterpret old results. They prepare configs, tests, docs, and
+acceptance semantics for later approved experiment runs.
+
+### PR #18: LSTM Standard-Init Strengthening
+
+- Branch:
+  - `codex/feat/lstm-standard-init-controls`
+- Goal:
+  - Add a stronger LSTM baseline path covering the three LSTM-specific concerns:
+    positive forget-gate bias, orthogonal recurrent initialization, and dropout
+    policy alignment.
+- Rationale:
+  - The current LSTM is a normalized recurrent control. That is acceptable, but
+    zero forget bias, Xavier recurrent matrices, and extra inter-layer dropout
+    can make it weaker than a well-tuned LSTM.
+  - Neo has no direct forget gate or learned hidden-to-hidden recurrent matrix,
+    so these are LSTM-specific best-practice controls, not one-to-one Neo
+    settings.
+- Scope:
+  - Add explicit LSTM init controls such as `forget_bias_init` and
+    `recurrent_init`.
+  - Add or document dropout-policy controls so LSTM-only inter-layer dropout is
+    intentional rather than accidental.
+  - Add tests that inspect initialized LSTM gate biases and recurrent matrix
+    properties on tiny models.
+  - Prefer new configs or explicit labels over silently changing old result
+    configs.
+- Exit criteria:
+  - Existing configs remain loadable.
+  - New standard-init LSTM path is covered by tests.
+  - Docs distinguish `RMSNorm-LSTM matched control` from `standard-init
+    RMSNorm-LSTM`.
+  - `make check` passes.
+
+### PR #19: Recurrent Eval Semantics
+
+- Branch:
+  - `codex/feat/recurrent-eval-semantics`
+- Goal:
+  - Decide and implement how recurrent models report block-reset evaluation
+    versus streaming-state evaluation.
+- Rationale:
+  - Training streams state across contiguous batches, but current eval resets
+    state per non-overlapping evaluation batch. That is valid if documented, but
+    it may understate recurrent models' sequence-memory performance.
+- Scope:
+  - Add an explicit config/CLI metric option for eval mode, for example
+    `eval_regime: block_reset | streaming`.
+  - Keep current behavior as `block_reset` unless a deliberate compatibility
+    decision changes it.
+  - Add focused tests on a tiny recurrent model or sentinel model to prove state
+    reset/streaming behavior.
+  - Update result docs so future tables state which eval regime is used.
+- Exit criteria:
+  - Both eval regimes are deterministic and tested.
+  - Existing checkpoints/configs keep their current eval interpretation.
+  - `make check` passes.
+
+### PR #20: Config Labels And Activation Provenance
+
+- Branch:
+  - `codex/docs/config-labels-activation-provenance`
+- Goal:
+  - Clean up config/result labels before new runs.
+- Rationale:
+  - WT2 config names such as `*_6m` and `lstm_25m` do not match current
+    parameter counts. Neo is also moving toward tanh activation, so labels must
+    distinguish tanh runs from older `id4`/`id5` custom-activation runs.
+- Scope:
+  - Rename or alias WT2 configs to small/large names, or add clear deprecation
+    notes while preserving old paths for compatibility.
+  - Add exact parameter-count reporting guidance in docs and PR bodies.
+  - Decide whether new Neo configs should use `activation_id: tanh`; do not
+    relabel old `id4`/`id5` runs as tanh.
+  - Update scripts/notebook references only if paths are renamed.
+- Exit criteria:
+  - Config labels no longer imply inaccurate parameter counts.
+  - Activation provenance is explicit for old and new Neo runs.
+  - `make check` passes.
+
+### PR #21: GPT-Style Transformer Control
+
+- Branch:
+  - `codex/feat/gpt2-style-transformer-control`
+- Goal:
+  - Strengthen the Transformer comparison path or explicitly demote it to a
+    lightweight internal control.
+- Rationale:
+  - The current Transformer is hand-rolled with learned absolute positions and
+    unfused attention. It is useful for smoke comparisons, but weak for claims
+    against modern Transformer baselines.
+- Scope:
+  - Add a GPT-2-style internal baseline when feasible: pre-norm blocks, causal
+    attention using PyTorch/MLX-supported optimized primitives where available,
+    GPT-style initialization/residual scaling, and clear config labels.
+  - If implementation scope is too large, document the current Transformer as an
+    internal control only and park stronger Transformer comparisons.
+  - Keep MLX/Torch behavior aligned or explicitly mark backend support limits.
+- Exit criteria:
+  - Transformer baseline status is unambiguous in docs.
+  - New code, if added, has focused shape/causality/checkpoint tests.
+  - `make check` passes.
+
+### PR #22: LSTM Optimizer Grouping Parity Guard
+
+- Branch:
+  - `codex/fix/lstm-optimizer-grouping-guard`
+- Goal:
+  - Fix or prove the Torch-vs-MLX optimizer grouping edge case for LSTM.
+- Rationale:
+  - Normal Torch optimizer grouping detects LSTM recurrent parameters with
+    names under `lstm.*`. The MLX-reference Torch optimizer path checks
+    `lstm_layers.*`, which matches MLX naming but not Torch LSTM naming. If a
+    Torch LSTM is trained with `reference_backend: mlx`, its recurrent weights
+    may receive projection weight decay instead of `recurrent_weight_decay`.
+- Scope:
+  - Add a focused unit test that builds a Torch LSTM under MLX-reference
+    optimizer settings and verifies recurrent/projection/embedding/norm decay
+    buckets.
+  - Fix grouping to recognize both Torch `lstm.*` and MLX-style
+    `lstm_layers.*` names where appropriate.
+  - Keep existing MLX parity behavior unchanged.
+- Exit criteria:
+  - The test fails before the fix and passes after it.
+  - No optimizer behavior changes for Neo or Transformer unless explicitly
+    covered by tests.
+  - `make check` passes.
 
 The next CUDA step remains external validation, not normal local development.
 Before opening CUDA-result or CUDA-CI work, confirm an
@@ -148,7 +281,7 @@ Follow-up to #2.
 
 ## Queue Item
 
-- PR queue item: `<none unless the queue is explicitly reopened>`
+- PR queue item: `<PR #18 / #19 / #20 / #21 / #22 name>`
 - Depends on: `<merged PRs>`
 
 ## Summary
@@ -175,7 +308,7 @@ Follow-up to #2.
 
 ## Remaining Follow-Up
 
-- `<none unless the queue is explicitly reopened>`
+- `<next queue item or none>`
 ```
 
 ## Merge Review Checklist
