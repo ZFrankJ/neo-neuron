@@ -73,6 +73,15 @@ The historical `RMSNorm-LSTM matched control` remains loadable and is not
 silently reinterpreted. These initialization controls are PyTorch-only; MLX
 runtime semantics remain unchanged.
 
+## Config and result labels
+
+Future WT103 Neo runs use `tanh`, and the checked-in Neo run tags include
+`_tanh`. Historical `id4` and `id5` checkpoints and run snapshots retain their
+original activation provenance; they are not tanh results. WT2 `6m` and `25m`
+filenames remain as compatibility paths but are legacy labels, not exact
+parameter counts. See `docs/training.md` for exact counts and paper-facing
+small/large reporting labels.
+
 ## Reproduction GPU preflight
 
 Before making CUDA reproduction or performance claims, first verify that the

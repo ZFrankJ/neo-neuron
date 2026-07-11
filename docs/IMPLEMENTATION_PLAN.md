@@ -7,8 +7,8 @@ GitHub issue: https://github.com/ZFrankJ/neo-neuron/issues/2
 ## Current State
 
 ```text
-branch codex/feat/recurrent-eval-semantics from origin/main
-base d6df064 Merge pull request #18 from ZFrankJ/codex/feat/lstm-standard-init-controls
+branch codex/docs/config-labels-activation-provenance from origin/main
+base 58c484b Merge pull request #19 from ZFrankJ/codex/feat/recurrent-eval-semantics
 ```
 
 MLX is the frozen scientific reference backend. Existing clean MLX result rows outside this repo remain authoritative.
@@ -108,6 +108,9 @@ CUDA parity work is prepared but not validated in this repo because no Nvidia GP
 - PR #18: https://github.com/ZFrankJ/neo-neuron/pull/18
   - Merge commit: `d6df064 Merge pull request #18 from ZFrankJ/codex/feat/lstm-standard-init-controls`
   - Added opt-in standard-init PyTorch LSTM controls while preserving historical LSTM config and checkpoint behavior.
+- PR #19: https://github.com/ZFrankJ/neo-neuron/pull/19
+  - Merge commit: `58c484b Merge pull request #19 from ZFrankJ/codex/feat/recurrent-eval-semantics`
+  - Added explicit compatibility-default block-reset and opt-in streaming recurrent evaluation regimes.
 
 ## Active PR Queue
 
@@ -153,7 +156,7 @@ acceptance semantics for later approved experiment runs.
 ### PR #19: Recurrent Eval Semantics
 
 - Status:
-  - implemented on `codex/feat/recurrent-eval-semantics`; pending review and merge
+  - merged as PR #19; retained here until the baseline-alignment queue closes
 
 - Branch:
   - `codex/feat/recurrent-eval-semantics`
@@ -179,6 +182,9 @@ acceptance semantics for later approved experiment runs.
 
 ### PR #20: Config Labels And Activation Provenance
 
+- Status:
+  - implemented on `codex/docs/config-labels-activation-provenance`; pending review and merge
+
 - Branch:
   - `codex/docs/config-labels-activation-provenance`
 - Goal:
@@ -188,11 +194,11 @@ acceptance semantics for later approved experiment runs.
     parameter counts. Neo is also moving toward tanh activation, so labels must
     distinguish tanh runs from older `id4`/`id5` custom-activation runs.
 - Scope:
-  - Rename or alias WT2 configs to small/large names, or add clear deprecation
-    notes while preserving old paths for compatibility.
-  - Add exact parameter-count reporting guidance in docs and PR bodies.
-  - Decide whether new Neo configs should use `activation_id: tanh`; do not
-    relabel old `id4`/`id5` runs as tanh.
+  - Retain WT2 config paths for compatibility, but document them as legacy
+    labels with exact parameter counts and small/large reporting names.
+  - Require exact parameter counts in paper-facing result tables and PR bodies.
+  - Use `activation_id: tanh` and activation-bearing run tags for future WT103
+    Neo templates; do not relabel old `id4`/`id5` runs as tanh.
   - Update scripts/notebook references only if paths are renamed.
 - Exit criteria:
   - Config labels no longer imply inaccurate parameter counts.
