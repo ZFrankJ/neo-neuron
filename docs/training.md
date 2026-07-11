@@ -51,6 +51,12 @@ parameter initialization and therefore only apply when starting a new PyTorch
 LSTM run; loaded checkpoint weights remain authoritative. MLX LSTM semantics are
 unchanged by this control path.
 
+With `reference_backend: mlx` and table-based weight decay, Torch LSTM
+parameters are grouped by role despite backend-specific names: `lstm.*`
+recurrent matrices use `recurrent_weight_decay`, embeddings and projections use
+their configured decay values, and biases plus recurrent norms use zero decay.
+MLX keeps its native `lstm_layers.*` naming and unchanged runtime semantics.
+
 ## Transformer baseline taxonomy
 
 Transformer configs without `transformer_variant` are the historical

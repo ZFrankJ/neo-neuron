@@ -150,6 +150,7 @@ def _build_mlx_reference_weight_decay_groups(
             or ".ln1." in name
             or ".ln2." in name
             or "norm." in name
+            or (model_name == "lstm" and ".pre_norms." in name)
             or name.startswith("pre_norms.")
         ):
             wd = 0.0
@@ -161,7 +162,7 @@ def _build_mlx_reference_weight_decay_groups(
             elif model_name == "neo":
                 wd = recurrent_wd if name.startswith("recurrent.") else proj_wd
             elif model_name == "lstm":
-                wd = recurrent_wd if name.startswith("lstm_layers.") else proj_wd
+                wd = recurrent_wd if name.startswith(("lstm.", "lstm_layers.")) else proj_wd
             else:
                 wd = proj_wd
         else:

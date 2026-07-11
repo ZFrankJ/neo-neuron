@@ -2,6 +2,22 @@
 
 Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLAN.md`; keep broad priorities in `docs/ROADMAP.md`.
 
+## 2026-07-11 - Cross-Backend LSTM Optimizer Grouping
+
+- Decision:
+  - The MLX-reference Torch optimizer recognizes both Torch `lstm.*` and MLX-style `lstm_layers.*` recurrent parameter namespaces.
+  - Torch LSTM pre-norms remain in the zero-decay norm bucket rather than inheriting recurrent weight decay.
+- Why:
+  - Torch LSTM recurrent weights were receiving projection decay when `reference_backend: mlx` because the classifier only recognized MLX parameter names.
+  - Cross-backend comparison requires grouping by parameter role while preserving each backend's native names.
+- Scope:
+  - `src/train/optim.py`
+  - `tests/test_optimizer_grouping.py`
+  - `docs/training.md`
+- Impact:
+  - MLX-reference Torch LSTM runs now apply configured embedding, projection, recurrent, and zero-decay buckets consistently.
+  - Neo and Transformer grouping behavior is unchanged and covered by regression tests; MLX runtime semantics are unchanged.
+
 ## 2026-07-11 - GPT-2-Style Transformer Control
 
 - Decision:
