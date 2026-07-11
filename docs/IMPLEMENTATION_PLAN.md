@@ -7,8 +7,8 @@ GitHub issue: https://github.com/ZFrankJ/neo-neuron/issues/2
 ## Current State
 
 ```text
-main == origin/main
-HEAD e84d6c9 Merge pull request #17 from ZFrankJ/codex/maint/torch-validation-preflight
+branch codex/feat/lstm-standard-init-controls from origin/main
+base f2c8bbc docs: plan baseline alignment queue
 ```
 
 MLX is the frozen scientific reference backend. Existing clean MLX result rows outside this repo remain authoritative.
@@ -114,6 +114,9 @@ planning for paper-facing results. These PRs must not run WT103, mutate
 acceptance semantics for later approved experiment runs.
 
 ### PR #18: LSTM Standard-Init Strengthening
+
+- Status:
+  - implemented on `codex/feat/lstm-standard-init-controls`; pending review and merge
 
 - Branch:
   - `codex/feat/lstm-standard-init-controls`

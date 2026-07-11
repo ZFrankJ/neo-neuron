@@ -18,6 +18,9 @@ class LSTMConfig:
     tie_embeddings: bool = True
     output_norm: str = "layernorm"
     norm_place: str = "all"
+    forget_bias_init: float = 0.0
+    recurrent_init: str = "xavier_uniform"
+    lstm_layer_dropout: Optional[float] = None
 
 
 def _build_output_norm(norm_type: str, d_model: int) -> nn.Module:
@@ -51,11 +54,22 @@ class LSTMStack(nn.Module):
         output_norm: str,
         layer_dropout: float,
         norm_place: str = "all",
+        forget_bias_init: float = 0.0,
+        recurrent_init: str = "xavier_uniform",
     ):
         super().__init__()
         self.d_model = int(d_model)
         self.num_layers = int(n_layers)
         self.layer_dropout = float(layer_dropout)
+        if not 0.0 <= self.layer_dropout < 1.0:
+            raise ValueError("lstm_layer_dropout must be in the range [0, 1).")
+        self.forget_bias_init = float(forget_bias_init)
+        self.recurrent_init = str(recurrent_init).strip().lower()
+        if self.recurrent_init not in ("xavier_uniform", "orthogonal"):
+            raise ValueError(
+                "Unsupported recurrent_init "
+                f"'{recurrent_init}'. Use one of: xavier_uniform, orthogonal."
+            )
         place = _parse_norm_place(norm_place)
         self.pre_norms = nn.ModuleList(
             [
@@ -81,9 +95,14 @@ class LSTMStack(nn.Module):
             b_ih = getattr(self, f"bias_ih_l{li}")
             b_hh = getattr(self, f"bias_hh_l{li}")
             nn.init.xavier_uniform_(w_ih)
-            nn.init.xavier_uniform_(w_hh)
+            if self.recurrent_init == "orthogonal":
+                for gate_matrix in w_hh.chunk(4, dim=0):
+                    nn.init.orthogonal_(gate_matrix)
+            else:
+                nn.init.xavier_uniform_(w_hh)
             nn.init.zeros_(b_ih)
             nn.init.zeros_(b_hh)
+            b_ih.data[self.d_model : 2 * self.d_model].fill_(self.forget_bias_init)
 
     def forward(
         self,
@@ -151,6 +170,9 @@ class LSTMLM(nn.Module):
         tie_embeddings: bool = True,
         output_norm: str = "layernorm",
         norm_place: str = "all",
+        forget_bias_init: float = 0.0,
+        recurrent_init: str = "xavier_uniform",
+        lstm_layer_dropout: Optional[float] = None,
     ):
         super().__init__()
         self.vocab_size = vocab_size
@@ -166,8 +188,10 @@ class LSTMLM(nn.Module):
             d_model=d_model,
             n_layers=n_layers,
             output_norm=self.output_norm_type,
-            layer_dropout=dropout,
+            layer_dropout=dropout if lstm_layer_dropout is None else lstm_layer_dropout,
             norm_place=norm_place,
+            forget_bias_init=forget_bias_init,
+            recurrent_init=recurrent_init,
         )
         self.drop = nn.Dropout(dropout)
         self.out_proj = nn.Linear(d_model, d_embed) if d_embed != d_model else nn.Identity()

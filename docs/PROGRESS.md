@@ -11,7 +11,7 @@ Roadmap priority:
 Current position:
 
 - backend parity is locally complete, with CUDA validation still blocked outside the local queue
-- current work is planning the paper-facing baseline and evaluation alignment queue
+- the first paper-facing baseline slice implements opt-in standard-init PyTorch LSTM controls while preserving historical config behavior
 - old result rows stay provenance-bound; do not silently reinterpret them after baseline changes
 
 Current active checkpoint:
@@ -40,7 +40,7 @@ Current implementation plan:
    - Status: blocked outside the local queue
    - Result wanted: CUDA parity is claimed only after the opt-in CUDA probe runs, not skips, on a real Nvidia CUDA machine.
 6. Baseline taxonomy and LSTM strengthening
-   - Status: active planning
+   - Status: implemented; pending PR review and merge
    - Result wanted: LSTM is named as a normalized/matched recurrent control, and a stronger LSTM variant covers standard init and dropout-policy concerns.
 7. Evaluation semantics and config/result labels
    - Status: active planning
