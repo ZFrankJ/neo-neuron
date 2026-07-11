@@ -12,7 +12,8 @@ Current position:
 
 - backend parity is locally complete, with CUDA validation still blocked outside the local queue
 - the first paper-facing baseline slice is merged and provides opt-in standard-init PyTorch LSTM controls while preserving historical config behavior
-- recurrent evaluation now has explicit compatibility-default block-reset and opt-in streaming semantics pending PR review
+- recurrent evaluation now has merged compatibility-default block-reset and opt-in streaming semantics
+- config/result labeling now records exact WT2 parameter counts and makes tanh explicit for future WT103 Neo runs
 - old result rows stay provenance-bound; do not silently reinterpret them after baseline changes
 
 Current active checkpoint:
@@ -44,7 +45,7 @@ Current implementation plan:
    - Status: done
    - Result wanted: LSTM is named as a normalized/matched recurrent control, and a stronger LSTM variant covers standard init and dropout-policy concerns.
 7. Evaluation semantics and config/result labels
-   - Status: recurrent eval implemented; config/result labels remain queued
+   - Status: done
    - Result wanted: recurrent block-reset versus streaming-state eval is explicit, WT2 labels stop implying inaccurate parameter counts, and Neo tanh activation runs are labeled separately from older custom-activation runs.
 8. Transformer control strengthening
    - Status: active planning

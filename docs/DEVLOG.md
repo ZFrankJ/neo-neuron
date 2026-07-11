@@ -2,6 +2,25 @@
 
 Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLAN.md`; keep broad priorities in `docs/ROADMAP.md`.
 
+## 2026-07-11 - Config Labels And Neo Activation Provenance
+
+- Decision:
+  - Kept WT2 config filenames as compatibility paths while replacing their numeric implications in reporting guidance with small/large labels and exact parameter counts.
+  - Set future WT103 Neo config templates to `activation_id: tanh` and added `tanh` to their run tags.
+- Why:
+  - WT2 `6m` and `25m` filenames materially understate their current parameter counts, while Neo result interpretation requires a visible boundary between new tanh runs and historical custom-activation runs.
+- Scope:
+  - `configs/wt103/neo_20m.yaml`
+  - `configs/wt103/neo_30m.yaml`
+  - `configs/wt103/neo_50m.yaml`
+  - `tests/test_config_activation_provenance.py`
+  - `README.md`
+  - `docs/training.md`
+- Impact:
+  - Future WT103 Neo runs launched from checked-in configs are explicitly tanh runs.
+  - Historical `id4` and `id5` checkpoints and saved config snapshots retain their original provenance and are not relabeled.
+  - No WT103 training, dataset download, checkpoint mutation, or `neo.csv` change was performed.
+
 ## 2026-07-11 - Explicit Recurrent Evaluation Regimes
 
 - Decision:

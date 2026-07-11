@@ -13,7 +13,7 @@ tie_embeddings: true
 cell_type: cortical
 recurrent_norm: rmsnorm
 recurrent_norm_place: all
-activation_id: id5
+activation_id: tanh
 use_checkpoint: true
 use_compile: false
 vocab_size: 50527
@@ -36,7 +36,7 @@ warmup_epochs: 2
 min_lr: 3e-5
 seed: 42
 save_dir: checkpoints
-run_tag: wt103_neo_50m
+run_tag: wt103_neo_50m_tanh
 mem_report_interval: 10000
 mem_clear_interval: 200
 save_each_epoch: true

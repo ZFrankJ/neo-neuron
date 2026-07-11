@@ -1,5 +1,32 @@
 # Training
 
+## Config labels and activation provenance
+
+The active WT103 Neo templates use `activation_id: tanh`, and their run tags
+include the activation (`wt103_neo_<size>_tanh`). The size labels are rounded
+total-parameter labels; always report the exact parameter count printed by
+`scripts/train.py` with paper-facing results. The current Torch counts are
+20,356,863, 30,351,943, and 50,342,103 parameters for the 20m, 30m, and 50m
+Neo templates respectively.
+
+Historical checkpoints and run snapshots are authoritative for their own
+activation metadata. In particular, old `id4` and `id5` runs must keep those
+labels and must not be described as tanh runs.
+
+The WT2 filenames are retained only as compatibility paths for existing
+scripts and records. Their numeric suffixes are legacy names, not trustworthy
+parameter counts:
+
+| Compatibility path | Exact Torch parameter count | Reporting label |
+| --- | ---: | --- |
+| `configs/wt2/neo_6m.yaml` | 9,708,894 | WT2 Neo small (legacy `6m`, `id4`) |
+| `configs/wt2/lstm_6m.yaml` | 9,636,561 | WT2 LSTM small (legacy `6m`) |
+| `configs/wt2/lstm_25m.yaml` | 28,589,265 | WT2 LSTM large (legacy `25m`) |
+
+Do not derive a parameter count from these WT2 filenames. Future PR bodies and
+result tables should use the reporting label, exact count, activation ID for
+Neo, and evaluation regime.
+
 ## LSTM baseline taxonomy
 
 Two LSTM control labels are available for future result reporting:
