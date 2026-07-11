@@ -7,8 +7,8 @@ GitHub issue: https://github.com/ZFrankJ/neo-neuron/issues/2
 ## Current State
 
 ```text
-branch codex/feat/gpt2-style-transformer-control from origin/main
-base 1e7830d Merge pull request #20 from ZFrankJ/codex/docs/config-labels-activation-provenance
+branch codex/fix/lstm-optimizer-grouping-guard from origin/main
+base db821b4 Merge pull request #21 from ZFrankJ/codex/feat/gpt2-style-transformer-control
 ```
 
 MLX is the frozen scientific reference backend. Existing clean MLX result rows outside this repo remain authoritative.
@@ -114,6 +114,9 @@ CUDA parity work is prepared but not validated in this repo because no Nvidia GP
 - PR #20: https://github.com/ZFrankJ/neo-neuron/pull/20
   - Merge commit: `1e7830d Merge pull request #20 from ZFrankJ/codex/docs/config-labels-activation-provenance`
   - Added exact WT2 parameter-count reporting labels and explicit activation provenance for future tanh runs.
+- PR #21: https://github.com/ZFrankJ/neo-neuron/pull/21
+  - Merge commit: `db821b4 Merge pull request #21 from ZFrankJ/codex/feat/gpt2-style-transformer-control`
+  - Added an opt-in GPT-2-style Transformer control with aligned Torch/MLX causal checkpoint behavior.
 
 ## Active PR Queue
 
@@ -211,7 +214,7 @@ acceptance semantics for later approved experiment runs.
 ### PR #21: GPT-Style Transformer Control
 
 - Status:
-  - implemented on `codex/feat/gpt2-style-transformer-control`; pending review and merge
+  - merged as PR #21; retained here until the baseline-alignment queue closes
 
 - Branch:
   - `codex/feat/gpt2-style-transformer-control`
@@ -235,6 +238,9 @@ acceptance semantics for later approved experiment runs.
   - `make check` passes.
 
 ### PR #22: LSTM Optimizer Grouping Parity Guard
+
+- Status:
+  - implemented on `codex/fix/lstm-optimizer-grouping-guard`; pending review and merge
 
 - Branch:
   - `codex/fix/lstm-optimizer-grouping-guard`
