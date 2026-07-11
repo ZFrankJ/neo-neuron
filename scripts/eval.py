@@ -23,6 +23,7 @@ def main() -> None:
     parser.add_argument("--split", default="test", choices=["val", "test"], help="Dataset split")
     parser.add_argument("--device", default=None, help="cpu | cuda | mps | auto")
     parser.add_argument("--backend", default=None, help="torch | mlx (defaults to config/backend or torch)")
+    parser.add_argument("--eval-regime", choices=["block_reset", "streaming"], default=None)
     args = parser.parse_args()
 
     ensure_repo_root_on_path()
@@ -33,6 +34,8 @@ def main() -> None:
     backend_name = resolve_backend_name(cfg, explicit=args.backend)
     backend = get_backend_api(backend_name)
     cfg["backend"] = backend_name
+    if args.eval_regime is not None:
+        cfg["eval_regime"] = args.eval_regime
 
     device = backend.get_runtime_device(args.device)
     seed = cfg.get("seed")
@@ -49,6 +52,7 @@ def main() -> None:
 
     ids = val_ids if args.split == "val" else test_ids
     metrics = backend.eval_metrics_entry(model, ids, cfg, device)
+    print(f"Eval regime: {metrics['eval_regime']}")
     print(f"{args.split} PPL: {metrics['ppl']:.2f}")
     if metrics.get("gflops_per_token") is not None:
         print(f"Estimated GFLOPs/token: {metrics['gflops_per_token']:.3f}")

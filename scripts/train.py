@@ -97,6 +97,7 @@ def main() -> None:
             torch_backend.load_checkpoint_entry(str(best_ckpt), torch_model, device=torch_device, cfg=cfg)
             best_metrics = torch_backend.eval_metrics_entry(torch_model, test_ids, cfg, torch_device)
             metrics["best_ckpt_test_ppl_torch"] = best_metrics.get("ppl")
+            metrics["best_ckpt_eval_regime_torch"] = best_metrics.get("eval_regime")
             metrics["best_ckpt_gflops_per_token_torch"] = best_metrics.get("gflops_per_token")
             metrics["best_ckpt_act_sparsity_torch"] = best_metrics.get("act_sparsity")
             print(f"Best checkpoint (PyTorch eval, CPU) Test PPL: {best_metrics['ppl']:.2f}", flush=True)

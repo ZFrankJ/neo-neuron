@@ -2,6 +2,26 @@
 
 Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLAN.md`; keep broad priorities in `docs/ROADMAP.md`.
 
+## 2026-07-11 - Explicit Recurrent Evaluation Regimes
+
+- Decision:
+  - Added `eval_regime: block_reset | streaming` across Torch and MLX evaluation, with `block_reset` as the compatibility default.
+  - Defined streaming evaluation as state carry along contiguous batch lanes, never across lanes, and exposed the selected regime in evaluation metrics and CLI output.
+- Why:
+  - Training can carry recurrent state while historical evaluation reset it per block, so paper-facing perplexity needs an explicit state-lifetime contract.
+  - Existing configs and checkpoints must retain their historical block-reset interpretation unless a run deliberately opts into streaming evaluation.
+- Scope:
+  - `src/runtime/eval_semantics.py`
+  - `src/train/eval.py`
+  - `src/runtime/backends/mlx_backend.py`
+  - `scripts/eval.py`
+  - `tests/test_recurrent_eval_semantics.py`
+  - `README.md`
+  - `docs/training.md`
+- Impact:
+  - Future result tables must name the evaluation regime.
+  - Streaming evaluation is deterministic and backend-aligned without changing MLX model semantics or historical result provenance.
+
 ## 2026-07-11 - Opt-In Standard-Init LSTM Control
 
 - Decision:

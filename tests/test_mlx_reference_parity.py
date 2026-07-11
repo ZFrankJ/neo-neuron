@@ -531,6 +531,8 @@ def test_public_backend_training_loop_stays_close_to_mlx_reference(tmp_path: Pat
     torch_metrics = torch_runtime.train_entry(torch_model, torch_cfg, train_ids, val_ids, device=torch.device("cpu"))
     mlx_metrics = mlx_runtime.train_entry(mlx_model, mlx_cfg, train_ids, val_ids, device="cpu")
     assert abs(torch_metrics["val_ppl"] - mlx_metrics["val_ppl"]) <= 1e-5
+    assert torch_metrics["eval_regime"] == "block_reset"
+    assert mlx_metrics["eval_regime"] == "block_reset"
 
     final_torch = torch_runtime.eval_metrics_entry(torch_model, val_ids, cfg, torch.device("cpu"))["ppl"]
     final_mlx = mlx_runtime.eval_metrics_entry(mlx_model, val_ids, cfg, "cpu")["ppl"]

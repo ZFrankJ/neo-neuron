@@ -7,8 +7,8 @@ GitHub issue: https://github.com/ZFrankJ/neo-neuron/issues/2
 ## Current State
 
 ```text
-branch codex/feat/lstm-standard-init-controls from origin/main
-base f2c8bbc docs: plan baseline alignment queue
+branch codex/feat/recurrent-eval-semantics from origin/main
+base d6df064 Merge pull request #18 from ZFrankJ/codex/feat/lstm-standard-init-controls
 ```
 
 MLX is the frozen scientific reference backend. Existing clean MLX result rows outside this repo remain authoritative.
@@ -105,6 +105,9 @@ CUDA parity work is prepared but not validated in this repo because no Nvidia GP
 - PR #17: https://github.com/ZFrankJ/neo-neuron/pull/17
   - Merge commit: `e84d6c9 Merge pull request #17 from ZFrankJ/codex/maint/torch-validation-preflight`
   - Added `make torch-validate` and a machine-specific main Mac mini constraints record without loosening the portable parity lock.
+- PR #18: https://github.com/ZFrankJ/neo-neuron/pull/18
+  - Merge commit: `d6df064 Merge pull request #18 from ZFrankJ/codex/feat/lstm-standard-init-controls`
+  - Added opt-in standard-init PyTorch LSTM controls while preserving historical LSTM config and checkpoint behavior.
 
 ## Active PR Queue
 
@@ -116,7 +119,7 @@ acceptance semantics for later approved experiment runs.
 ### PR #18: LSTM Standard-Init Strengthening
 
 - Status:
-  - implemented on `codex/feat/lstm-standard-init-controls`; pending review and merge
+  - merged as PR #18; retained here until the baseline-alignment queue closes
 
 - Branch:
   - `codex/feat/lstm-standard-init-controls`
@@ -148,6 +151,9 @@ acceptance semantics for later approved experiment runs.
   - `make check` passes.
 
 ### PR #19: Recurrent Eval Semantics
+
+- Status:
+  - implemented on `codex/feat/recurrent-eval-semantics`; pending review and merge
 
 - Branch:
   - `codex/feat/recurrent-eval-semantics`

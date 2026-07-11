@@ -141,7 +141,7 @@ def train_model(
     val_ids: torch.Tensor,
     test_ids: Optional[torch.Tensor] = None,
     device: Optional[torch.device] = None,
-) -> Dict[str, float]:
+) -> Dict[str, Any]:
     device = device or (torch.device("mps") if torch.backends.mps.is_available() else torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"))
     model.to(device)
     log_line(f"Using device: {device}")
@@ -287,7 +287,12 @@ def train_model(
             },
         )
 
-    metrics = {"val_ppl": best_val}
+    from src.runtime.eval_semantics import resolve_eval_regime
+
+    metrics = {
+        "val_ppl": best_val,
+        "eval_regime": resolve_eval_regime(cfg),
+    }
     if test_ids is not None:
         eval_metrics = evaluate_metrics(model, test_ids, cfg, device)
         metrics["test_ppl"] = eval_metrics["ppl"]

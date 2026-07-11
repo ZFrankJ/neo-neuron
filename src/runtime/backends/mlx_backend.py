@@ -872,23 +872,50 @@ def load_checkpoint_entry(
 
 
 def _eval_perplexity(model, ids: np.ndarray, cfg: Any) -> float:
+    from src.runtime.eval_semantics import resolve_eval_regime
+
     model.eval()
     t_len = int(_cfg_get(cfg, "block_size", 128))
     batch = int(_cfg_get(cfg, "batch_size", 16))
     total_loss = 0.0
     total_tokens = 0
     n = int(ids.shape[0])
+    regime = resolve_eval_regime(cfg)
+    state = None
 
-    for start in range(0, n - (t_len + 1), t_len * batch):
-        cur_b = min(batch, (n - (start + t_len + 1)) // t_len)
-        if cur_b <= 0:
-            break
-        x = np.stack([ids[start + i * t_len: start + i * t_len + t_len] for i in range(cur_b)])
-        y = np.stack([ids[start + i * t_len + 1: start + i * t_len + t_len + 1] for i in range(cur_b)])
+    if regime == "streaming":
+        batch = min(batch, max(1, (n - 1) // t_len))
+        lane_len = n // batch
+        usable_steps = ((lane_len - 1) // t_len) * t_len
+        lanes = ids[: lane_len * batch].reshape(batch, lane_len)
+        batches = (
+            (
+                lanes[:, start : start + t_len],
+                lanes[:, start + 1 : start + t_len + 1],
+                batch,
+            )
+            for start in range(0, usable_steps, t_len)
+        )
+    else:
+        def _block_batches():
+            for start in range(0, n - (t_len + 1), t_len * batch):
+                cur_b = min(batch, (n - (start + t_len + 1)) // t_len)
+                if cur_b <= 0:
+                    break
+                yield (
+                    np.stack([ids[start + i * t_len : start + i * t_len + t_len] for i in range(cur_b)]),
+                    np.stack([ids[start + i * t_len + 1 : start + i * t_len + t_len + 1] for i in range(cur_b)]),
+                    cur_b,
+                )
+        batches = _block_batches()
+
+    for x, y, cur_b in batches:
         x_mx = mx.array(np.ascontiguousarray(x.T), dtype=mx.int32)
         y_mx = mx.array(np.ascontiguousarray(y.T), dtype=mx.int32)
-        state = _init_state_for_model(model, cur_b)
-        logits, _ = model(x_mx, state)
+        if regime == "block_reset" or state is None:
+            state = _init_state_for_model(model, cur_b)
+        logits, state_out = model(x_mx, state)
+        state = _stop_grad_tree(state_out) if regime == "streaming" else None
         loss = mxnn.losses.cross_entropy(logits, y_mx, reduction="sum")
         mx.eval(loss)
         total_loss += float(loss.item())
@@ -903,11 +930,18 @@ def _eval_perplexity(model, ids: np.ndarray, cfg: Any) -> float:
 
 
 def eval_metrics_entry(model, ids, cfg: Any, device=None):
+    from src.runtime.eval_semantics import resolve_eval_regime
+
     del device
     ids_np = _to_numpy_ids(ids)
     _validate_token_id_range(cfg, ids_np, context="mlx_eval")
     ppl = _eval_perplexity(model, ids_np, cfg)
-    return {"ppl": ppl, "act_sparsity": None, "gflops_per_token": None}
+    return {
+        "ppl": ppl,
+        "eval_regime": resolve_eval_regime(cfg),
+        "act_sparsity": None,
+        "gflops_per_token": None,
+    }
 
 
 def train_entry(
@@ -1074,7 +1108,12 @@ def train_entry(
             },
         )
 
-    metrics: Dict[str, Optional[float]] = {"val_ppl": best_val}
+    from src.runtime.eval_semantics import resolve_eval_regime
+
+    metrics: Dict[str, Any] = {
+        "val_ppl": best_val,
+        "eval_regime": resolve_eval_regime(cfg),
+    }
     if test_np is not None:
         test_metrics = eval_metrics_entry(model, test_np, cfg)
         metrics["test_ppl"] = test_metrics["ppl"]

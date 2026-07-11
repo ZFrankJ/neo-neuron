@@ -137,4 +137,9 @@ python3 scripts/eval.py --config configs/wt103/lstm_20m.yaml --checkpoint checkp
 python3 scripts/eval.py --config configs/wt103/transformer_20m.yaml --checkpoint checkpoints/best_wt103_transformer_20m.pt --backend torch
 ```
 
+Recurrent evaluation defaults to compatibility-preserving `block_reset`
+semantics. Use `--eval-regime streaming` to carry state across contiguous
+evaluation blocks. The command prints the selected regime; record it with any
+reported perplexity. See `docs/training.md` for the exact contract.
+
 For probing, use `--backend torch` as well.

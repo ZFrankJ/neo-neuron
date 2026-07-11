@@ -11,7 +11,8 @@ Roadmap priority:
 Current position:
 
 - backend parity is locally complete, with CUDA validation still blocked outside the local queue
-- the first paper-facing baseline slice implements opt-in standard-init PyTorch LSTM controls while preserving historical config behavior
+- the first paper-facing baseline slice is merged and provides opt-in standard-init PyTorch LSTM controls while preserving historical config behavior
+- recurrent evaluation now has explicit compatibility-default block-reset and opt-in streaming semantics pending PR review
 - old result rows stay provenance-bound; do not silently reinterpret them after baseline changes
 
 Current active checkpoint:
@@ -40,10 +41,10 @@ Current implementation plan:
    - Status: blocked outside the local queue
    - Result wanted: CUDA parity is claimed only after the opt-in CUDA probe runs, not skips, on a real Nvidia CUDA machine.
 6. Baseline taxonomy and LSTM strengthening
-   - Status: implemented; pending PR review and merge
+   - Status: done
    - Result wanted: LSTM is named as a normalized/matched recurrent control, and a stronger LSTM variant covers standard init and dropout-policy concerns.
 7. Evaluation semantics and config/result labels
-   - Status: active planning
+   - Status: recurrent eval implemented; config/result labels remain queued
    - Result wanted: recurrent block-reset versus streaming-state eval is explicit, WT2 labels stop implying inaccurate parameter counts, and Neo tanh activation runs are labeled separately from older custom-activation runs.
 8. Transformer control strengthening
    - Status: active planning
