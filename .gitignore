@@ -2,7 +2,7 @@
 # Experiment outputs
 ############################
 runs/
-checkpoints/
+/checkpoints
 outputs/
 logs/
 experiments/**/*.csv
