@@ -148,22 +148,39 @@ no-layer-dropout RMSNorm-LSTM`. A config snapshot and result row must retain the
 exact label, backend, trainable count, and evaluation regime; none may be
 inferred from an old filename or checkpoint.
 
-WT103 config preparation is approved only for the first 50M-recurrent-core,
-approximately 60M-total, diagnostic (`d_model: 790`, `n_layers: 10`).
-The planned new paths are
+### WT103 50M-recurrent-core diagnostic profiles
+
+WT103 config preparation is limited to the first 50M-recurrent-core,
+approximately 60M-total, diagnostic (`d_model: 790`, `n_layers: 10`). The two
+checked-in paths are
 `configs/wt103/lstm_60m_matched_no_layer_dropout.yaml` and
 `configs/wt103/lstm_60m_standard_init_no_layer_dropout.yaml`, with unique
-profile-bearing run tags. Those files do not exist yet, and historical WT103
-paths must not be repurposed. The matched profile runs first with a 12-epoch
-schedule and an epoch-4 streaming-validation gate; the standard-init profile is
-a fallback, not a concurrent run. The same-geometry historical epoch-4
-validation PPL is `84.54`; `83.54` is the predeclared continuation threshold,
-and `82.57` matches the preceding eight-layer point. Test PPL is reserved until
-profile and checkpoint selection. The continuation threshold is an operational
-run-allocation rule, not statistical significance; a later paper-facing claim
-still requires a repeated-seed variance plan. Clean MLX Neo checkpoints are
-reevaluated under explicit streaming semantics rather than retrained solely to
-add metadata fields.
+profile-bearing run tags. Both construct as 60,024,343-trainable-parameter MLX
+and aligned single-bias Torch models. The matched profile omits initialization
+controls to preserve native MLX initialization; the fallback adds
+`forget_bias_init: 1.0` and `recurrent_init: orthogonal`. Historical WT103 paths
+must not be repurposed.
+
+No run is authorized by the presence of these configs. When a later explicit
+start is approved, run the matched profile first under its full 12-epoch
+schedule and apply this predeclared epoch-4 gate:
+
+- same-geometry historical epoch-4 streaming validation PPL: `84.54`
+- preceding eight-layer epoch-4 streaming validation PPL: `82.57`
+- continue the matched profile when PPL is at most `83.54`; a value at most
+  `82.57` is full restoration of monotonic scaling at this checkpoint
+- when matched PPL is above `83.54`, stop it and run only the standard-init fallback
+  under the same epoch-4 gate
+- if the fallback remains above `83.54`, stop and classify the recovery attempt
+  as negative
+- do not inspect test PPL until the profile and checkpoint are selected
+
+NaN or infinity is an optimization failure. Checkpoint or data failures
+invalidate the run and must be repaired before interpretation. The continuation
+threshold is an operational run-allocation rule, not statistical significance;
+a later paper-facing claim still requires a repeated-seed variance plan. Clean
+MLX Neo checkpoints are reevaluated under explicit streaming semantics rather
+than retrained solely to add metadata fields.
 
 ## Transformer baseline taxonomy
 

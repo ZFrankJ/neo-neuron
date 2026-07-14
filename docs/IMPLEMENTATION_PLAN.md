@@ -11,7 +11,7 @@ open a new tracking issue only when explicitly requested.
 
 ```text
 completed packet PR 1: https://github.com/ZFrankJ/neo-neuron/pull/29
-next active packet PR 2: WT103 50M-recurrent-core LSTM diagnostic profiles
+active packet PR 2: WT103 50M-recurrent-core LSTM diagnostic profiles in review
 ```
 
 MLX is the frozen scientific reference backend. Existing clean MLX result rows outside this repo remain authoritative.

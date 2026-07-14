@@ -2,6 +2,32 @@
 
 Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLAN.md`; keep broad priorities in `docs/ROADMAP.md`.
 
+## 2026-07-14 - WT103 LSTM Diagnostic Profile Contract
+
+- Decision:
+  - Added separately named matched and standard-init 10-layer WT103 LSTM
+    diagnostic profiles with 60,024,343 trainable parameters on MLX and aligned
+    single-bias Torch construction.
+  - Kept native MLX initialization in the matched profile by omitting
+    initialization keys; confined positive forget bias and orthogonal recurrence
+    to the standard-init fallback.
+  - Bound both profiles to no LSTM layer dropout, output dropout 0.1,
+    no checkpointing, streaming evaluation, a 12-epoch schedule, fresh starts,
+    and unique provenance-bearing run tags.
+- Why:
+  - The historical depth curve confounds added recurrence with repeated
+    inter-layer dropout; one controlled geometry isolates that policy before
+    any broader scaling work.
+  - The epoch-4 gate and fallback order must be reviewable before results exist.
+- Scope:
+  - two new WT103 LSTM config paths, config-contract tests, verification wiring,
+    and user/workflow documentation
+- Impact:
+  - The profiles are runnable only after a separate explicit start; no WT103
+    process, checkpoint, result, historical config, or `neo.csv` row changed.
+  - The matched profile remains first, and the standard-init profile remains a
+    sequential fallback under the frozen streaming-validation gate.
+
 ## 2026-07-14 - Neo MLX Epsilon And Parity Isolation Contract
 
 - Decision:

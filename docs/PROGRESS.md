@@ -42,10 +42,12 @@ Current position:
 - Neo MLX now rejects unsupported explicit RMSNorm epsilon values, tanh is in
   the committed mapped-weight parity matrix, and MLX device state is isolated
   across the focused parity suite
+- the two test-covered 50M-recurrent-core / 60M-total LSTM diagnostic profiles
+  are in review; their presence does not authorize a training run
 
 Current active checkpoint:
 
-`Neo MLX contract hardening complete; WT103 diagnostic profile preparation pending PR #29 merge`
+`WT103 diagnostic profile preparation in review; no diagnostic run authorized`
 
 Current implementation plan:
 
@@ -97,7 +99,7 @@ Current implementation plan:
      cover tanh in the committed mapped-weight parity matrix, and prevent MLX
      device state from leaking between tests.
 13. WT103 diagnostic profile preparation
-   - Status: pending PR #29 merge
+   - Status: in review
    - Result wanted: add separately named, test-covered 50M-recurrent-core,
      approximately 60M-total matched and standard-init no-layer-dropout LSTM
      configs without editing historical paths.
