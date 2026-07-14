@@ -2,7 +2,7 @@
 
 Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLAN.md`; keep broad priorities in `docs/ROADMAP.md`.
 
-## 2026-07-14 - WT103 LSTM Diagnostic Profile Contract
+## 2026-07-14 - 60M-Total / 50M-Recurrent-Core Boundary Diagnostic Contract
 
 - Decision:
   - Added separately named matched and standard-init 10-layer WT103 LSTM
@@ -58,8 +58,8 @@ Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLA
     model-fairness audit.
   - Preserved every historical WT103 config, run tag, checkpoint, and result
     label; new experiments must use separately named profiles.
-  - Chose one `d_model=790`, `n_layers=10`, approximately 50M-recurrent-core and
-    60M-total matched-no-layer-dropout MLX LSTM as the first diagnostic, with a
+  - Chose one `d_model=790`, `n_layers=10`, approximately 60M-total / 50M-recurrent-core
+    matched-no-layer-dropout MLX LSTM as the first boundary diagnostic, with a
     standard-init fallback and an epoch-4 validation review under a 12-epoch
     scheduler contract.
   - Froze `83.54` as the epoch-4 streaming-validation continuation threshold

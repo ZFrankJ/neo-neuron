@@ -148,11 +148,11 @@ no-layer-dropout RMSNorm-LSTM`. A config snapshot and result row must retain the
 exact label, backend, trainable count, and evaluation regime; none may be
 inferred from an old filename or checkpoint.
 
-### WT103 50M-recurrent-core diagnostic profiles
+### WT103 60M-total / 50M-recurrent-core boundary diagnostic
 
-WT103 config preparation is limited to the first 50M-recurrent-core,
-approximately 60M-total, diagnostic (`d_model: 790`, `n_layers: 10`). The two
-checked-in paths are
+WT103 config preparation is limited to the 60M-total / 50M-recurrent-core
+boundary diagnostic (`d_model: 790`, `n_layers: 10`). The two checked-in paths
+are
 `configs/wt103/lstm_60m_matched_no_layer_dropout.yaml` and
 `configs/wt103/lstm_60m_standard_init_no_layer_dropout.yaml`, with unique
 profile-bearing run tags. Both construct as 60,024,343-trainable-parameter MLX
