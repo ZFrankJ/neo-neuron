@@ -4,14 +4,14 @@ Strict execution contract for Neo backend parity and baseline-alignment work.
 
 Previous tracking issue: https://github.com/ZFrankJ/neo-neuron/issues/2
 
-Issue #2 is closed. The LSTM four-way correction queue starts from live `main`;
+Issue #2 is closed. PR #28 is the final local LSTM four-way correction packet;
 open a new tracking issue only when explicitly requested.
 
 ## Current State
 
 ```text
-branch codex/fix/mlx-reference-scheduler-timing from origin/main
-base df19d7f Merge pull request #26 from ZFrankJ/codex/feat/mlx-lstm-aligned-controls
+branch codex/docs/lstm-aligned-trial-profile from origin/main
+base 61b56c5 Merge pull request #27 from ZFrankJ/codex/fix/mlx-reference-scheduler-timing
 ```
 
 MLX is the frozen scientific reference backend. Existing clean MLX result rows outside this repo remain authoritative.
@@ -25,9 +25,10 @@ reference parity, optimizer parity, public training-loop parity, checkpoint
 metadata guards, CI, a seed optional MPS probe, a shared backend parity audit
 report helper, MPS short training trajectory parity, MPS memory slope
 classification, skip-safe CUDA harness preparation, and machine-specific Mac
-mini backend provenance. A later four-way audit found that this contract does
-not yet extend to LSTM. CUDA validation remains blocked on real Nvidia GPU
-access:
+mini backend provenance. The LSTM extension now includes mapped forward,
+gradient, optimizer, trajectory, checkpoint, public-loop scheduler, and
+explicit trial-profile contracts. CUDA validation remains blocked on real
+Nvidia GPU access:
 
 ```text
 MLX reference
@@ -70,6 +71,9 @@ LSTM is alignment-ready only when all of the following are true:
   controls for the new profile while missing controls preserve historical
   backend behavior.
 - The MLX-reference Torch public loop matches MLX warmup/cosine update timing.
+- A checked-in profile freezes the single-bias, `rmsnorm_eps: 1e-5`,
+  no-layer-dropout, standard-init, no-checkpoint, streaming-evaluation contract
+  with equal backend trainable parameter counts.
 - Historical MLX and Torch LSTM runs retain backend-specific provenance and are
   not relabeled as aligned or standard-init runs.
 - No WT103 run or `neo.csv` edit is needed to satisfy this exit.
@@ -167,44 +171,21 @@ LSTM is alignment-ready only when all of the following are true:
 - PR #26: https://github.com/ZFrankJ/neo-neuron/pull/26
   - Merge commit: `df19d7f Merge pull request #26 from ZFrankJ/codex/feat/mlx-lstm-aligned-controls`
   - Added explicit matched-dropout and standard-init LSTM controls on MLX while preserving missing-key native initialization.
+- PR #27: https://github.com/ZFrankJ/neo-neuron/pull/27
+  - Merge commit: `61b56c5 Merge pull request #27 from ZFrankJ/codex/fix/mlx-reference-scheduler-timing`
+  - Aligned MLX-reference Torch warmup/cosine timing and added deterministic public-loop LSTM parity.
 
 ## Active PR Queue
 
-Execute exactly one packet at a time. Expected PR numbers are based on the live
-remote state after PR #26 merged. Recheck GitHub before creating each PR because
-numbers can drift.
-
-### PR #27: MLX-Reference Warmup And Public-Loop Parity
-
-- Status:
-  - implemented on `codex/fix/mlx-reference-scheduler-timing`; pending review
-    and merge
-- Branch:
-  - `codex/fix/mlx-reference-scheduler-timing`
-- Goal:
-  - Align the Torch MLX-reference public loop with MLX's first-update
-    warmup/cosine timing.
-- Compatibility:
-  - Apply the aligned timing only to the explicit MLX-reference Torch path.
-    Native Torch behavior and historical configs remain unchanged.
-- Scope:
-  - Add a fail-first scheduler test proving that MLX update one uses warmup step
-    one while current Torch update one uses zero learning rate.
-  - Add a public-loop LSTM parity case with cosine warmup, fixed streaming
-    batches, deterministic initialization, and explicit aligned controls.
-  - Keep random batch selection and stochastic dropout outside exact
-    cross-backend trajectory claims.
-  - Keep `tbptt_len < block_size` out of scope because checked-in configs do
-    not activate that divergent branch.
-- Exit criteria:
-  - Per-update learning rates and public-loop metrics match the MLX contract.
-  - Native Torch scheduling remains covered.
-  - `make check` and `make lstm-parity` pass.
+PR #28 is the final local alignment packet. No later hidden implementation PR
+is queued; after review and merge, the next action requires an explicitly
+approved result-production and variance plan.
 
 ### PR #28: Aligned Profile And Trial Readiness
 
 - Status:
-  - queued after PR #27; WT103 template work remains approval-gated
+  - implemented on `codex/docs/lstm-aligned-trial-profile`; pending review and
+    merge; WT103 template work remains approval-gated
 - Branch:
   - `codex/docs/lstm-aligned-trial-profile`
 - Goal:
@@ -215,6 +196,10 @@ numbers can drift.
     `reference_backend: mlx`, `lstm_bias_mode: single`,
     `rmsnorm_eps: 1e-5`, `lstm_layer_dropout: 0.0`, and the selected init
     controls.
+  - The selected fixture is
+    `configs/alignment/lstm_standard_init_trial.yaml`: a one-epoch Wikitext-2
+    trial with orthogonal recurrence, forget bias `1.0`,
+    `use_checkpoint: false`, and `eval_regime: streaming`.
   - Document three distinct labels: legacy MLX LSTM, matched no-layer-dropout
     LSTM, and standard-init no-layer-dropout LSTM.
   - Record exact backend parameter counts and required evaluation regime.
@@ -270,8 +255,8 @@ Do not hand these to an agent yet:
   while paper variance uses repeated backend-local seeds.
 - Aligning the divergent `tbptt_len < block_size` optimizer-step contract until
   a future approved config actually needs shorter TBPTT chunks.
-- Adding aligned WT103 templates or run tags before the explicit approval gate
-  in PR #28.
+- Adding aligned WT103 templates or run tags before a separate explicit
+  result-production and variance plan is approved.
 - Introducing CUDA speed features such as AMP, TF32 changes, fused optimizers, `torch.compile`, or activation checkpointing before boring full-precision CUDA parity passes.
 
 ## Standard PR Body Template
@@ -281,7 +266,7 @@ LSTM four-way alignment queue.
 
 ## Queue Item
 
-- PR queue item: `<PR #23 / #24 / #25 / #26 / #27 / #28 name>`
+- PR queue item: `<PR #28 name / future explicitly approved packet>`
 - Depends on: `<merged PRs>`
 
 ## Summary

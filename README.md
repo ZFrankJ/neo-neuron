@@ -69,10 +69,10 @@ lstm_layer_dropout: 0.0
 dropout: 0.1
 ```
 
-This path is the `standard-init RMSNorm-LSTM`. On both backends it uses Xavier
-input matrices, a positive forget-gate bias, gate-wise orthogonal
-hidden-to-hidden initialization, no LSTM-only inter-layer dropout, and retains
-`dropout` before the language-model output.
+This path is the `standard-init no-layer-dropout RMSNorm-LSTM`. On both backends
+it uses Xavier input matrices, a positive forget-gate bias, gate-wise
+orthogonal hidden-to-hidden initialization, no LSTM-only inter-layer dropout,
+and retains `dropout` before the language-model output.
 The aligned RMSNorm path sets `rmsnorm_eps: 1e-5` explicitly; omitting it keeps
 the historical Torch epsilon interpretation. MLX accepts a missing value or
 `1e-5` and rejects other explicit LSTM epsilon values.
@@ -80,6 +80,16 @@ The historical backend-native LSTM profiles remain loadable and are not
 silently reinterpreted. Missing MLX init keys preserve native uniform weights
 and random gate biases exactly; explicit init keys select the new experimental
 profile. Setting only `lstm_layer_dropout` does not reinitialize model weights.
+
+The checked-in
+`configs/alignment/lstm_standard_init_trial.yaml` profile freezes a small
+Wikitext-2 alignment trial as `standard-init no-layer-dropout RMSNorm-LSTM`.
+It uses MLX as the reference backend, a single effective bias, explicit
+`rmsnorm_eps: 1e-5`, orthogonal recurrence, a positive forget bias,
+`lstm_layer_dropout: 0.0`, `use_checkpoint: false`, and `streaming` evaluation.
+Its Torch and MLX trainable parameter counts are both exactly **3,546,833**.
+This is a trial-readiness fixture, not a paper-quality result-production plan;
+existing WT103 configs and run tags remain unchanged.
 
 ## Config and result labels
 
