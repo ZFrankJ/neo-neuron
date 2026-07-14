@@ -47,6 +47,15 @@ CANONICAL_PARITY_CFG = {
 }
 
 
+@pytest.fixture(autouse=True)
+def _restore_mlx_default_device():
+    original_device = mx.default_device()
+    try:
+        yield
+    finally:
+        mx.set_default_device(original_device)
+
+
 def _tiny_cfg(**overrides):
     cfg = dict(CANONICAL_PARITY_CFG)
     cfg.update(
@@ -250,8 +259,49 @@ def test_canonical_tiny_config_constructs_and_maps_parameters():
     assert set(mapped) == set(torch_template)
 
 
+def test_neo_mlx_missing_and_explicit_reference_rmsnorm_epsilon_match():
+    missing_cfg = _tiny_cfg(recurrent_norm="rmsnorm")
+    missing_cfg.pop("rmsnorm_eps")
+    explicit_cfg = dict(missing_cfg, rmsnorm_eps=1e-5)
+    missing_model = mlx_backend.build_model(missing_cfg, "neo")
+    explicit_model = mlx_backend.build_model(explicit_cfg, "neo")
+    state = _deterministic_state(_mlx_params(missing_model))
+    missing_model.update(
+        mlx_utils.tree_unflatten(
+            [(name, mx.array(value)) for name, value in state.items()]
+        )
+    )
+    explicit_model.update(
+        mlx_utils.tree_unflatten(
+            [(name, mx.array(value)) for name, value in state.items()]
+        )
+    )
+    x_np, _ = _tokens(missing_cfg)
+    state_np = _state(missing_cfg)
+
+    missing_logits, missing_state = missing_model(
+        mx.array(x_np.astype(np.int32)), mx.array(state_np)
+    )
+    explicit_logits, explicit_state = explicit_model(
+        mx.array(x_np.astype(np.int32)), mx.array(state_np)
+    )
+    mx.eval(missing_logits, missing_state, explicit_logits, explicit_state)
+
+    np.testing.assert_array_equal(np.asarray(missing_logits), np.asarray(explicit_logits))
+    np.testing.assert_array_equal(np.asarray(missing_state), np.asarray(explicit_state))
+
+
+@pytest.mark.parametrize("rmsnorm_eps", [1e-6, 1e-4])
+def test_neo_mlx_rejects_unsupported_explicit_rmsnorm_epsilon(rmsnorm_eps):
+    with pytest.raises(
+        ValueError,
+        match=r"MLX Neo supports only rmsnorm_eps=1e-5; MLX runtime semantics are frozen\.",
+    ):
+        mlx_backend.build_model(_tiny_cfg(rmsnorm_eps=rmsnorm_eps), "neo")
+
+
 @pytest.mark.parametrize("recurrent_norm", ["none", "layernorm", "rmsnorm"])
-@pytest.mark.parametrize("activation_id", ["id4", "id5"])
+@pytest.mark.parametrize("activation_id", ["id4", "id5", "tanh"])
 @pytest.mark.parametrize("n_layers", [1, 2, 4])
 def test_forward_and_recurrent_state_match_mlx_reference(recurrent_norm, activation_id, n_layers):
     cfg = _tiny_cfg(recurrent_norm=recurrent_norm, activation_id=activation_id, n_layers=n_layers)
