@@ -2,6 +2,29 @@
 
 Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLAN.md`; keep broad priorities in `docs/ROADMAP.md`.
 
+## 2026-07-14 - Neo MLX Epsilon And Parity Isolation Contract
+
+- Decision:
+  - Preserved the frozen Neo MLX RMSNorm epsilon at `1e-5`: a missing value or
+    explicit `1e-5` constructs identically, while any other explicit value is
+    rejected before model construction.
+  - Added tanh to the mapped-weight Neo forward and recurrent-state parity
+    matrix across supported recurrent norms and layer counts.
+  - Isolated the MLX process-global default device around every Neo parity test.
+- Why:
+  - The MLX adapter previously recorded arbitrary explicit Neo epsilon values
+    without executing them, tanh was absent from the durable matrix, and the
+    public-loop test could leave later tests on CPU depending on module order.
+- Scope:
+  - `src/runtime/backends/mlx_backend.py`
+  - `tests/test_mlx_reference_parity.py`
+  - public error-contract documentation
+- Impact:
+  - Existing Neo MLX runs with a missing epsilon or `1e-5` keep unchanged
+    runtime semantics and numerical behavior.
+  - Unsupported explicit values now fail clearly, tanh parity is enforced, and
+    focused MLX parity tests no longer depend on execution order.
+
 ## 2026-07-14 - WT103 Revalidation Policy Activated
 
 - Decision:

@@ -626,6 +626,21 @@ def build_model(cfg: Dict[str, Any], model_name: str):
     recurrent_norm_place = str(cfg.get("recurrent_norm_place", cfg.get("norm_place", "all")))
 
     if model_name == "neo":
+        neo_rmsnorm_eps = cfg.get("rmsnorm_eps")
+        try:
+            supported_rmsnorm_eps = neo_rmsnorm_eps is None or math.isclose(
+                float(neo_rmsnorm_eps),
+                1e-5,
+                rel_tol=0.0,
+                abs_tol=1e-12,
+            )
+        except (TypeError, ValueError):
+            supported_rmsnorm_eps = False
+        if not supported_rmsnorm_eps:
+            raise ValueError(
+                "MLX Neo supports only rmsnorm_eps=1e-5; "
+                "MLX runtime semantics are frozen."
+            )
         cell_kwargs = {
             "activation_id": cfg.get("activation_id", "id3"),
         }

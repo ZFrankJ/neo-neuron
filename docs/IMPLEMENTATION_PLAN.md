@@ -10,8 +10,8 @@ open a new tracking issue only when explicitly requested.
 ## Current State
 
 ```text
-branch main
-head a6f64e9 docs(plan): close LSTM alignment queue
+completed packet PR 1: https://github.com/ZFrankJ/neo-neuron/pull/29
+next active packet PR 2: WT103 50M-recurrent-core LSTM diagnostic profiles
 ```
 
 MLX is the frozen scientific reference backend. Existing clean MLX result rows outside this repo remain authoritative.
@@ -216,43 +216,18 @@ following are true:
 - PR #28: https://github.com/ZFrankJ/neo-neuron/pull/28
   - Merge commit: `891550d Merge pull request #28 from ZFrankJ/codex/docs/lstm-aligned-trial-profile`
   - Froze the checked-in standard-init no-layer-dropout LSTM trial profile, exact backend parameter counts, schedule, evaluation regime, and provenance labels.
+- PR #29: https://github.com/ZFrankJ/neo-neuron/pull/29
+  - Hardened the frozen Neo MLX RMSNorm epsilon contract, added tanh to the
+    mapped-weight parity matrix, and isolated MLX default-device state in tests.
 
 ## Active PR Queue
 
 Execute exactly one packet at a time in this order.
 
-### PR 1 - Neo MLX Contract And Parity-Test Hardening
-
-- Purpose:
-  - close code and test gaps discovered by the four-path audit before adding new
-    result-production configs
-- First-test contracts:
-  - missing or explicit `rmsnorm_eps: 1e-5` preserves current Neo MLX behavior
-  - any other explicit Neo MLX RMSNorm epsilon fails clearly
-  - tanh participates in mapped-weight forward and recurrent-state parity
-  - tests that change the MLX default device restore or isolate that state
-- Implementation scope:
-  - `src/runtime/backends/mlx_backend.py`
-  - the narrowest relevant Neo parity tests
-  - documentation only where public error behavior changes
-- Excluded:
-  - WT103 config files
-  - training or result artifacts
-  - short-TBPTT alignment
-  - historical best-checkpoint metric rewriting
-- Verification:
-  - `make mlx-parity`
-  - `make lstm-parity`
-  - reordered focused parity tests that previously exposed the device leak
-  - `make check`
-- Exit:
-  - MLX semantics remain fixed at epsilon `1e-5`, tanh is in the durable parity
-    matrix, and the focused suite passes independently of module order
-
 ### PR 2 - WT103 50M-Recurrent-Core LSTM Diagnostic Profiles
 
 - Depends on:
-  - PR 1 merged
+  - PR #29 merged
 - Purpose:
   - create the minimum explicit config surface needed to test whether repeated
     LSTM inter-layer dropout caused the observed depth degradation

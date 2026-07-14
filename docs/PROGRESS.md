@@ -39,10 +39,13 @@ Current position:
 - clean MLX Neo checkpoints do not require retraining for fields that were
   already effective on MLX; streaming checkpoint reevaluation remains the
   authoritative path
+- Neo MLX now rejects unsupported explicit RMSNorm epsilon values, tanh is in
+  the committed mapped-weight parity matrix, and MLX device state is isolated
+  across the focused parity suite
 
 Current active checkpoint:
 
-`WT103 revalidation plan approved; contract-hardening PR pending`
+`Neo MLX contract hardening complete; WT103 diagnostic profile preparation pending PR #29 merge`
 
 Current implementation plan:
 
@@ -89,24 +92,24 @@ Current implementation plan:
      equivalence, preserve clean historical MLX results, and identify the minimum
      new experiment that tests the LSTM depth-regularization confound.
 12. Neo MLX contract and parity-test hardening
-   - Status: pending
+   - Status: done
    - Result wanted: reject unsupported explicit Neo MLX RMSNorm epsilon values,
      cover tanh in the committed mapped-weight parity matrix, and prevent MLX
      device state from leaking between tests.
 13. WT103 diagnostic profile preparation
-   - Status: pending
+   - Status: pending PR #29 merge
    - Result wanted: add separately named, test-covered 50M-recurrent-core,
      approximately 60M-total matched and standard-init no-layer-dropout LSTM
      configs without editing historical paths.
 14. 50M-recurrent-core matched-no-layer-dropout LSTM diagnostic
-   - Status: pending explicit run start after checkpoints 12 and 13 merge
+   - Status: pending explicit run start after checkpoint 13 merges
    - Result wanted: train with a 12-epoch scheduler contract, inspect at epoch 4,
      and continue, switch profile, or stop according to the predeclared gate.
 
 ## Remaining Scale Estimate
 
-- Two implementation PRs remain before the first diagnostic: contract/test
-  hardening, then new WT103 profile configs plus config tests.
+- One implementation PR remains before the first diagnostic: new WT103 profile
+  configs plus config tests after PR #29 merges.
 - The diagnostic run is not a code PR and must not start before both
   implementation PRs merge and the user explicitly starts or authorizes it.
 - A full LSTM scaling rebuild remains conditional on meaningful 50M-recurrent-core

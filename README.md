@@ -41,6 +41,9 @@ python3 scripts/eval.py --config configs/wt103/neo_20m.yaml --checkpoint checkpo
   `activation_id`, recurrent norm settings, `use_checkpoint`, and `weight_decay_policy`.
   Missing metadata is treated as legacy/provisional, while mismatches with the requested
   eval/resume config fail before evaluation.
+- Neo MLX keeps the frozen RMSNorm epsilon at `1e-5`: omitting `rmsnorm_eps` or
+  setting it to `1e-5` preserves the reference behavior, while any other
+  explicit value fails during model construction.
 - PyTorch MPS diagnostics are optional and must be run explicitly with
   `NEO_RUN_MPS_PROBE=1 pytest tests/test_mps_no_checkpoint_probe.py`. They cover
   only tiny synthetic no-checkpoint single-step parity, short trajectory parity,
