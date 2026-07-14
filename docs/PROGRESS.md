@@ -6,7 +6,7 @@ Checkpoint tracker for the active large goal. This file sits between `docs/ROADM
 
 Roadmap priority:
 
-`3. Baseline Alignment And Result Readiness`
+`4. Result Production And WT103 Revalidation`
 
 Current position:
 
@@ -31,10 +31,18 @@ Current position:
   no-layer-dropout, single-bias, streaming-eval contract with equal Torch/MLX
   trainable parameter counts and a 10%-warmup cosine schedule
 - old result rows stay provenance-bound; do not silently reinterpret them after baseline changes
+- a four-path code and config audit confirmed that clean MLX Neo and LSTM runs
+  remain usable under their historical labels, while plain Torch backend
+  overrides of the WT103 configs are not aligned experiments
+- WT103 revalidation planning and new-profile config preparation are now
+  approved, but no new training process has been authorized or started
+- clean MLX Neo checkpoints do not require retraining for fields that were
+  already effective on MLX; streaming checkpoint reevaluation remains the
+  authoritative path
 
 Current active checkpoint:
 
-`LSTM four-way alignment correction complete; result production approval-gated`
+`WT103 revalidation plan approved; contract-hardening PR pending`
 
 Current implementation plan:
 
@@ -75,17 +83,39 @@ Current implementation plan:
      forward, gradient, optimizer, trajectory, and checkpoint contract; the
      matched and standard-init profiles remove accidental LSTM-only dropout
      without changing historical run interpretation.
+11. Four-path fairness audit and WT103 revalidation decision
+   - Status: done
+   - Result wanted: distinguish mapped-weight backend parity from fresh-run
+     equivalence, preserve clean historical MLX results, and identify the minimum
+     new experiment that tests the LSTM depth-regularization confound.
+12. Neo MLX contract and parity-test hardening
+   - Status: pending
+   - Result wanted: reject unsupported explicit Neo MLX RMSNorm epsilon values,
+     cover tanh in the committed mapped-weight parity matrix, and prevent MLX
+     device state from leaking between tests.
+13. WT103 diagnostic profile preparation
+   - Status: pending
+   - Result wanted: add separately named, test-covered 50M-recurrent-core,
+     approximately 60M-total matched and standard-init no-layer-dropout LSTM
+     configs without editing historical paths.
+14. 50M-recurrent-core matched-no-layer-dropout LSTM diagnostic
+   - Status: pending explicit run start after checkpoints 12 and 13 merge
+   - Result wanted: train with a 12-epoch scheduler contract, inspect at epoch 4,
+     and continue, switch profile, or stop according to the predeclared gate.
 
 ## Remaining Scale Estimate
 
-- PR #28 closed the local LSTM alignment queue; no hidden implementation packet
-  remains.
-- Paper-quality result production remains blocked until a separate
-  result-production and variance plan is explicitly approved.
+- Two implementation PRs remain before the first diagnostic: contract/test
+  hardening, then new WT103 profile configs plus config tests.
+- The diagnostic run is not a code PR and must not start before both
+  implementation PRs merge and the user explicitly starts or authorizes it.
+- A full LSTM scaling rebuild remains conditional on meaningful 50M-recurrent-core
+  recovery; no Neo retraining is planned.
 - CUDA validation remains blocked on access to Nvidia hardware or a provisioned GPU runner.
 - Reproducers must run `NEO_RUN_CUDA_PROBE=1 python3 -m pytest -q tests/test_cuda_parity_harness.py` and confirm it does not skip before making CUDA claims.
 - Standard GitHub-hosted runners for individual repos are not an acceptable substitute for Nvidia GPU validation.
-- WT103 revalidation is intentionally outside the active checkpoint chain.
+- PyTorch MPS remains outside scientific result production, and historical
+  PyTorch MPS rows remain unusable.
 
 ## Update Rules
 

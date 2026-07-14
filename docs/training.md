@@ -148,13 +148,22 @@ no-layer-dropout RMSNorm-LSTM`. A config snapshot and result row must retain the
 exact label, backend, trainable count, and evaluation regime; none may be
 inferred from an old filename or checkpoint.
 
-WT103 remains approval-gated. If a later result-production and variance plan
-is explicitly approved, proposed new paths are
-`configs/wt103/lstm_<size>_matched_no_layer_dropout.yaml` and
-`configs/wt103/lstm_<size>_standard_init_no_layer_dropout.yaml`, with matching
-run tags `wt103_lstm_<size>_matched_no_layer_dropout` and
-`wt103_lstm_<size>_standard_init_no_layer_dropout`. Those files and tags do not
-exist yet, and historical WT103 paths must not be repurposed.
+WT103 config preparation is approved only for the first 50M-recurrent-core,
+approximately 60M-total, diagnostic (`d_model: 790`, `n_layers: 10`).
+The planned new paths are
+`configs/wt103/lstm_60m_matched_no_layer_dropout.yaml` and
+`configs/wt103/lstm_60m_standard_init_no_layer_dropout.yaml`, with unique
+profile-bearing run tags. Those files do not exist yet, and historical WT103
+paths must not be repurposed. The matched profile runs first with a 12-epoch
+schedule and an epoch-4 streaming-validation gate; the standard-init profile is
+a fallback, not a concurrent run. The same-geometry historical epoch-4
+validation PPL is `84.54`; `83.54` is the predeclared continuation threshold,
+and `82.57` matches the preceding eight-layer point. Test PPL is reserved until
+profile and checkpoint selection. The continuation threshold is an operational
+run-allocation rule, not statistical significance; a later paper-facing claim
+still requires a repeated-seed variance plan. Clean MLX Neo checkpoints are
+reevaluated under explicit streaming semantics rather than retrained solely to
+add metadata fields.
 
 ## Transformer baseline taxonomy
 

@@ -2,6 +2,40 @@
 
 Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLAN.md`; keep broad priorities in `docs/ROADMAP.md`.
 
+## 2026-07-14 - WT103 Revalidation Policy Activated
+
+- Decision:
+  - Activated a staged WT103 revalidation policy after the four-path backend and
+    model-fairness audit.
+  - Preserved every historical WT103 config, run tag, checkpoint, and result
+    label; new experiments must use separately named profiles.
+  - Chose one `d_model=790`, `n_layers=10`, approximately 50M-recurrent-core and
+    60M-total matched-no-layer-dropout MLX LSTM as the first diagnostic, with a
+    standard-init fallback and an epoch-4 validation review under a 12-epoch
+    scheduler contract.
+  - Froze `83.54` as the epoch-4 streaming-validation continuation threshold
+    before the new result is observed; test PPL remains excluded from profile
+    and checkpoint selection.
+  - Classified that threshold as an operational resource gate rather than a
+    statistical claim; paper-facing recovery evidence still requires a separate
+    repeated-seed variance packet.
+  - Excluded clean MLX Neo retraining when explicit metadata fields do not change
+    training mathematics; existing checkpoints remain eligible for streaming
+    reevaluation.
+- Why:
+  - Configuration alone does not close silent Neo MLX epsilon handling, tanh
+    parity coverage, or test-device isolation gaps.
+  - The historical LSTM depth curve is parameter-budget matched but includes
+    repeated inter-layer dropout, so a single controlled diagnostic is more
+    informative than immediately rebuilding every scaling point.
+- Scope:
+  - planning, progress, training-policy, and roadmap documentation
+- Impact:
+  - Implementation is split into a contract/test-hardening PR and a dependent
+    WT103 diagnostic-config PR.
+  - No WT103 run is started by this decision, and full LSTM scaling remains
+    conditional on the diagnostic result.
+
 ## 2026-07-14 - Aligned LSTM Trial Profile And Queue Closure
 
 - Decision:

@@ -43,7 +43,7 @@ This roadmap lists broad project priorities only. Checkpoint state belongs in `d
 
 ## 3. Baseline Alignment And Result Readiness
 
-- Status: LSTM correction implemented; separate result-production approval pending
+- Status: local alignment complete; WT103 result preparation moved to priority 4
 - Why now:
   - Neo backend parity is locally complete, but paper-facing claims also need
     defensible baselines, explicit evaluation semantics, LSTM parity, and
@@ -77,13 +77,28 @@ This roadmap lists broad project priorities only. Checkpoint state belongs in `d
 
 ## 4. Result Production And WT103 Revalidation
 
-- Status: approval-gated; no active run packet
+- Status: planning and new-profile config preparation approved; no run started
 - Why now:
   - Old PyTorch MPS WT103 rows are not trusted, and new result production should wait until baseline alignment is explicit.
+  - The four-path audit found that the historical MLX results remain valid for
+    their recorded profiles, but backend overrides and the LSTM depth comparison
+    still have explicit configuration and regularization confounds.
 - Focus:
-  - Do not rerun WT103 or rehabilitate old PyTorch result rows until a separate
-    result-production and variance plan is explicitly approved.
+  - Preserve historical WT103 configs, run tags, checkpoints, and result labels.
+  - Close the remaining Neo MLX contract and parity-test gaps before adding new
+    WT103 profiles.
+  - Add separately named 50M-recurrent-core, approximately 60M-total,
+    matched-no-layer-dropout and standard-init LSTM diagnostic profiles with
+    config-contract tests.
+  - Do not retrain clean MLX Neo checkpoints when the new explicit fields do not
+    change their training mathematics; use streaming reevaluation instead.
+  - Run only the matched-no-layer-dropout 50M-recurrent-core LSTM first, with a
+    12-epoch schedule and an epoch-4 validation gate before any broader scaling
+    work.
 - Exit condition:
-  - A separate approved plan defines hardware, configs, result labels, and acceptance criteria.
+  - The new profiles are merged without repurposing historical paths, the first
+    50M-recurrent-core diagnostic is classified at the epoch-4 gate, and broader LSTM
+    retraining is either justified by recovery or explicitly rejected.
 - Expanded plan:
-  - not active
+  - `docs/PROGRESS.md`
+  - `docs/IMPLEMENTATION_PLAN.md`
