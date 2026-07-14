@@ -21,6 +21,7 @@ class LSTMConfig:
     forget_bias_init: float = 0.0
     recurrent_init: str = "xavier_uniform"
     lstm_layer_dropout: Optional[float] = None
+    lstm_bias_mode: str = "split"
 
 
 def _build_output_norm(norm_type: str, d_model: int) -> nn.Module:
@@ -44,6 +45,15 @@ def _parse_norm_place(norm_place: str) -> str:
     raise ValueError(f"Unsupported norm placement '{norm_place}'. Use one of: all, pre, stack.")
 
 
+def _parse_lstm_bias_mode(lstm_bias_mode: str) -> str:
+    mode = str(lstm_bias_mode).strip().lower()
+    if mode in ("split", "single"):
+        return mode
+    raise ValueError(
+        f"Unsupported lstm_bias_mode '{lstm_bias_mode}'. Use one of: split, single."
+    )
+
+
 class LSTMStack(nn.Module):
     """Stacked LSTM core with internal per-layer pre-norm and final stack norm."""
 
@@ -56,6 +66,7 @@ class LSTMStack(nn.Module):
         norm_place: str = "all",
         forget_bias_init: float = 0.0,
         recurrent_init: str = "xavier_uniform",
+        lstm_bias_mode: str = "split",
     ):
         super().__init__()
         self.d_model = int(d_model)
@@ -64,6 +75,7 @@ class LSTMStack(nn.Module):
         if not 0.0 <= self.layer_dropout < 1.0:
             raise ValueError("lstm_layer_dropout must be in the range [0, 1).")
         self.forget_bias_init = float(forget_bias_init)
+        self.lstm_bias_mode = _parse_lstm_bias_mode(lstm_bias_mode)
         self.recurrent_init = str(recurrent_init).strip().lower()
         if self.recurrent_init not in ("xavier_uniform", "orthogonal"):
             raise ValueError(
@@ -84,7 +96,14 @@ class LSTMStack(nn.Module):
             setattr(self, f"weight_ih_l{li}", nn.Parameter(torch.empty(gate_dim, d_model)))
             setattr(self, f"weight_hh_l{li}", nn.Parameter(torch.empty(gate_dim, d_model)))
             setattr(self, f"bias_ih_l{li}", nn.Parameter(torch.empty(gate_dim)))
-            setattr(self, f"bias_hh_l{li}", nn.Parameter(torch.empty(gate_dim)))
+            setattr(
+                self,
+                f"bias_hh_l{li}",
+                nn.Parameter(
+                    torch.empty(gate_dim),
+                    requires_grad=self.lstm_bias_mode == "split",
+                ),
+            )
 
         self.reset_parameters()
 
@@ -173,6 +192,7 @@ class LSTMLM(nn.Module):
         forget_bias_init: float = 0.0,
         recurrent_init: str = "xavier_uniform",
         lstm_layer_dropout: Optional[float] = None,
+        lstm_bias_mode: str = "split",
     ):
         super().__init__()
         self.vocab_size = vocab_size
@@ -192,6 +212,7 @@ class LSTMLM(nn.Module):
             norm_place=norm_place,
             forget_bias_init=forget_bias_init,
             recurrent_init=recurrent_init,
+            lstm_bias_mode=lstm_bias_mode,
         )
         self.drop = nn.Dropout(dropout)
         self.out_proj = nn.Linear(d_model, d_embed) if d_embed != d_model else nn.Identity()

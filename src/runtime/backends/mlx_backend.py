@@ -415,6 +415,7 @@ class MlxLSTMLM(mxnn.Module):
         self.d_embed = int(d_embed)
         self.n_layers = int(n_layers)
         self.tie_embeddings = bool(tie_embeddings)
+        self.lstm_bias_mode = "single"
 
         self.emb = mxnn.Embedding(vocab_size, d_embed)
         self.in_proj = mxnn.Linear(d_embed, d_model) if d_embed != d_model else mxnn.Identity()
@@ -587,6 +588,17 @@ def build_model(cfg: Dict[str, Any], model_name: str):
             norm_place=recurrent_norm_place,
         )
     if model_name == "lstm":
+        lstm_bias_mode = str(cfg.get("lstm_bias_mode", "single")).strip().lower()
+        if lstm_bias_mode not in ("split", "single"):
+            raise ValueError(
+                f"Unsupported lstm_bias_mode '{cfg.get('lstm_bias_mode')}'. "
+                "Use one of: split, single."
+            )
+        if lstm_bias_mode != "single":
+            raise ValueError(
+                "MLX LSTM supports only lstm_bias_mode='single'; "
+                "MLX runtime semantics are frozen."
+            )
         uses_torch_init_controls = (
             float(cfg.get("forget_bias_init", 0.0)) != 0.0
             or str(cfg.get("recurrent_init", "xavier_uniform")).strip().lower()

@@ -70,6 +70,7 @@ def build_model(cfg: Dict[str, Any], model_name: str):
             lstm_layer_dropout=(
                 None if lstm_layer_dropout is None else float(lstm_layer_dropout)
             ),
+            lstm_bias_mode=str(cfg.get("lstm_bias_mode", "split")),
         )
 
     if model_name == "neo":

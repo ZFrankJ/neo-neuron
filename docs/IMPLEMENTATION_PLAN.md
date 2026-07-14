@@ -10,8 +10,8 @@ open a new tracking issue only when explicitly requested.
 ## Current State
 
 ```text
-branch main aligned with origin/main
-base 321315d docs: close baseline alignment queue
+branch codex/fix/lstm-effective-bias-contract from origin/main
+base 3af08ec docs(plan): reopen LSTM alignment queue
 ```
 
 MLX is the frozen scientific reference backend. Existing clean MLX result rows outside this repo remain authoritative.
@@ -159,13 +159,13 @@ LSTM is alignment-ready only when all of the following are true:
 ## Active PR Queue
 
 Execute exactly one packet at a time. Expected PR numbers are based on the live
-remote state, where PR #22 is the latest PR and no PR is open. Recheck GitHub
-before creating each PR because numbers can drift.
+remote state after PR #22 merged. PR #23 is implemented on the branch below;
+recheck GitHub before creating each PR because numbers can drift.
 
 ### PR #23: LSTM Effective-Bias Contract
 
 - Status:
-  - queued first
+  - implemented on `codex/fix/lstm-effective-bias-contract`; pending review and merge
 - Branch:
   - `codex/fix/lstm-effective-bias-contract`
 - Depends on:
