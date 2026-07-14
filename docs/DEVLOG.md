@@ -2,6 +2,33 @@
 
 Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLAN.md`; keep broad priorities in `docs/ROADMAP.md`.
 
+## 2026-07-14 - Cross-Backend LSTM Baseline Controls
+
+- Decision:
+  - Added MLX support for explicit `lstm_layer_dropout`, `forget_bias_init`,
+    and `recurrent_init` controls already available on Torch.
+  - Defined the opt-in standard initialization contract as Xavier input
+    matrices, `xavier_uniform` or gate-wise `orthogonal` recurrent matrices,
+    zero non-forget biases, and the configured effective forget bias.
+  - Kept key presence as the MLX compatibility boundary: missing init keys
+    retain native MLX uniform weights and random bias values exactly, while
+    `lstm_layer_dropout` alone does not reinitialize parameters.
+- Why:
+  - Matched and stronger LSTM profiles must be constructible on the MLX result
+    backend without silently changing historical MLX runs.
+  - Equal seeded tensors are not portable across frameworks, but independent
+    initialization invariants and explicit dropout policy are testable.
+- Scope:
+  - `src/runtime/backends/mlx_backend.py`
+  - `tests/test_lstm_init_controls.py`
+  - `Makefile`
+  - user and workflow documentation
+- Impact:
+  - Torch and MLX can now construct explicit matched no-layer-dropout and
+    standard-init LSTM profiles.
+  - Historical configs, WT103 templates, runs, checkpoints, results, and
+    `neo.csv` remain unchanged.
+
 ## 2026-07-14 - LSTM Gradient And Trajectory Parity
 
 - Decision:

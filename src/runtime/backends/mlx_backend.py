@@ -415,6 +415,10 @@ class MlxLSTMLM(mxnn.Module):
         tie_embeddings: bool,
         output_norm: str = "layernorm",
         norm_place: str = "all",
+        forget_bias_init: float = 0.0,
+        recurrent_init: str = "xavier_uniform",
+        lstm_layer_dropout: Optional[float] = None,
+        standard_init: bool = False,
         rmsnorm_eps: Optional[float] = None,
     ):
         super().__init__()
@@ -424,10 +428,25 @@ class MlxLSTMLM(mxnn.Module):
         self.n_layers = int(n_layers)
         self.tie_embeddings = bool(tie_embeddings)
         self.lstm_bias_mode = "single"
+        self.forget_bias_init = float(forget_bias_init)
+        self.recurrent_init = str(recurrent_init).strip().lower()
+        if self.recurrent_init not in ("xavier_uniform", "orthogonal"):
+            raise ValueError(
+                "Unsupported recurrent_init "
+                f"'{recurrent_init}'. Use one of: xavier_uniform, orthogonal."
+            )
+        self.standard_init = bool(standard_init)
+        self.layer_drop = float(
+            dropout if lstm_layer_dropout is None else lstm_layer_dropout
+        )
+        if not 0.0 <= self.layer_drop < 1.0:
+            raise ValueError("lstm_layer_dropout must be in the range [0, 1).")
 
         self.emb = mxnn.Embedding(vocab_size, d_embed)
         self.in_proj = mxnn.Linear(d_embed, d_model) if d_embed != d_model else mxnn.Identity()
         self.lstm_layers = [mxnn.LSTM(d_model, d_model) for _ in range(n_layers)]
+        if self.standard_init:
+            self._reset_lstm_parameters()
         place = _parse_norm_place(norm_place)
         self.pre_norms = [
             _build_output_norm(output_norm, d_model, rmsnorm_eps)
@@ -441,7 +460,6 @@ class MlxLSTMLM(mxnn.Module):
             else mxnn.Identity()
         )
         self.drop = mxnn.Dropout(dropout)
-        self.layer_drop = float(dropout)
         self.out_proj = mxnn.Linear(d_model, d_embed) if d_embed != d_model else mxnn.Identity()
         if self.tie_embeddings:
             self.output_bias = mx.zeros((vocab_size,), dtype=mx.float32)
@@ -449,6 +467,27 @@ class MlxLSTMLM(mxnn.Module):
         else:
             self.head = mxnn.Linear(d_model, vocab_size)
             self.output_bias = None
+
+    def _reset_lstm_parameters(self) -> None:
+        xavier_uniform = mxnn.init.glorot_uniform()
+        orthogonal = mxnn.init.orthogonal()
+        for layer in self.lstm_layers:
+            layer.Wx = xavier_uniform(layer.Wx)
+            if self.recurrent_init == "orthogonal":
+                layer.Wh = mx.concatenate(
+                    [orthogonal(gate) for gate in mx.split(layer.Wh, 4, axis=0)],
+                    axis=0,
+                )
+            else:
+                layer.Wh = xavier_uniform(layer.Wh)
+
+            zeros = mx.zeros((self.d_model,), dtype=layer.bias.dtype)
+            forget = mx.full(
+                (self.d_model,),
+                self.forget_bias_init,
+                dtype=layer.bias.dtype,
+            )
+            layer.bias = mx.concatenate((zeros, forget, zeros, zeros), axis=0)
 
     def init_state(self, batch_size: int):
         h = mx.zeros((self.n_layers, batch_size, self.d_model), dtype=mx.float32)
@@ -624,17 +663,8 @@ def build_model(cfg: Dict[str, Any], model_name: str):
                 "MLX LSTM supports only rmsnorm_eps=1e-5; "
                 "MLX runtime semantics are frozen."
             )
-        uses_torch_init_controls = (
-            float(cfg.get("forget_bias_init", 0.0)) != 0.0
-            or str(cfg.get("recurrent_init", "xavier_uniform")).strip().lower()
-            != "xavier_uniform"
-            or cfg.get("lstm_layer_dropout") is not None
-        )
-        if uses_torch_init_controls:
-            raise ValueError(
-                "forget_bias_init, recurrent_init, and lstm_layer_dropout are "
-                "PyTorch-only LSTM controls; MLX runtime semantics are frozen."
-            )
+        standard_init = "forget_bias_init" in cfg or "recurrent_init" in cfg
+        lstm_layer_dropout = cfg.get("lstm_layer_dropout")
         return MlxLSTMLM(
             vocab_size=vocab_size,
             d_model=d_model,
@@ -644,6 +674,12 @@ def build_model(cfg: Dict[str, Any], model_name: str):
             tie_embeddings=tie_embeddings,
             output_norm=recurrent_norm,
             norm_place=recurrent_norm_place,
+            forget_bias_init=float(cfg.get("forget_bias_init", 0.0)),
+            recurrent_init=str(cfg.get("recurrent_init", "xavier_uniform")),
+            lstm_layer_dropout=(
+                None if lstm_layer_dropout is None else float(lstm_layer_dropout)
+            ),
+            standard_init=standard_init,
             rmsnorm_eps=(
                 None if lstm_rmsnorm_eps is None else float(lstm_rmsnorm_eps)
             ),

@@ -10,8 +10,8 @@ open a new tracking issue only when explicitly requested.
 ## Current State
 
 ```text
-branch codex/fix/lstm-forward-checkpoint-parity from origin/main
-base 2ca64ea Merge pull request #23 from ZFrankJ/codex/fix/lstm-effective-bias-contract
+branch codex/feat/mlx-lstm-aligned-controls from origin/main
+base 807a080 Merge pull request #25 from ZFrankJ/codex/test/lstm-training-trajectory-parity
 ```
 
 MLX is the frozen scientific reference backend. Existing clean MLX result rows outside this repo remain authoritative.
@@ -161,44 +161,20 @@ LSTM is alignment-ready only when all of the following are true:
 - PR #24: https://github.com/ZFrankJ/neo-neuron/pull/24
   - Merge commit: `4b26e91 Merge pull request #24 from ZFrankJ/codex/fix/lstm-forward-checkpoint-parity`
   - Added deterministic MLX/Torch LSTM forward, recurrent-state, loss, and checkpoint parity with explicit RMSNorm epsilon handling.
+- PR #25: https://github.com/ZFrankJ/neo-neuron/pull/25
+  - Merge commit: `807a080 Merge pull request #25 from ZFrankJ/codex/test/lstm-training-trajectory-parity`
+  - Added deterministic LSTM gradient, optimizer, short fixed-batch trajectory, and backend-native optimizer-resume parity.
 
 ## Active PR Queue
 
 Execute exactly one packet at a time. Expected PR numbers are based on the live
-remote state after PR #24 merged. Recheck GitHub before creating each PR because
+remote state after PR #25 merged. Recheck GitHub before creating each PR because
 numbers can drift.
-
-### PR #25: LSTM Gradient And Trajectory Parity
-
-- Status:
-  - implemented on `codex/test/lstm-training-trajectory-parity`; pending review and merge
-- Branch:
-  - `codex/test/lstm-training-trajectory-parity`
-- Goal:
-  - Extend LSTM parity from inference into training semantics.
-- Contract:
-  - Use the explicit single-bias, `rmsnorm_eps: 1e-5`,
-    `reference_backend: mlx`, no-dropout, fixed-batch, no-checkpoint profile.
-  - Exact random-batch or dropout-mask replay is outside this deterministic
-    contract.
-- Scope:
-  - Compare loss, every mapped gradient, gradient norm, one Adam update,
-    recurrent state, and a short fixed-batch trajectory.
-  - Verify recurrent/projection/embedding/norm decay roles through the public
-    optimizer path.
-  - Cover same-backend optimizer resume. Cross-backend optimizer-state mapping
-    remains unsupported and must be explicit.
-  - Establish tolerances from measured evidence; do not weaken Neo thresholds.
-- Exit criteria:
-  - Gradient and update parity catches the old doubled-bias behavior.
-  - The short trajectory remains within documented thresholds.
-  - No non-finite values occur.
-  - `make check` and `make lstm-parity` pass.
 
 ### PR #26: Cross-Backend LSTM Baseline Controls
 
 - Status:
-  - queued after PR #25
+  - implemented on `codex/feat/mlx-lstm-aligned-controls`; pending review and merge
 - Branch:
   - `codex/feat/mlx-lstm-aligned-controls`
 - Goal:

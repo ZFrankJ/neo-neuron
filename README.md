@@ -53,10 +53,9 @@ python3 scripts/eval.py --config configs/wt103/neo_20m.yaml --checkpoint checkpo
 
 ## LSTM baseline controls
 
-Existing LSTM configs retain the historical matched-control behavior: zero gate
-biases, Xavier-uniform recurrent matrices, and `dropout` applied both between
-recurrent layers and before the output projection. For a stronger, explicitly
-labeled PyTorch LSTM baseline, configs can opt into:
+Existing LSTM configs retain backend-native historical initialization and use
+`dropout` both between recurrent layers and before the output projection. For a
+stronger, explicitly labeled Torch or MLX LSTM baseline, configs can opt into:
 
 ```yaml
 backend: torch
@@ -70,15 +69,17 @@ lstm_layer_dropout: 0.0
 dropout: 0.1
 ```
 
-This path is the `standard-init RMSNorm-LSTM`. It uses a positive forget-gate
-bias, gate-wise orthogonal hidden-to-hidden initialization, no LSTM-only
-inter-layer dropout, and retains `dropout` before the language-model output.
+This path is the `standard-init RMSNorm-LSTM`. On both backends it uses Xavier
+input matrices, a positive forget-gate bias, gate-wise orthogonal
+hidden-to-hidden initialization, no LSTM-only inter-layer dropout, and retains
+`dropout` before the language-model output.
 The aligned RMSNorm path sets `rmsnorm_eps: 1e-5` explicitly; omitting it keeps
 the historical Torch epsilon interpretation. MLX accepts a missing value or
 `1e-5` and rejects other explicit LSTM epsilon values.
-The historical `RMSNorm-LSTM matched control` remains loadable and is not
-silently reinterpreted. These initialization controls are PyTorch-only; MLX
-runtime semantics remain unchanged.
+The historical backend-native LSTM profiles remain loadable and are not
+silently reinterpreted. Missing MLX init keys preserve native uniform weights
+and random gate biases exactly; explicit init keys select the new experimental
+profile. Setting only `lstm_layer_dropout` does not reinitialize model weights.
 
 ## Config and result labels
 
