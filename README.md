@@ -60,6 +60,8 @@ labeled PyTorch LSTM baseline, configs can opt into:
 backend: torch
 model_name: lstm
 recurrent_norm: rmsnorm
+rmsnorm_eps: 1e-5
+lstm_bias_mode: single
 forget_bias_init: 1.0
 recurrent_init: orthogonal
 lstm_layer_dropout: 0.0
@@ -69,6 +71,9 @@ dropout: 0.1
 This path is the `standard-init RMSNorm-LSTM`. It uses a positive forget-gate
 bias, gate-wise orthogonal hidden-to-hidden initialization, no LSTM-only
 inter-layer dropout, and retains `dropout` before the language-model output.
+The aligned RMSNorm path sets `rmsnorm_eps: 1e-5` explicitly; omitting it keeps
+the historical Torch epsilon interpretation. MLX accepts a missing value or
+`1e-5` and rejects other explicit LSTM epsilon values.
 The historical `RMSNorm-LSTM matched control` remains loadable and is not
 silently reinterpreted. These initialization controls are PyTorch-only; MLX
 runtime semantics remain unchanged.
@@ -130,6 +135,7 @@ Useful focused checks:
 ```bash
 make test
 make mlx-parity
+make lstm-parity
 make mps-probe
 make cuda-probe
 ```

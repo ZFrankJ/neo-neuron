@@ -55,5 +55,7 @@ jobs:
           python -m pip install -c requirements-lock/constraints-macos-mlx.txt pytest
           python -m pip install -c requirements-lock/constraints-macos-mlx.txt -r requirements.txt
 
-      - name: Run MLX reference parity tests
-        run: make mlx-parity
+      - name: Run MLX and LSTM parity tests
+        run: |
+          make mlx-parity
+          make lstm-parity

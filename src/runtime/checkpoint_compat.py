@@ -21,6 +21,13 @@ REQUIRED_ALIGNED_NEO_CFG_KEYS = (
     "weight_decay_policy",
 )
 
+REQUIRED_ALIGNED_LSTM_CFG_KEYS = (
+    "lstm_bias_mode",
+    "recurrent_norm",
+    "recurrent_norm_place",
+    "rmsnorm_eps",
+)
+
 
 def load_checkpoint_payload(path: str | Path, map_location: Any = "cpu") -> Dict[str, Any]:
     p = Path(path)
@@ -81,6 +88,19 @@ def _looks_like_transformer(model_name: str | None, cfg: Any, expected_cfg: Any)
     return False
 
 
+def _looks_like_lstm(model_name: str | None, cfg: Any, expected_cfg: Any) -> bool:
+    if model_name == "lstm":
+        return True
+    if isinstance(cfg, dict) and str(cfg.get("model_name", "")).lower() == "lstm":
+        return True
+    if (
+        isinstance(expected_cfg, dict)
+        and str(expected_cfg.get("model_name", "")).lower() == "lstm"
+    ):
+        return True
+    return False
+
+
 def _metadata_values_match(key: str, checkpoint_value: Any, expected_value: Any) -> bool:
     if key == "rmsnorm_eps":
         return bool(np.isclose(float(checkpoint_value), float(expected_value), rtol=0.0, atol=1e-12))
@@ -116,6 +136,44 @@ def validate_checkpoint_metadata(
                 f"checkpoint={checkpoint_variant!r}, expected={expected_variant!r}"
             )
         return []
+
+    if _looks_like_lstm(model_name, cfg, expected_cfg):
+        if not isinstance(cfg, dict) or not cfg:
+            msg = (
+                "LSTM checkpoint is missing config metadata; treating it as "
+                "legacy/provisional, not as aligned backend evidence."
+            )
+            warnings.warn(msg, stacklevel=2)
+            return list(REQUIRED_ALIGNED_LSTM_CFG_KEYS)
+
+        missing = [
+            key
+            for key in REQUIRED_ALIGNED_LSTM_CFG_KEYS
+            if key not in cfg or cfg[key] in (None, "")
+        ]
+        if missing:
+            warnings.warn(
+                "LSTM checkpoint is missing aligned metadata fields "
+                f"{missing}; treating it as legacy/provisional, not as aligned backend evidence.",
+                stacklevel=2,
+            )
+
+        if expected_cfg:
+            conflicts = []
+            for key in REQUIRED_ALIGNED_LSTM_CFG_KEYS:
+                if key not in cfg or key not in expected_cfg:
+                    continue
+                if not _metadata_values_match(key, cfg[key], expected_cfg[key]):
+                    conflicts.append(
+                        f"{key}: checkpoint={cfg[key]!r}, expected={expected_cfg[key]!r}"
+                    )
+            if conflicts:
+                raise ValueError(
+                    "Checkpoint metadata is incompatible with requested config: "
+                    + "; ".join(conflicts)
+                )
+
+        return missing
 
     if not _looks_like_neo(model_name, cfg, expected_cfg):
         return []

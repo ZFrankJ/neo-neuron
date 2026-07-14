@@ -60,11 +60,22 @@ remain evaluable in single mode because both saved bias tensors are retained in
 the forward sum. Torch-to-MLX conversion sums them and warns that cross-backend
 optimizer resume is not equivalent.
 
+`rmsnorm_eps` makes the LSTM RMSNorm numerical contract explicit. Aligned
+Torch/MLX LSTM profiles set `rmsnorm_eps: 1e-5`. A Torch config that omits the
+field retains the historical PyTorch dtype-derived RMSNorm epsilon; it is not
+silently promoted to the aligned profile. MLX preserves its native `1e-5`
+behavior when the field is absent, accepts an explicit `1e-5`, and rejects any
+other explicit LSTM value rather than ignoring it. Aligned LSTM checkpoints
+record and validate `lstm_bias_mode`, `recurrent_norm`,
+`recurrent_norm_place`, and `rmsnorm_eps`; checkpoints missing those fields are
+loadable as legacy/provisional state with a warning.
+
 Do not relabel historical runs as standard-init runs. The new controls affect
 parameter initialization and therefore only apply when starting a new PyTorch
 LSTM run; loaded checkpoint weights remain authoritative. A future matched
-profile must state `lstm_bias_mode: single` explicitly. MLX LSTM semantics are
-unchanged by this control path.
+profile must state `lstm_bias_mode: single` explicitly. MLX LSTM runtime
+semantics remain unchanged; explicit epsilon support only validates and records
+the existing native value.
 
 With `reference_backend: mlx` and table-based weight decay, Torch LSTM
 parameters are grouped by role despite backend-specific names: `lstm.*`
