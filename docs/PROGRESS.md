@@ -16,10 +16,11 @@ Current position:
 - config/result labeling now records exact WT2 parameter counts and makes tanh explicit for future WT103 Neo runs
 - a GPT-2-style Transformer control is merged with aligned Torch/MLX causal checkpoint behavior
 - Torch LSTM optimizer grouping now aligns backend-specific recurrent parameter names
-- a four-way model audit found that LSTM parity is not complete: Torch trains
-  two effective bias vectors against MLX's one, Torch LSTM RMSNorm does not use
-  MLX's `1e-5` epsilon, and MLX lacks the explicit dropout/init controls needed
-  for a provenance-distinct aligned baseline
+- the explicit Torch LSTM single-bias mode now matches MLX trainable parameter
+  and effective-bias update semantics and is pending review
+- the remaining four-way LSTM gaps are forward/checkpoint coverage, Torch
+  RMSNorm epsilon, gradient/trajectory parity, public-loop schedule timing, and
+  MLX support for explicit dropout/init controls
 - old result rows stay provenance-bound; do not silently reinterpret them after baseline changes
 
 Current active checkpoint:
@@ -68,7 +69,7 @@ Current implementation plan:
 
 ## Remaining Scale Estimate
 
-- 6 local alignment PRs are currently queued.
+- PR #23 is implemented and pending review; 5 later local alignment PRs remain queued.
 - Paper-quality result production remains blocked until the LSTM four-way
   alignment exit passes and a separate run plan is approved.
 - CUDA validation remains blocked on access to Nvidia hardware or a provisioned GPU runner.

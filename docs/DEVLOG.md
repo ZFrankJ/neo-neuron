@@ -2,6 +2,27 @@
 
 Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLAN.md`; keep broad priorities in `docs/ROADMAP.md`.
 
+## 2026-07-14 - LSTM Effective-Bias Contract
+
+- Decision:
+  - Added `lstm_bias_mode: split | single`; missing Torch config keeps the historical two-trainable-bias `split` path, while MLX remains natively `single`.
+  - Explicit Torch `single` mode keeps `bias_hh` in checkpoint state for compatibility but freezes it, leaving exactly one trainable effective gate bias per layer.
+  - Torch-to-MLX conversion continues to sum retained split-bias state and warns that cross-backend optimizer resume is not equivalent.
+- Why:
+  - Torch `bias_ih` and `bias_hh` each receive the MLX-equivalent gradient, so updating both doubles the effective bias update even when mapped-weight forward outputs match.
+  - Retaining the frozen compatibility tensor preserves evaluation of historical Torch checkpoints without changing MLX runtime semantics.
+- Scope:
+  - `src/models/lstm_lm.py`
+  - `src/runtime/backends/torch_backend.py`
+  - `src/runtime/backends/mlx_backend.py`
+  - `src/runtime/checkpoint_compat.py`
+  - `tests/test_lstm_bias_contract.py`
+  - `docs/training.md`
+- Impact:
+  - Explicit single-bias Torch LSTM models match MLX trainable parameter counts and mapped effective-bias gradients.
+  - Historical Torch configs remain split-bias models; historical MLX configs and initialization remain unchanged.
+  - No Neo, Transformer, WT103 config, run, result, or `neo.csv` behavior changes.
+
 ## 2026-07-11 - Cross-Backend LSTM Optimizer Grouping
 
 - Decision:

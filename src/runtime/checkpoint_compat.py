@@ -333,6 +333,11 @@ def _map_lstm_torch_to_mlx(
             f"lstm.bias_hh_l{i}",
         )
 
+    warn.append(
+        "Cross-backend LSTM conversion combines Torch split-bias state; "
+        "model weights remain evaluable, but cross-backend optimizer resume is not equivalent."
+    )
+
     missing = sorted(set(dst_template.keys()) - set(out.keys()))
     if missing:
         raise KeyError(f"Missing mapped destination keys: {missing}")

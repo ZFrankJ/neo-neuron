@@ -29,12 +29,16 @@ Neo, and evaluation regime.
 
 ## LSTM baseline taxonomy
 
-Two LSTM control labels are available for future result reporting:
+Backend-native historical LSTM profiles are distinct and must retain their
+provenance:
 
-- `RMSNorm-LSTM matched control` preserves existing config behavior: zero gate
-  biases, Xavier-uniform input and recurrent matrices, and `dropout` reused as
-  inter-layer and output dropout.
-- `standard-init RMSNorm-LSTM` is an opt-in PyTorch control using
+- `native-MLX RMSNorm-LSTM` uses MLX-native uniform recurrent initialization,
+  a single trainable gate-bias vector with native random initialization, and
+  `dropout` as both inter-layer and output dropout.
+- `legacy Torch RMSNorm-LSTM` uses Xavier-uniform input and recurrent matrices,
+  two trainable zero-initialized bias vectors, and `dropout` as both inter-layer
+  and output dropout.
+- `standard-init Torch RMSNorm-LSTM` is an opt-in PyTorch control using
   `forget_bias_init: 1.0`, `recurrent_init: orthogonal`, and an explicit
   `lstm_layer_dropout` policy. Gate-wise orthogonal initialization is applied to
   each hidden-to-hidden gate matrix. The forget value is written to the input
@@ -46,9 +50,20 @@ Setting it to `0.0` removes only LSTM inter-layer dropout; `dropout` still appli
 before the output projection. Supported `recurrent_init` values are
 `xavier_uniform` and `orthogonal`.
 
+`lstm_bias_mode` makes effective-bias training explicit. When it is absent,
+Torch keeps historical `split` behavior and MLX keeps native `single` behavior.
+Torch `single` mode retains `bias_hh` in checkpoint state but freezes it, so
+only `bias_ih` receives optimizer updates and the trainable parameter count
+matches MLX. MLX accepts explicit `single` and rejects `split`; it does not
+change its native parameterization. Historical split-bias Torch checkpoints
+remain evaluable in single mode because both saved bias tensors are retained in
+the forward sum. Torch-to-MLX conversion sums them and warns that cross-backend
+optimizer resume is not equivalent.
+
 Do not relabel historical runs as standard-init runs. The new controls affect
 parameter initialization and therefore only apply when starting a new PyTorch
-LSTM run; loaded checkpoint weights remain authoritative. MLX LSTM semantics are
+LSTM run; loaded checkpoint weights remain authoritative. A future matched
+profile must state `lstm_bias_mode: single` explicitly. MLX LSTM semantics are
 unchanged by this control path.
 
 With `reference_backend: mlx` and table-based weight decay, Torch LSTM
