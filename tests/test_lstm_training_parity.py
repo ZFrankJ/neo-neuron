@@ -67,6 +67,15 @@ def _batch(step: int = 0):
     return x, y.astype(np.int32)
 
 
+def _token_stream(cfg, *, batches: int):
+    block_size = int(cfg["block_size"])
+    batch_size = int(cfg["batch_size"])
+    vocab_size = int(cfg["vocab_size"])
+    token_count = block_size * batch_size * batches + block_size + 1
+    values = (np.arange(token_count, dtype=np.int64) * 5 + 1) % vocab_size
+    return torch.from_numpy(values)
+
+
 def _initial_state(cfg):
     rng = np.random.default_rng(20260714)
     shape = (int(cfg["n_layers"]), 3, int(cfg["d_model"]))
@@ -364,6 +373,64 @@ def test_lstm_fixed_batch_short_training_trajectory_stays_inside_envelope():
     assert _max_tree_diff(torch_after, mapped_after) <= TRAJECTORY_ATOL
     np.testing.assert_allclose(torch_state[0], mlx_state[0], rtol=1e-5, atol=1e-6)
     np.testing.assert_allclose(torch_state[1], mlx_state[1], rtol=1e-5, atol=1e-6)
+
+
+def test_lstm_public_loop_cosine_warmup_matches_mlx_reference(tmp_path: Path):
+    cfg = _cfg(
+        epochs=1,
+        cosine=True,
+        warmup_epochs=0.5,
+        min_lr=3e-5,
+        train_regime="streaming",
+        stream_state=True,
+        eval_regime="block_reset",
+        block_size=4,
+        batch_size=3,
+        grad_clip=0.0,
+        lstm_layer_dropout=0.0,
+        forget_bias_init=1.0,
+        recurrent_init="orthogonal",
+        save_each_epoch=False,
+        mem_report_interval=None,
+        mem_clear_interval=None,
+        use_checkpoint=False,
+    )
+    assert cfg["reference_backend"] == "mlx"
+    assert cfg["lstm_bias_mode"] == "single"
+    assert cfg["rmsnorm_eps"] == pytest.approx(1e-5)
+    assert cfg["lstm_layer_dropout"] == pytest.approx(0.0)
+    assert cfg["use_checkpoint"] is False
+
+    torch_model, mlx_model = _build_mapped_pair(cfg)
+    train_ids = _token_stream(cfg, batches=4)
+    val_ids = _token_stream(cfg, batches=2)
+    torch_cfg = dict(cfg, save_dir=str(tmp_path / "torch"), run_tag="public_loop")
+    mlx_cfg = dict(cfg, save_dir=str(tmp_path / "mlx"), run_tag="public_loop")
+
+    torch_metrics = torch_backend.train_entry(
+        torch_model,
+        torch_cfg,
+        train_ids,
+        val_ids,
+        device=torch.device("cpu"),
+    )
+    mlx_metrics = mlx_backend.train_entry(
+        mlx_model,
+        mlx_cfg,
+        train_ids,
+        val_ids,
+        device="cpu",
+    )
+
+    assert torch_metrics["eval_regime"] == "block_reset"
+    assert mlx_metrics["eval_regime"] == "block_reset"
+    assert abs(torch_metrics["val_ppl"] - mlx_metrics["val_ppl"]) <= TRAJECTORY_ATOL
+
+    torch_eval = torch_backend.eval_metrics_entry(
+        torch_model, val_ids, cfg, torch.device("cpu")
+    )
+    mlx_eval = mlx_backend.eval_metrics_entry(mlx_model, val_ids, cfg, "cpu")
+    assert abs(torch_eval["ppl"] - mlx_eval["ppl"]) <= TRAJECTORY_ATOL
 
 
 def _torch_training_step(model, optimizer, cfg, step):
