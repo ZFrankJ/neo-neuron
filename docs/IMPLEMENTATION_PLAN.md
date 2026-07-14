@@ -2,13 +2,16 @@
 
 Strict execution contract for Neo backend parity and baseline-alignment work.
 
-GitHub issue: https://github.com/ZFrankJ/neo-neuron/issues/2
+Previous tracking issue: https://github.com/ZFrankJ/neo-neuron/issues/2
+
+Issue #2 is closed. The LSTM four-way correction queue starts from live `main`;
+open a new tracking issue only when explicitly requested.
 
 ## Current State
 
 ```text
-branch codex/fix/lstm-optimizer-grouping-guard from origin/main
-base db821b4 Merge pull request #21 from ZFrankJ/codex/feat/gpt2-style-transformer-control
+branch main aligned with origin/main
+base 321315d docs: close baseline alignment queue
 ```
 
 MLX is the frozen scientific reference backend. Existing clean MLX result rows outside this repo remain authoritative.
@@ -17,7 +20,14 @@ The dependency reproducibility maintenance slice constrains macOS Apple Silicon
 MLX parity installs to a tested package stack. MLX runtime semantics and strict
 parity thresholds remain unchanged.
 
-The completed local backend alignment queue established MLX reference parity, optimizer parity, public training-loop parity, checkpoint metadata guards, CI, a seed optional MPS probe, a shared backend parity audit report helper, MPS short training trajectory parity, MPS memory slope classification, skip-safe CUDA harness preparation, and machine-specific Mac mini backend provenance. CUDA validation remains blocked on real Nvidia GPU access:
+The completed local Neo backend alignment queue established same-weight MLX
+reference parity, optimizer parity, public training-loop parity, checkpoint
+metadata guards, CI, a seed optional MPS probe, a shared backend parity audit
+report helper, MPS short training trajectory parity, MPS memory slope
+classification, skip-safe CUDA harness preparation, and machine-specific Mac
+mini backend provenance. A later four-way audit found that this contract does
+not yet extend to LSTM. CUDA validation remains blocked on real Nvidia GPU
+access:
 
 ```text
 MLX reference
@@ -44,15 +54,40 @@ MPS is parity-ready only when all of the following are true:
 
 CUDA parity work is prepared but not validated in this repo because no Nvidia GPU is currently available. Reproducers must first run `NEO_RUN_CUDA_PROBE=1 python3 -m pytest -q tests/test_cuda_parity_harness.py` on a real Nvidia CUDA machine and confirm the optional CUDA test runs instead of skips. CUDA must pass full-precision, no-checkpoint, no-compile, no-fused-optimizer tests before speed features are considered.
 
+### LSTM Four-Way Alignment Exit
+
+LSTM is alignment-ready only when all of the following are true:
+
+- Same mapped weights produce matching MLX/Torch LSTM logits and recurrent
+  state for `none`, `layernorm`, and `rmsnorm` recurrent normalization.
+- The aligned Torch path has one trainable effective gate bias, matching MLX,
+  without silently changing legacy split-bias checkpoint interpretation.
+- RMSNorm epsilon is explicit and equal to `1e-5` in the aligned profile.
+- Loss, gradients, one optimizer update, a short fixed-batch trajectory, and
+  same-backend resume pass explicit parity tolerances without relaxing the Neo
+  contract.
+- MLX and Torch honor the same explicit LSTM layer-dropout and standard-init
+  controls for the new profile while missing controls preserve historical
+  backend behavior.
+- The MLX-reference Torch public loop matches MLX warmup/cosine update timing.
+- Historical MLX and Torch LSTM runs retain backend-specific provenance and are
+  not relabeled as aligned or standard-init runs.
+- No WT103 run or `neo.csv` edit is needed to satisfy this exit.
+
 ## Global Rules
 
 - Do not change MLX runtime semantics to match PyTorch.
+- New MLX LSTM capabilities may be added only as explicit opt-in controls whose
+  absence preserves historical MLX behavior; they are new experimental
+  profiles, not silent parity repairs.
 - Do not weaken or remove existing MLX parity tests.
 - Do not run WT103.
 - Do not start production training scripts.
 - Do not download large datasets.
 - Do not modify `neo.csv`.
 - Do not alter `configs/wt103/*` unless explicitly approved.
+- Do not reuse a historical run tag for a new LSTM bias, normalization,
+  dropout, initialization, or scheduler contract.
 - Do not touch the main experiment machine.
 - Do not write checkpoints or result artifacts outside pytest temp directories.
 - Keep the passing PyTorch parity path on `use_checkpoint: false`.
@@ -123,160 +158,196 @@ CUDA parity work is prepared but not validated in this repo because no Nvidia GP
 
 ## Active PR Queue
 
-The strict parity queue is empty. The baseline-alignment queue for
-paper-facing result readiness is complete through PR #22. No active local PR is
-currently queued here. Future result-production work must start from a separate
-approved run plan and must not mutate `neo.csv` or reinterpret old results.
+Execute exactly one packet at a time. Expected PR numbers are based on the live
+remote state, where PR #22 is the latest PR and no PR is open. Recheck GitHub
+before creating each PR because numbers can drift.
 
-### PR #18: LSTM Standard-Init Strengthening
-
-- Status:
-  - merged as PR #18; retained here until the baseline-alignment queue closes
-
-- Branch:
-  - `codex/feat/lstm-standard-init-controls`
-- Goal:
-  - Add a stronger LSTM baseline path covering the three LSTM-specific concerns:
-    positive forget-gate bias, orthogonal recurrent initialization, and dropout
-    policy alignment.
-- Rationale:
-  - The current LSTM is a normalized recurrent control. That is acceptable, but
-    zero forget bias, Xavier recurrent matrices, and extra inter-layer dropout
-    can make it weaker than a well-tuned LSTM.
-  - Neo has no direct forget gate or learned hidden-to-hidden recurrent matrix,
-    so these are LSTM-specific best-practice controls, not one-to-one Neo
-    settings.
-- Scope:
-  - Add explicit LSTM init controls such as `forget_bias_init` and
-    `recurrent_init`.
-  - Add or document dropout-policy controls so LSTM-only inter-layer dropout is
-    intentional rather than accidental.
-  - Add tests that inspect initialized LSTM gate biases and recurrent matrix
-    properties on tiny models.
-  - Prefer new configs or explicit labels over silently changing old result
-    configs.
-- Exit criteria:
-  - Existing configs remain loadable.
-  - New standard-init LSTM path is covered by tests.
-  - Docs distinguish `RMSNorm-LSTM matched control` from `standard-init
-    RMSNorm-LSTM`.
-  - `make check` passes.
-
-### PR #19: Recurrent Eval Semantics
+### PR #23: LSTM Effective-Bias Contract
 
 - Status:
-  - merged as PR #19; retained here until the baseline-alignment queue closes
-
+  - queued first
 - Branch:
-  - `codex/feat/recurrent-eval-semantics`
+  - `codex/fix/lstm-effective-bias-contract`
+- Depends on:
+  - merged PR #22
 - Goal:
-  - Decide and implement how recurrent models report block-reset evaluation
-    versus streaming-state evaluation.
-- Rationale:
-  - Training streams state across contiguous batches, but current eval resets
-    state per non-overlapping evaluation batch. That is valid if documented, but
-    it may understate recurrent models' sequence-memory performance.
+  - Give the aligned Torch LSTM one trainable effective gate bias, matching the
+    MLX parameterization and update semantics.
+- Public contract:
+  - Add `lstm_bias_mode: split | single`.
+  - Missing `lstm_bias_mode` keeps legacy Torch `split` behavior and native
+    MLX `single` behavior.
+  - Every aligned config must set `lstm_bias_mode: single` explicitly.
 - Scope:
-  - Add an explicit config/CLI metric option for eval mode, for example
-    `eval_regime: block_reset | streaming`.
-  - Keep current behavior as `block_reset` unless a deliberate compatibility
-    decision changes it.
-  - Add focused tests on a tiny recurrent model or sentinel model to prove state
-    reset/streaming behavior.
-  - Update result docs so future tables state which eval regime is used.
+  - Start with a failing mapped-weight gradient test showing that current Torch
+    `bias_ih + bias_hh` doubles the effective MLX bias update.
+  - In Torch `single` mode, exactly one effective bias is trainable. Any
+    retained split-bias compatibility state must not receive optimizer updates.
+  - Keep old Torch checkpoints evaluable. Cross-backend conversion may sum
+    legacy split biases, but must warn that cross-backend optimizer resume is
+    not equivalent.
+  - Count trainable parameters consistently across MLX and Torch in single mode.
+  - Correct user-facing LSTM taxonomy so MLX native initialization is not
+    described as Torch Xavier/zero-bias behavior.
 - Exit criteria:
-  - Both eval regimes are deterministic and tested.
-  - Existing checkpoints/configs keep their current eval interpretation.
+  - The new gradient contract fails before implementation and passes after it.
+  - Legacy split-bias model loading remains covered.
+  - No Neo, Transformer, WT103 config, run, or result behavior changes.
   - `make check` passes.
 
-### PR #20: Config Labels And Activation Provenance
+### PR #24: LSTM Forward And Checkpoint Parity
 
 - Status:
-  - merged as PR #20; retained here until the baseline-alignment queue closes
-
+  - queued after PR #23
 - Branch:
-  - `codex/docs/config-labels-activation-provenance`
+  - `codex/fix/lstm-forward-checkpoint-parity`
 - Goal:
-  - Clean up config/result labels before new runs.
-- Rationale:
-  - WT2 config names such as `*_6m` and `lstm_25m` do not match current
-    parameter counts. Neo is also moving toward tanh activation, so labels must
-    distinguish tanh runs from older `id4`/`id5` custom-activation runs.
+  - Establish the missing deterministic MLX/Torch LSTM forward contract.
+- Public contract:
+  - Add explicit LSTM `rmsnorm_eps` handling.
+  - The aligned profile uses `rmsnorm_eps: 1e-5`.
+  - Legacy Torch configs that omit the field retain their historical epsilon
+    interpretation; MLX may accept missing or `1e-5`, but must reject an
+    unsupported explicit value instead of silently ignoring it.
 - Scope:
-  - Retain WT2 config paths for compatibility, but document them as legacy
-    labels with exact parameter counts and small/large reporting names.
-  - Require exact parameter counts in paper-facing result tables and PR bodies.
-  - Use `activation_id: tanh` and activation-bearing run tags for future WT103
-    Neo templates; do not relabel old `id4`/`id5` runs as tanh.
-  - Update scripts/notebook references only if paths are renamed.
+  - Add same-weight forward, recurrent-state, and loss parity for one and
+    multiple layers with `none`, `layernorm`, and `rmsnorm`.
+  - Cover MLX-to-Torch and Torch-to-MLX model checkpoint conversion.
+  - Add LSTM checkpoint metadata guards for bias mode, recurrent norm,
+    norm placement, and RMSNorm epsilon. Missing fields remain legacy warnings.
+  - Add a dedicated `make lstm-parity` target and keep it skip-safe without
+    MLX.
 - Exit criteria:
-  - Config labels no longer imply inaccurate parameter counts.
-  - Activation provenance is explicit for old and new Neo runs.
-  - `make check` passes.
+  - RMSNorm mapped-weight logits return to the established small numerical
+    envelope without tolerance relaxation.
+  - Both checkpoint directions preserve evaluation loss.
+  - Existing Neo parity remains green.
+  - `make check` and `make lstm-parity` pass.
 
-### PR #21: GPT-Style Transformer Control
+### PR #25: LSTM Gradient And Trajectory Parity
 
 - Status:
-  - merged as PR #21; retained here until the baseline-alignment queue closes
-
+  - queued after PR #24
 - Branch:
-  - `codex/feat/gpt2-style-transformer-control`
+  - `codex/test/lstm-training-trajectory-parity`
 - Goal:
-  - Strengthen the Transformer comparison path or explicitly demote it to a
-    lightweight internal control.
-- Rationale:
-  - The current Transformer is hand-rolled with learned absolute positions and
-    unfused attention. It is useful for smoke comparisons, but weak for claims
-    against modern Transformer baselines.
+  - Extend LSTM parity from inference into training semantics.
+- Contract:
+  - Use the explicit single-bias, `rmsnorm_eps: 1e-5`,
+    `reference_backend: mlx`, no-dropout, fixed-batch, no-checkpoint profile.
+  - Exact random-batch or dropout-mask replay is outside this deterministic
+    contract.
 - Scope:
-  - Add a GPT-2-style internal baseline when feasible: pre-norm blocks, causal
-    attention using PyTorch/MLX-supported optimized primitives where available,
-    GPT-style initialization/residual scaling, and clear config labels.
-  - If implementation scope is too large, document the current Transformer as an
-    internal control only and park stronger Transformer comparisons.
-  - Keep MLX/Torch behavior aligned or explicitly mark backend support limits.
+  - Compare loss, every mapped gradient, gradient norm, one Adam update,
+    recurrent state, and a short fixed-batch trajectory.
+  - Verify recurrent/projection/embedding/norm decay roles through the public
+    optimizer path.
+  - Cover same-backend optimizer resume. Cross-backend optimizer-state mapping
+    remains unsupported and must be explicit.
+  - Establish tolerances from measured evidence; do not weaken Neo thresholds.
 - Exit criteria:
-  - Transformer baseline status is unambiguous in docs.
-  - New code, if added, has focused shape/causality/checkpoint tests.
-  - `make check` passes.
+  - Gradient and update parity catches the old doubled-bias behavior.
+  - The short trajectory remains within documented thresholds.
+  - No non-finite values occur.
+  - `make check` and `make lstm-parity` pass.
 
-### PR #22: LSTM Optimizer Grouping Parity Guard
+### PR #26: Cross-Backend LSTM Baseline Controls
 
 - Status:
-  - merged as PR #22; retained here until the next result-production plan replaces this completed queue
-
+  - queued after PR #25
 - Branch:
-  - `codex/fix/lstm-optimizer-grouping-guard`
+  - `codex/feat/mlx-lstm-aligned-controls`
 - Goal:
-  - Fix or prove the Torch-vs-MLX optimizer grouping edge case for LSTM.
-- Rationale:
-  - Normal Torch optimizer grouping detects LSTM recurrent parameters with
-    names under `lstm.*`. The MLX-reference Torch optimizer path checks
-    `lstm_layers.*`, which matches MLX naming but not Torch LSTM naming. If a
-    Torch LSTM is trained with `reference_backend: mlx`, its recurrent weights
-    may receive projection weight decay instead of `recurrent_weight_decay`.
+  - Make the matched and strong LSTM profiles available on the MLX result
+    backend without changing historical MLX defaults.
+- Public contract:
+  - MLX and Torch both honor explicit `lstm_layer_dropout`,
+    `forget_bias_init`, and `recurrent_init`.
+  - Missing keys preserve native historical behavior on each backend.
+  - The aligned matched profile uses `lstm_layer_dropout: 0.0`.
+  - The strong profile additionally uses `forget_bias_init: 1.0` and
+    `recurrent_init: orthogonal`.
 - Scope:
-  - Add a focused unit test that builds a Torch LSTM under MLX-reference
-    optimizer settings and verifies recurrent/projection/embedding/norm decay
-    buckets.
-  - Fix grouping to recognize both Torch `lstm.*` and MLX-style
-    `lstm_layers.*` names where appropriate.
-  - Keep existing MLX parity behavior unchanged.
+  - Remove the current MLX rejection only for implemented, tested controls.
+  - Define the explicit standard-init profile completely: Xavier input
+    matrices, selected recurrent initialization, zero non-forget biases, and
+    the configured forget-bias value.
+  - Test initialization invariants independently on both backends. Equal random
+    tensors from equal seeds are not required.
+  - Preserve missing-key MLX native uniform/random-bias initialization exactly.
+  - Do not add or alter WT103 configs in this PR.
 - Exit criteria:
-  - The test fails before the fix and passes after it.
-  - No optimizer behavior changes for Neo or Transformer unless explicitly
-    covered by tests.
-  - `make check` passes.
+  - Neo and matched LSTM have no inter-layer dropout under the explicit matched
+    profile.
+  - Standard-init invariants hold on both backends.
+  - Historical configs construct with unchanged defaults.
+  - `make check` and `make lstm-parity` pass.
+
+### PR #27: MLX-Reference Warmup And Public-Loop Parity
+
+- Status:
+  - queued after PR #26
+- Branch:
+  - `codex/fix/mlx-reference-scheduler-timing`
+- Goal:
+  - Align the Torch MLX-reference public loop with MLX's first-update
+    warmup/cosine timing.
+- Compatibility:
+  - Apply the aligned timing only to the explicit MLX-reference Torch path.
+    Native Torch behavior and historical configs remain unchanged.
+- Scope:
+  - Add a fail-first scheduler test proving that MLX update one uses warmup step
+    one while current Torch update one uses zero learning rate.
+  - Add a public-loop LSTM parity case with cosine warmup, fixed streaming
+    batches, deterministic initialization, and explicit aligned controls.
+  - Keep random batch selection and stochastic dropout outside exact
+    cross-backend trajectory claims.
+  - Keep `tbptt_len < block_size` out of scope because checked-in configs do
+    not activate that divergent branch.
+- Exit criteria:
+  - Per-update learning rates and public-loop metrics match the MLX contract.
+  - Native Torch scheduling remains covered.
+  - `make check` and `make lstm-parity` pass.
+
+### PR #28: Aligned Profile And Trial Readiness
+
+- Status:
+  - queued after PR #27; WT103 template work remains approval-gated
+- Branch:
+  - `codex/docs/lstm-aligned-trial-profile`
+- Goal:
+  - Freeze the exact profile and provenance needed for a small alignment trial,
+    then close the correction queue without starting production runs.
+- Scope:
+  - Add a lightweight checked-in alignment config or fixture containing
+    `reference_backend: mlx`, `lstm_bias_mode: single`,
+    `rmsnorm_eps: 1e-5`, `lstm_layer_dropout: 0.0`, and the selected init
+    controls.
+  - Document three distinct labels: legacy MLX LSTM, matched no-layer-dropout
+    LSTM, and standard-init no-layer-dropout LSTM.
+  - Record exact backend parameter counts and required evaluation regime.
+  - Update README, training docs, DEVLOG, progress, and this queue to the final
+    implemented behavior.
+  - Do not modify existing WT103 configs or run tags. Propose new WT103 paths
+    and tags, but add them only after explicit user approval.
+  - Do not run WT103, touch the main training machine, or edit `neo.csv`.
+- Exit criteria:
+  - `make check`, `make mlx-parity`, and `make lstm-parity` pass.
+  - Historical artifacts remain unambiguously labeled.
+  - The next action is a separate approved result-production and variance plan,
+    not another hidden implementation change.
 
 The next CUDA step remains external validation, not normal local development.
-Before opening CUDA-result or CUDA-CI work, confirm an
-Nvidia CUDA environment with:
+Before opening CUDA-result or CUDA-CI work, confirm an Nvidia CUDA environment
+with:
 
 ```bash
 NEO_RUN_CUDA_PROBE=1 python3 -m pytest -q tests/test_cuda_parity_harness.py
 ```
 
-If this command skips because CUDA is unavailable, CUDA parity has not been validated. Standard GitHub-hosted runners for individual repos are not treated as Nvidia GPU runners for this project.
+If this command skips because CUDA is unavailable, CUDA parity has not been
+validated. Standard GitHub-hosted runners for individual repos are not treated
+as Nvidia GPU runners for this project.
 
 ## Standing CI And Branch Protection Policy
 
@@ -302,16 +373,23 @@ Do not hand these to an agent yet:
 - Re-enabling activation checkpointing for result production.
 - Turning CUDA CI into a required branch protection check before an Nvidia runner exists.
 - Editing `neo.csv` based on PyTorch runs.
+- Exact cross-backend replay of NumPy/Torch random batches or stochastic
+  dropout masks; deterministic parity uses fixed batches and dropout disabled,
+  while paper variance uses repeated backend-local seeds.
+- Aligning the divergent `tbptt_len < block_size` optimizer-step contract until
+  a future approved config actually needs shorter TBPTT chunks.
+- Adding aligned WT103 templates or run tags before the explicit approval gate
+  in PR #28.
 - Introducing CUDA speed features such as AMP, TF32 changes, fused optimizers, `torch.compile`, or activation checkpointing before boring full-precision CUDA parity passes.
 
 ## Standard PR Body Template
 
 ```markdown
-Follow-up to #2.
+LSTM four-way alignment queue.
 
 ## Queue Item
 
-- PR queue item: `<PR #18 / #19 / #20 / #21 / #22 name>`
+- PR queue item: `<PR #23 / #24 / #25 / #26 / #27 / #28 name>`
 - Depends on: `<merged PRs>`
 
 ## Summary
@@ -322,14 +400,15 @@ Follow-up to #2.
 ## Scope
 
 - `<files changed>`
-- MLX runtime semantics unchanged.
+- Historical MLX behavior is unchanged when new controls are absent.
 - No WT103/main-machine/result/neo.csv changes.
 - Trusted PyTorch parity path remains `use_checkpoint: false`.
 
 ## Verification
 
-- `python3 -m pytest -q tests/test_mlx_reference_parity.py`: `<result>`
-- `python3 -m pytest -q`: `<result>`
+- `make lstm-parity PYTHON=.venv/bin/python`: `<result or not yet available>`
+- `make mlx-parity PYTHON=.venv/bin/python`: `<result>`
+- `make check PYTHON=.venv/bin/python`: `<result>`
 - `<optional MPS/CUDA command if this PR has one>`: `<result or skip reason>`
 - `git diff --check`: `<result>`
 - GitHub Actions Ubuntu tests: `<result or URL>`
@@ -345,12 +424,17 @@ Follow-up to #2.
 
 - Is the PR the next queue item, or has the queue been explicitly updated?
 - Does the diff stay inside the stated scope?
-- Are MLX runtime semantics unchanged?
+- Does missing-key behavior preserve historical MLX and Torch profiles?
+- Are new LSTM controls explicit and provenance-visible rather than inferred
+  silently from the backend?
+- Does the PR preserve or deliberately migrate the single effective-bias and
+  `rmsnorm_eps: 1e-5` aligned contracts?
 - Is `use_checkpoint: false` preserved for passing PyTorch parity paths?
 - Are checkpointed MPS claims still quarantined?
 - Are tests small and deterministic?
 - Are MPS/CUDA tests skip-safe unless explicitly provisioned?
 - Are no WT103/main-machine/result/`neo.csv` changes present?
+- If WT103 templates are touched, was that separately and explicitly approved?
 - Do local tests pass?
 - Do GitHub Actions pass?
 - Does the PR body report exact verification?

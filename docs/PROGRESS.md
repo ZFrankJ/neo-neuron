@@ -10,17 +10,21 @@ Roadmap priority:
 
 Current position:
 
-- backend parity is locally complete, with CUDA validation still blocked outside the local queue
+- Neo backend parity is locally complete, with CUDA validation still blocked outside the local queue
 - the first paper-facing baseline slice is merged and provides opt-in standard-init PyTorch LSTM controls while preserving historical config behavior
 - recurrent evaluation now has merged compatibility-default block-reset and opt-in streaming semantics
 - config/result labeling now records exact WT2 parameter counts and makes tanh explicit for future WT103 Neo runs
 - a GPT-2-style Transformer control is merged with aligned Torch/MLX causal checkpoint behavior
 - Torch LSTM optimizer grouping now aligns backend-specific recurrent parameter names
+- a four-way model audit found that LSTM parity is not complete: Torch trains
+  two effective bias vectors against MLX's one, Torch LSTM RMSNorm does not use
+  MLX's `1e-5` epsilon, and MLX lacks the explicit dropout/init controls needed
+  for a provenance-distinct aligned baseline
 - old result rows stay provenance-bound; do not silently reinterpret them after baseline changes
 
 Current active checkpoint:
 
-`Baseline and evaluation alignment queue`
+`LSTM four-way alignment correction queue`
 
 Current implementation plan:
 
@@ -55,11 +59,18 @@ Current implementation plan:
 9. LSTM optimizer grouping parity
    - Status: done
    - Result wanted: MLX-reference Torch LSTM training applies recurrent, projection, embedding, and zero-decay buckets by parameter role without changing Neo or Transformer behavior.
+10. LSTM four-way parity and aligned baseline profile
+   - Status: in progress
+   - Result wanted: MLX/Torch LSTM has an explicit same-weight parameter,
+     forward, gradient, optimizer, trajectory, and checkpoint contract; the
+     matched and standard-init profiles remove accidental LSTM-only dropout
+     without changing historical run interpretation.
 
 ## Remaining Scale Estimate
 
-- 0 local parity PRs are currently queued.
-- Baseline alignment is locally complete; paper-quality result production needs a separate approved run plan.
+- 6 local alignment PRs are currently queued.
+- Paper-quality result production remains blocked until the LSTM four-way
+  alignment exit passes and a separate run plan is approved.
 - CUDA validation remains blocked on access to Nvidia hardware or a provisioned GPU runner.
 - Reproducers must run `NEO_RUN_CUDA_PROBE=1 python3 -m pytest -q tests/test_cuda_parity_harness.py` and confirm it does not skip before making CUDA claims.
 - Standard GitHub-hosted runners for individual repos are not an acceptable substitute for Nvidia GPU validation.
