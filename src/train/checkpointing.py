@@ -1,6 +1,7 @@
 """Checkpoint save/load helpers."""
 
 import pickle
+import warnings
 from pathlib import Path
 from typing import Any, Optional
 
@@ -94,4 +95,11 @@ def load_checkpoint(
             optimizer.load_state_dict(ckpt["optimizer_state_dict"])
         if scheduler is not None and ckpt.get("scheduler_state_dict") is not None:
             scheduler.load_state_dict(ckpt["scheduler_state_dict"])
+    elif optimizer is not None and ckpt.get("optimizer_state_dict") is not None:
+        warnings.warn(
+            "cross-backend optimizer resume is unsupported; loaded model weights "
+            "without restoring optimizer state.",
+            UserWarning,
+            stacklevel=2,
+        )
     return ckpt

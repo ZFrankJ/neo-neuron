@@ -158,46 +158,20 @@ LSTM is alignment-ready only when all of the following are true:
 - PR #23: https://github.com/ZFrankJ/neo-neuron/pull/23
   - Merge commit: `2ca64ea Merge pull request #23 from ZFrankJ/codex/fix/lstm-effective-bias-contract`
   - Added an explicit single-effective-bias Torch LSTM mode matching MLX trainable parameter and update semantics.
+- PR #24: https://github.com/ZFrankJ/neo-neuron/pull/24
+  - Merge commit: `4b26e91 Merge pull request #24 from ZFrankJ/codex/fix/lstm-forward-checkpoint-parity`
+  - Added deterministic MLX/Torch LSTM forward, recurrent-state, loss, and checkpoint parity with explicit RMSNorm epsilon handling.
 
 ## Active PR Queue
 
 Execute exactly one packet at a time. Expected PR numbers are based on the live
-remote state after PR #23 merged. PR #24 is implemented on the branch below;
-recheck GitHub before creating each PR because numbers can drift.
-
-### PR #24: LSTM Forward And Checkpoint Parity
-
-- Status:
-  - implemented on `codex/fix/lstm-forward-checkpoint-parity`; pending review and merge
-- Branch:
-  - `codex/fix/lstm-forward-checkpoint-parity`
-- Goal:
-  - Establish the missing deterministic MLX/Torch LSTM forward contract.
-- Public contract:
-  - Add explicit LSTM `rmsnorm_eps` handling.
-  - The aligned profile uses `rmsnorm_eps: 1e-5`.
-  - Legacy Torch configs that omit the field retain their historical epsilon
-    interpretation; MLX may accept missing or `1e-5`, but must reject an
-    unsupported explicit value instead of silently ignoring it.
-- Scope:
-  - Add same-weight forward, recurrent-state, and loss parity for one and
-    multiple layers with `none`, `layernorm`, and `rmsnorm`.
-  - Cover MLX-to-Torch and Torch-to-MLX model checkpoint conversion.
-  - Add LSTM checkpoint metadata guards for bias mode, recurrent norm,
-    norm placement, and RMSNorm epsilon. Missing fields remain legacy warnings.
-  - Add a dedicated `make lstm-parity` target and keep it skip-safe without
-    MLX.
-- Exit criteria:
-  - RMSNorm mapped-weight logits return to the established small numerical
-    envelope without tolerance relaxation.
-  - Both checkpoint directions preserve evaluation loss.
-  - Existing Neo parity remains green.
-  - `make check` and `make lstm-parity` pass.
+remote state after PR #24 merged. Recheck GitHub before creating each PR because
+numbers can drift.
 
 ### PR #25: LSTM Gradient And Trajectory Parity
 
 - Status:
-  - queued after PR #24
+  - implemented on `codex/test/lstm-training-trajectory-parity`; pending review and merge
 - Branch:
   - `codex/test/lstm-training-trajectory-parity`
 - Goal:

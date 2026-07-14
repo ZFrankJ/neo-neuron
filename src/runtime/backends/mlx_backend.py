@@ -7,6 +7,7 @@ import math
 import pickle
 import random
 import sys
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -934,6 +935,13 @@ def load_checkpoint_entry(
             optimizer.state = _unflatten_tree(ckpt["optimizer_state_dict"])
         if scheduler is not None and ckpt.get("scheduler_state_dict") is not None:
             scheduler.update(ckpt["scheduler_state_dict"])
+    elif optimizer is not None and ckpt.get("optimizer_state_dict") is not None:
+        warnings.warn(
+            "cross-backend optimizer resume is unsupported; loaded model weights "
+            "without restoring optimizer state.",
+            UserWarning,
+            stacklevel=2,
+        )
     return ckpt
 
 

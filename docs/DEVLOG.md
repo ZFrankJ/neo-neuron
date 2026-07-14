@@ -2,6 +2,36 @@
 
 Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLAN.md`; keep broad priorities in `docs/ROADMAP.md`.
 
+## 2026-07-14 - LSTM Gradient And Trajectory Parity
+
+- Decision:
+  - Added deterministic MLX-reference LSTM training parity for the explicit
+    single-bias, `rmsnorm_eps: 1e-5`, no-dropout, fixed-batch,
+    no-checkpoint profile.
+  - Set `1e-6` loss, `1e-5` gradient/update, and `2e-5` 12-step trajectory
+    tolerances from measured local maxima of `7.16e-7` loss drift, `5.93e-7`
+    gradient-norm drift, `2.99e-8` parameter drift, and `1.20e-7` recurrent
+    state drift without weakening the existing Neo contract.
+  - Kept optimizer state backend-native: same-backend resume is exact, while a
+    cross-backend load with optimizer state now warns and leaves the
+    destination optimizer state untouched.
+- Why:
+  - Forward parity alone did not prove that every mapped gradient, decay role,
+    Adam update, recurrent state, and short training trajectory matched MLX.
+  - The historical split-bias Torch path doubles the effective gate-bias update;
+    the new regression proves it falls outside the aligned update envelope.
+- Scope:
+  - `tests/test_lstm_training_parity.py`
+  - `src/train/checkpointing.py`
+  - `src/runtime/backends/mlx_backend.py`
+  - `Makefile`
+  - user and workflow documentation
+- Impact:
+  - `make lstm-parity` now covers deterministic LSTM inference, gradients,
+    public optimizer roles, one update, short trajectory, and optimizer resume.
+  - Random-batch and dropout-mask replay, cross-backend optimizer-state mapping,
+    WT103 runs, results, and `neo.csv` remain outside this contract.
+
 ## 2026-07-14 - LSTM Forward And Checkpoint Parity
 
 - Decision:
