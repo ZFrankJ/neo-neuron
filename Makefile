@@ -24,7 +24,7 @@ mlx-parity:
 	$(PYTHON) -m pytest -q tests/test_mlx_reference_parity.py
 
 lstm-parity:
-	$(PYTHON) -m pytest -q tests/test_lstm_init_controls.py tests/test_lstm_forward_parity.py tests/test_lstm_training_parity.py tests/test_scheduler_timing.py tests/test_lstm_alignment_profile.py
+	$(PYTHON) -m pytest -q tests/test_lstm_init_controls.py tests/test_lstm_forward_parity.py tests/test_lstm_training_parity.py tests/test_scheduler_timing.py tests/test_lstm_alignment_profile.py tests/test_wt103_lstm_diagnostic_profiles.py
 
 mps-probe:
 	NEO_RUN_MPS_PROBE=1 $(PYTHON) -m pytest -q tests/test_mps_no_checkpoint_probe.py

@@ -96,6 +96,14 @@ Its Torch and MLX trainable parameter counts are both exactly **3,546,833**.
 This is a trial-readiness fixture, not a paper-quality result-production plan;
 existing WT103 configs and run tags remain unchanged.
 
+The separately named 60M-total / 50M-recurrent-core boundary diagnostic configs
+`configs/wt103/lstm_60m_matched_no_layer_dropout.yaml` and
+`configs/wt103/lstm_60m_standard_init_no_layer_dropout.yaml` freeze the approved
+10-layer, 60,024,343-parameter MLX profiles. Their presence does not authorize a
+training run: the matched profile must be explicitly started first and reviewed
+at the predeclared epoch-4 streaming-validation gate documented in
+`docs/training.md`; the standard-init profile is only a sequential fallback.
+
 ## Config and result labels
 
 Future WT103 Neo runs use `tanh`, and the checked-in Neo run tags include

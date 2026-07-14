@@ -11,7 +11,8 @@ open a new tracking issue only when explicitly requested.
 
 ```text
 completed packet PR 1: https://github.com/ZFrankJ/neo-neuron/pull/29
-next active packet PR 2: WT103 50M-recurrent-core LSTM diagnostic profiles
+completed packet PR 2: https://github.com/ZFrankJ/neo-neuron/pull/30
+next checkpoint: 60M-total / 50M-recurrent-core boundary diagnostic experiment gate
 ```
 
 MLX is the frozen scientific reference backend. Existing clean MLX result rows outside this repo remain authoritative.
@@ -108,7 +109,7 @@ following are true:
   initialization keys; the standard-init fallback explicitly selects positive
   forget bias and orthogonal recurrent initialization.
 - The first run is only the `d_model=790`, `n_layers=10` MLX LSTM: approximately
-  50M recurrent-core and 60M total parameters, configured for 12 epochs and
+  60M total / 50M recurrent-core parameters, configured for 12 epochs and
   reviewed after epoch 4.
 - Broader LSTM scaling is authorized only if the diagnostic shows meaningful
   recovery; clean MLX Neo checkpoints are reevaluated rather than retrained.
@@ -219,62 +220,15 @@ following are true:
 - PR #29: https://github.com/ZFrankJ/neo-neuron/pull/29
   - Hardened the frozen Neo MLX RMSNorm epsilon contract, added tanh to the
     mapped-weight parity matrix, and isolated MLX default-device state in tests.
+- PR #30: https://github.com/ZFrankJ/neo-neuron/pull/30
+  - Added test-covered 60M-total / 50M-recurrent-core matched and standard-init
+    boundary diagnostic profiles without changing historical WT103 paths.
 
-## Active PR Queue
+## Active Execution Queue
 
 Execute exactly one packet at a time in this order.
 
-### PR 2 - WT103 50M-Recurrent-Core LSTM Diagnostic Profiles
-
-- Depends on:
-  - PR #29 merged
-- Purpose:
-  - create the minimum explicit config surface needed to test whether repeated
-    LSTM inter-layer dropout caused the observed depth degradation
-- New paths only:
-  - `configs/wt103/lstm_60m_matched_no_layer_dropout.yaml`
-  - `configs/wt103/lstm_60m_standard_init_no_layer_dropout.yaml`
-- Shared contract:
-  - MLX training backend and `reference_backend: mlx`
-  - `d_model: 790` and `n_layers: 10`, matching the recorded approximately 50M
-    recurrent-core / 60M-total historical LSTM geometry
-  - exactly `60,024,343` trainable parameters on MLX and aligned single-bias
-    Torch construction
-  - `lstm_bias_mode: single`
-  - `recurrent_norm: rmsnorm`, `recurrent_norm_place: all`, and
-    `rmsnorm_eps: 1e-5`
-  - `lstm_layer_dropout: 0.0` while retaining output `dropout: 0.1`
-  - `use_checkpoint: false`
-  - `eval_regime: streaming`
-  - 12 epochs, existing WT103 optimizer/scheduler values, fresh start, per-epoch
-    checkpoints, seed `42`, and unique provenance-bearing run tags
-- Profile difference:
-  - matched profile omits `forget_bias_init` and `recurrent_init`, preserving
-    native MLX initialization
-  - standard-init profile sets `forget_bias_init: 1.0` and
-    `recurrent_init: orthogonal`
-  - Torch construction of the matched profile is a compatibility and evaluation
-    check, not a fresh-run initialization-equivalence claim
-- Required tests:
-  - both configs construct on MLX and Torch
-  - both configs expose the intended trainable counts and policy fields
-  - historical WT103 config contracts remain unchanged
-  - run tags cannot collide with historical artifacts
-  - the config documentation freezes the epoch-4 validation baselines and gate
-    before either run starts
-- Excluded:
-  - Neo retraining configs
-  - 20M/30M/50M/70M/80M/90M total-parameter LSTM profile matrices
-  - starting either training run
-- Verification:
-  - config-contract tests
-  - `make lstm-parity`
-  - `make check`
-- Exit:
-  - both diagnostic profiles are reviewable and runnable, with historical paths
-    untouched
-
-### Experiment Gate - Not A Code PR
+### 60M-Total / 50M-Recurrent-Core Boundary Diagnostic - Not A Code PR
 
 - Start only the matched-no-layer-dropout `d_model=790`, `n_layers=10` MLX LSTM.
 - Keep `epochs: 12`; do not shorten the schedule when planning to review at
@@ -292,7 +246,8 @@ Execute exactly one packet at a time in this order.
 - If matched epoch-4 validation PPL is above `83.54`, stop it and run only the
   standard-init fallback to epoch 4 under the same gate.
 - If the standard-init fallback also remains above `83.54`, stop and classify
-  the 50M-recurrent-core recovery attempt as negative; do not rebuild the scale.
+  the 60M-total / 50M-recurrent-core recovery attempt as negative; do not
+  rebuild the scale.
 - `83.54` is an operational resource-allocation gate, not a statistical
   significance threshold. A successful one-seed diagnostic selects the next
   profile; it does not establish a paper-facing superiority claim.
@@ -333,7 +288,8 @@ Optional hardware probes remain local/manual:
 
 Do not hand these to an agent yet:
 
-- Full WT103 scaling reruns before the 50M-recurrent-core diagnostic gate is classified.
+- Full WT103 scaling reruns before the 60M-total / 50M-recurrent-core boundary
+  diagnostic gate is classified.
 - Revalidating old PyTorch MPS result rows.
 - Making MPS a production result backend.
 - Re-enabling activation checkpointing for result production.
@@ -344,8 +300,8 @@ Do not hand these to an agent yet:
   while paper variance uses repeated backend-local seeds.
 - Aligning the divergent `tbptt_len < block_size` optimizer-step contract until
   a future approved config actually needs shorter TBPTT chunks.
-- Adding WT103 profile matrices beyond the two approved 50M-recurrent-core diagnostic
-  paths before the diagnostic gate is classified.
+- Adding WT103 profile matrices beyond the two approved 60M-total /
+  50M-recurrent-core boundary diagnostic paths before the gate is classified.
 - Making a paper-facing recovered-scaling claim before a separate repeated-seed
   variance packet is approved and completed.
 - Introducing CUDA speed features such as AMP, TF32 changes, fused optimizers, `torch.compile`, or activation checkpointing before boring full-precision CUDA parity passes.

@@ -42,10 +42,12 @@ Current position:
 - Neo MLX now rejects unsupported explicit RMSNorm epsilon values, tanh is in
   the committed mapped-weight parity matrix, and MLX device state is isolated
   across the focused parity suite
+- the two test-covered 60M-total / 50M-recurrent-core LSTM boundary diagnostic
+  profiles are complete; their presence does not start a training run
 
 Current active checkpoint:
 
-`Neo MLX contract hardening complete; WT103 diagnostic profile preparation pending PR #29 merge`
+`60M-total / 50M-recurrent-core boundary diagnostic gate next; no run started`
 
 Current implementation plan:
 
@@ -97,23 +99,22 @@ Current implementation plan:
      cover tanh in the committed mapped-weight parity matrix, and prevent MLX
      device state from leaking between tests.
 13. WT103 diagnostic profile preparation
-   - Status: pending PR #29 merge
-   - Result wanted: add separately named, test-covered 50M-recurrent-core,
-     approximately 60M-total matched and standard-init no-layer-dropout LSTM
+   - Status: done
+   - Result wanted: add separately named, test-covered 60M-total /
+     50M-recurrent-core matched and standard-init no-layer-dropout LSTM
      configs without editing historical paths.
-14. 50M-recurrent-core matched-no-layer-dropout LSTM diagnostic
-   - Status: pending explicit run start after checkpoint 13 merges
+14. 60M-total / 50M-recurrent-core boundary diagnostic
+   - Status: next; no run started
    - Result wanted: train with a 12-epoch scheduler contract, inspect at epoch 4,
      and continue, switch profile, or stop according to the predeclared gate.
 
 ## Remaining Scale Estimate
 
-- One implementation PR remains before the first diagnostic: new WT103 profile
-  configs plus config tests after PR #29 merges.
-- The diagnostic run is not a code PR and must not start before both
-  implementation PRs merge and the user explicitly starts or authorizes it.
-- A full LSTM scaling rebuild remains conditional on meaningful 50M-recurrent-core
-  recovery; no Neo retraining is planned.
+- No implementation PR remains before the boundary diagnostic.
+- The diagnostic run is not a code PR and must be explicitly started or
+  authorized; no run has started.
+- A full LSTM scaling rebuild remains conditional on meaningful 60M-total /
+  50M-recurrent-core recovery; no Neo retraining is planned.
 - CUDA validation remains blocked on access to Nvidia hardware or a provisioned GPU runner.
 - Reproducers must run `NEO_RUN_CUDA_PROBE=1 python3 -m pytest -q tests/test_cuda_parity_harness.py` and confirm it does not skip before making CUDA claims.
 - Standard GitHub-hosted runners for individual repos are not an acceptable substitute for Nvidia GPU validation.

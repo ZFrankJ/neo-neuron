@@ -77,7 +77,7 @@ This roadmap lists broad project priorities only. Checkpoint state belongs in `d
 
 ## 4. Result Production And WT103 Revalidation
 
-- Status: planning and new-profile config preparation approved; no run started
+- Status: boundary diagnostic profiles complete; experiment gate next; no run started
 - Why now:
   - Old PyTorch MPS WT103 rows are not trusted, and new result production should wait until baseline alignment is explicit.
   - The four-path audit found that the historical MLX results remain valid for
@@ -87,18 +87,19 @@ This roadmap lists broad project priorities only. Checkpoint state belongs in `d
   - Preserve historical WT103 configs, run tags, checkpoints, and result labels.
   - Close the remaining Neo MLX contract and parity-test gaps before adding new
     WT103 profiles.
-  - Add separately named 50M-recurrent-core, approximately 60M-total,
-    matched-no-layer-dropout and standard-init LSTM diagnostic profiles with
+  - Preserve the separately named 60M-total / 50M-recurrent-core
+    matched-no-layer-dropout and standard-init LSTM boundary profiles with
     config-contract tests.
   - Do not retrain clean MLX Neo checkpoints when the new explicit fields do not
     change their training mathematics; use streaming reevaluation instead.
-  - Run only the matched-no-layer-dropout 50M-recurrent-core LSTM first, with a
-    12-epoch schedule and an epoch-4 validation gate before any broader scaling
-    work.
+  - Run only the matched-no-layer-dropout 60M-total / 50M-recurrent-core LSTM
+    first, with a 12-epoch schedule and an epoch-4 validation gate before any
+    broader scaling work.
 - Exit condition:
-  - The new profiles are merged without repurposing historical paths, the first
-    50M-recurrent-core diagnostic is classified at the epoch-4 gate, and broader LSTM
-    retraining is either justified by recovery or explicitly rejected.
+  - The new profiles are merged without repurposing historical paths, the
+    60M-total / 50M-recurrent-core boundary diagnostic is classified at the
+    epoch-4 gate, and broader LSTM retraining is either justified by recovery or
+    explicitly rejected.
 - Expanded plan:
   - `docs/PROGRESS.md`
   - `docs/IMPLEMENTATION_PLAN.md`
