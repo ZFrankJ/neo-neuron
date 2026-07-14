@@ -35,6 +35,8 @@ python3 scripts/eval.py --config configs/wt103/neo_20m.yaml --checkpoint checkpo
 - `mlx` backend evaluation currently reports perplexity, while GFLOPs/token and activation sparsity are marked unavailable.
 - Checkpoints are stored in a unified model-state format and can be loaded across `torch` and `mlx` for model weights.
 - Optimizer/scheduler state remains backend-native and is restored only when backend matches.
+  Supplying an optimizer during a cross-backend load emits a warning and leaves
+  that optimizer's state untouched.
 - Neo checkpoints now carry alignment metadata such as `reference_backend`, `rmsnorm_eps`,
   `activation_id`, recurrent norm settings, `use_checkpoint`, and `weight_decay_policy`.
   Missing metadata is treated as legacy/provisional, while mismatches with the requested
@@ -139,6 +141,11 @@ make lstm-parity
 make mps-probe
 make cuda-probe
 ```
+
+`make lstm-parity` covers deterministic LSTM forward/checkpoint behavior plus
+mapped gradients, public optimizer roles, one update, a short fixed-batch
+trajectory, and backend-native optimizer resume. It does not claim random-batch
+or dropout-mask replay across backends.
 
 `make mps-probe` is opt-in Apple Silicon diagnostics only. It does not validate checkpointed MPS, WT103 training, or production result quality. The strict backend parity PR queue lives in `docs/IMPLEMENTATION_PLAN.md`.
 `make cuda-probe` is opt-in Nvidia CUDA diagnostics only. It skips without CUDA and does not make CUDA a required local or CI gate.

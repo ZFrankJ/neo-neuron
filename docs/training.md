@@ -70,6 +70,23 @@ record and validate `lstm_bias_mode`, `recurrent_norm`,
 `recurrent_norm_place`, and `rmsnorm_eps`; checkpoints missing those fields are
 loadable as legacy/provisional state with a warning.
 
+The deterministic LSTM training-parity profile additionally requires
+`reference_backend: mlx`, `lstm_bias_mode: single`, `dropout: 0.0`, fixed
+batches, and `use_checkpoint: false`. Its test envelope is `1e-6` for loss,
+`1e-5` for mapped gradients, one optimizer update, and the 12-step fixed-batch
+trajectory; recurrent-state comparisons use `rtol=1e-5` and `atol=1e-6`.
+Torch and MLX model initialization is reset to the fixed seed `20260714` before
+each test. These thresholds were set above the measured
+local maxima of `7.16e-7` loss drift, `5.93e-7` gradient-norm drift,
+`2.99e-8` parameter drift, and `1.20e-7` recurrent-state drift. Exact replay of
+random batches or dropout masks remains outside the contract.
+
+Optimizer state is backend-native. Same-backend Torch and MLX checkpoint resume
+is covered exactly. Cross-backend loads convert model weights only; when an
+optimizer and saved optimizer state are both present, the loader warns that
+cross-backend optimizer resume is unsupported and leaves the destination
+optimizer state untouched.
+
 Do not relabel historical runs as standard-init runs. The new controls affect
 parameter initialization and therefore only apply when starting a new PyTorch
 LSTM run; loaded checkpoint weights remain authoritative. A future matched

@@ -19,10 +19,12 @@ Current position:
 - the explicit Torch LSTM single-bias mode now matches MLX trainable parameter
   and effective-bias update semantics
 - deterministic MLX/Torch LSTM forward, recurrent-state, loss, and checkpoint
-  conversion parity now covers one/two layers and all supported norm modes;
-  the explicit aligned RMSNorm epsilon contract is pending review
-- the remaining four-way LSTM gaps are gradient/trajectory parity, public-loop
-  schedule timing, and MLX support for explicit dropout/init controls
+  conversion parity now covers one/two layers and all supported norm modes with
+  the merged explicit aligned RMSNorm epsilon contract
+- deterministic LSTM gradient, optimizer, 12-step fixed-batch trajectory, and
+  same-backend optimizer-resume parity is implemented and pending review
+- the remaining four-way LSTM gaps are public-loop schedule timing and MLX
+  support for explicit dropout/init controls
 - old result rows stay provenance-bound; do not silently reinterpret them after baseline changes
 
 Current active checkpoint:
@@ -71,7 +73,7 @@ Current implementation plan:
 
 ## Remaining Scale Estimate
 
-- PR #24 is implemented and pending review; 4 later local alignment PRs remain queued.
+- PR #25 is implemented and pending review; 3 later local alignment PRs remain queued.
 - Paper-quality result production remains blocked until the LSTM four-way
   alignment exit passes and a separate run plan is approved.
 - CUDA validation remains blocked on access to Nvidia hardware or a provisioned GPU runner.
