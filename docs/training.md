@@ -73,8 +73,10 @@ loadable as legacy/provisional state with a warning.
 The deterministic LSTM training-parity profile additionally requires
 `reference_backend: mlx`, `lstm_bias_mode: single`, `dropout: 0.0`, fixed
 batches, and `use_checkpoint: false`. Its test envelope is `1e-6` for loss,
-`1e-5` for mapped gradients and one optimizer update, and `2e-5` across a
-12-step fixed-batch trajectory. These thresholds were set above the measured
+`1e-5` for mapped gradients, one optimizer update, and the 12-step fixed-batch
+trajectory; recurrent-state comparisons use `rtol=1e-5` and `atol=1e-6`.
+Torch and MLX model initialization is reset to the fixed seed `20260714` before
+each test. These thresholds were set above the measured
 local maxima of `7.16e-7` loss drift, `5.93e-7` gradient-norm drift,
 `2.99e-8` parameter drift, and `1.20e-7` recurrent-state drift. Exact replay of
 random batches or dropout masks remains outside the contract.

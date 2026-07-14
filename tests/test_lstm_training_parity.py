@@ -23,8 +23,15 @@ from src.train.optim import build_optimizer
 LOSS_ATOL = 1e-6
 GRADIENT_ATOL = 1e-5
 UPDATE_ATOL = 1e-5
-TRAJECTORY_ATOL = 2e-5
+TRAJECTORY_ATOL = 1e-5
 TRAJECTORY_STEPS = 12
+MODEL_SEED = 20260714
+
+
+@pytest.fixture(autouse=True)
+def _seed_model_initialization():
+    torch.manual_seed(MODEL_SEED)
+    mx.random.seed(MODEL_SEED)
 
 
 def _cfg(**overrides):
@@ -355,8 +362,8 @@ def test_lstm_fixed_batch_short_training_trajectory_stays_inside_envelope():
     assert max_loss_diff <= TRAJECTORY_ATOL
     assert max_gradient_norm_diff <= TRAJECTORY_ATOL
     assert _max_tree_diff(torch_after, mapped_after) <= TRAJECTORY_ATOL
-    np.testing.assert_allclose(torch_state[0], mlx_state[0], rtol=2e-5, atol=2e-6)
-    np.testing.assert_allclose(torch_state[1], mlx_state[1], rtol=2e-5, atol=2e-6)
+    np.testing.assert_allclose(torch_state[0], mlx_state[0], rtol=1e-5, atol=1e-6)
+    np.testing.assert_allclose(torch_state[1], mlx_state[1], rtol=1e-5, atol=1e-6)
 
 
 def _torch_training_step(model, optimizer, cfg, step):

@@ -8,10 +8,14 @@ Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLA
   - Added deterministic MLX-reference LSTM training parity for the explicit
     single-bias, `rmsnorm_eps: 1e-5`, no-dropout, fixed-batch,
     no-checkpoint profile.
-  - Set `1e-6` loss, `1e-5` gradient/update, and `2e-5` 12-step trajectory
-    tolerances from measured local maxima of `7.16e-7` loss drift, `5.93e-7`
-    gradient-norm drift, `2.99e-8` parameter drift, and `1.20e-7` recurrent
-    state drift without weakening the existing Neo contract.
+  - Set `1e-6` loss and `1e-5` gradient/update/12-step trajectory tolerances,
+    with recurrent-state `rtol=1e-5` and `atol=1e-6`, from measured local
+    maxima of `7.16e-7` loss drift, `5.93e-7` gradient-norm drift, `2.99e-8`
+    parameter drift, and `1.20e-7` recurrent state drift without weakening the
+    existing Neo contract.
+  - Reset Torch and MLX initialization to fixed seed `20260714` before every
+    training-parity test so the measured envelope is reproducible across fresh
+    processes.
   - Kept optimizer state backend-native: same-backend resume is exact, while a
     cross-backend load with optimizer state now warns and leaves the
     destination optimizer state untouched.
