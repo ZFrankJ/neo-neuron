@@ -265,14 +265,20 @@ def _fused_cortical_step(
     return output, state
 
 
-def _build_output_norm(norm_type: str, dims: int) -> mxnn.Module:
+def _build_output_norm(
+    norm_type: str,
+    dims: int,
+    rmsnorm_eps: Optional[float] = None,
+) -> mxnn.Module:
     norm = str(norm_type).strip().lower()
     if norm in ("none", "off", "identity"):
         return mxnn.Identity()
     if norm in ("layernorm", "layer_norm", "ln"):
         return mxnn.LayerNorm(dims)
     if norm in ("rmsnorm", "rms_norm", "rms"):
-        return mxnn.RMSNorm(dims)
+        if rmsnorm_eps is None:
+            return mxnn.RMSNorm(dims)
+        return mxnn.RMSNorm(dims, eps=float(rmsnorm_eps))
     raise ValueError(f"Unsupported output_norm '{norm_type}'.")
 
 
@@ -408,6 +414,7 @@ class MlxLSTMLM(mxnn.Module):
         tie_embeddings: bool,
         output_norm: str = "layernorm",
         norm_place: str = "all",
+        rmsnorm_eps: Optional[float] = None,
     ):
         super().__init__()
         self.vocab_size = int(vocab_size)
@@ -422,10 +429,16 @@ class MlxLSTMLM(mxnn.Module):
         self.lstm_layers = [mxnn.LSTM(d_model, d_model) for _ in range(n_layers)]
         place = _parse_norm_place(norm_place)
         self.pre_norms = [
-            _build_output_norm(output_norm, d_model) if place in ("all", "pre") else mxnn.Identity()
+            _build_output_norm(output_norm, d_model, rmsnorm_eps)
+            if place in ("all", "pre")
+            else mxnn.Identity()
             for _ in range(n_layers)
         ]
-        self.stack_norm = _build_output_norm(output_norm, d_model) if place in ("all", "stack") else mxnn.Identity()
+        self.stack_norm = (
+            _build_output_norm(output_norm, d_model, rmsnorm_eps)
+            if place in ("all", "stack")
+            else mxnn.Identity()
+        )
         self.drop = mxnn.Dropout(dropout)
         self.layer_drop = float(dropout)
         self.out_proj = mxnn.Linear(d_model, d_embed) if d_embed != d_model else mxnn.Identity()
@@ -599,6 +612,17 @@ def build_model(cfg: Dict[str, Any], model_name: str):
                 "MLX LSTM supports only lstm_bias_mode='single'; "
                 "MLX runtime semantics are frozen."
             )
+        lstm_rmsnorm_eps = cfg.get("rmsnorm_eps")
+        if lstm_rmsnorm_eps is not None and not math.isclose(
+            float(lstm_rmsnorm_eps),
+            1e-5,
+            rel_tol=0.0,
+            abs_tol=1e-12,
+        ):
+            raise ValueError(
+                "MLX LSTM supports only rmsnorm_eps=1e-5; "
+                "MLX runtime semantics are frozen."
+            )
         uses_torch_init_controls = (
             float(cfg.get("forget_bias_init", 0.0)) != 0.0
             or str(cfg.get("recurrent_init", "xavier_uniform")).strip().lower()
@@ -619,6 +643,9 @@ def build_model(cfg: Dict[str, Any], model_name: str):
             tie_embeddings=tie_embeddings,
             output_norm=recurrent_norm,
             norm_place=recurrent_norm_place,
+            rmsnorm_eps=(
+                None if lstm_rmsnorm_eps is None else float(lstm_rmsnorm_eps)
+            ),
         )
     if model_name == "transformer":
         n_heads = int(_require(cfg, "n_heads"))

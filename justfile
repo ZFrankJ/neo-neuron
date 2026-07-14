@@ -18,6 +18,9 @@ test:
 mlx-parity:
   make mlx-parity
 
+lstm-parity:
+  make lstm-parity
+
 mps-probe:
   make mps-probe
 

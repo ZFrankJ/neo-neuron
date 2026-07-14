@@ -2,6 +2,39 @@
 
 Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLAN.md`; keep broad priorities in `docs/ROADMAP.md`.
 
+## 2026-07-14 - LSTM Forward And Checkpoint Parity
+
+- Decision:
+  - Added explicit LSTM `rmsnorm_eps` handling with `1e-5` as the aligned
+    Torch/MLX value.
+  - Preserved the historical Torch dtype-derived RMSNorm epsilon when the field
+    is absent; MLX accepts missing or explicit `1e-5` and rejects other
+    explicit values without changing its native runtime semantics.
+  - Added LSTM checkpoint guards for bias mode, recurrent norm, norm placement,
+    and RMSNorm epsilon, with missing fields treated as legacy/provisional.
+- Why:
+  - PyTorch RMSNorm defaults to a dtype-derived epsilon while MLX uses `1e-5`,
+    which caused mapped-weight LSTM logits to diverge despite matching weights.
+  - Forward and checkpoint claims need deterministic coverage across supported
+    norm modes and layer counts before training-trajectory parity is meaningful.
+- Scope:
+  - `src/models/lstm_lm.py`
+  - `src/runtime/backends/torch_backend.py`
+  - `src/runtime/backends/mlx_backend.py`
+  - `src/runtime/checkpoint_compat.py`
+  - `tests/test_lstm_forward_parity.py`
+  - `Makefile`
+  - `justfile`
+  - `.github/workflows/tests.yml`
+  - user and workflow documentation
+- Impact:
+  - Same mapped weights now match forward logits, recurrent state, and loss for
+    one/two-layer LSTMs using no norm, LayerNorm, or RMSNorm.
+  - MLX-to-Torch and Torch-to-MLX checkpoint conversion preserves evaluation
+    loss under the aligned profile.
+  - Historical Torch configs and checkpoints are not silently relabeled as
+    aligned; no WT103 run, result, or `neo.csv` behavior changes.
+
 ## 2026-07-14 - LSTM Effective-Bias Contract
 
 - Decision:

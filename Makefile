@@ -1,4 +1,4 @@
-.PHONY: check test docs-check mlx-parity mps-probe cuda-probe torch-validate help
+.PHONY: check test docs-check mlx-parity lstm-parity mps-probe cuda-probe torch-validate help
 
 PYTHON ?= python3
 
@@ -23,6 +23,9 @@ docs-check:
 mlx-parity:
 	$(PYTHON) -m pytest -q tests/test_mlx_reference_parity.py
 
+lstm-parity:
+	$(PYTHON) -m pytest -q tests/test_lstm_forward_parity.py
+
 mps-probe:
 	NEO_RUN_MPS_PROBE=1 $(PYTHON) -m pytest -q tests/test_mps_no_checkpoint_probe.py
 
@@ -38,6 +41,7 @@ help:
 	@echo "  test        - full pytest suite"
 	@echo "  docs-check  - required harness docs/workflow files exist"
 	@echo "  mlx-parity  - MLX reference parity tests"
+	@echo "  lstm-parity - deterministic MLX/Torch LSTM forward and checkpoint parity"
 	@echo "  mps-probe   - opt-in tiny PyTorch MPS no-checkpoint probe"
 	@echo "  cuda-probe  - opt-in tiny PyTorch CUDA no-checkpoint probe"
 	@echo "  torch-validate - Torch CPU checks plus MLX/MPS parity preflights"

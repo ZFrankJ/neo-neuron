@@ -22,9 +22,14 @@ class LSTMConfig:
     recurrent_init: str = "xavier_uniform"
     lstm_layer_dropout: Optional[float] = None
     lstm_bias_mode: str = "split"
+    rmsnorm_eps: Optional[float] = None
 
 
-def _build_output_norm(norm_type: str, d_model: int) -> nn.Module:
+def _build_output_norm(
+    norm_type: str,
+    d_model: int,
+    rmsnorm_eps: Optional[float] = None,
+) -> nn.Module:
     norm = str(norm_type).strip().lower()
     if norm in ("none", "off", "identity"):
         return nn.Identity()
@@ -34,7 +39,9 @@ def _build_output_norm(norm_type: str, d_model: int) -> nn.Module:
         rms_norm = getattr(nn, "RMSNorm", None)
         if rms_norm is None:
             raise ValueError("RMSNorm is not available in this torch version.")
-        return rms_norm(d_model)
+        if rmsnorm_eps is None:
+            return rms_norm(d_model)
+        return rms_norm(d_model, eps=float(rmsnorm_eps))
     raise ValueError(f"Unsupported output_norm '{norm_type}'.")
 
 
@@ -67,6 +74,7 @@ class LSTMStack(nn.Module):
         forget_bias_init: float = 0.0,
         recurrent_init: str = "xavier_uniform",
         lstm_bias_mode: str = "split",
+        rmsnorm_eps: Optional[float] = None,
     ):
         super().__init__()
         self.d_model = int(d_model)
@@ -85,11 +93,17 @@ class LSTMStack(nn.Module):
         place = _parse_norm_place(norm_place)
         self.pre_norms = nn.ModuleList(
             [
-                _build_output_norm(output_norm, d_model) if place in ("all", "pre") else nn.Identity()
+                _build_output_norm(output_norm, d_model, rmsnorm_eps)
+                if place in ("all", "pre")
+                else nn.Identity()
                 for _ in range(n_layers)
             ]
         )
-        self.stack_norm = _build_output_norm(output_norm, d_model) if place in ("all", "stack") else nn.Identity()
+        self.stack_norm = (
+            _build_output_norm(output_norm, d_model, rmsnorm_eps)
+            if place in ("all", "stack")
+            else nn.Identity()
+        )
 
         gate_dim = 4 * d_model
         for li in range(n_layers):
@@ -193,6 +207,7 @@ class LSTMLM(nn.Module):
         recurrent_init: str = "xavier_uniform",
         lstm_layer_dropout: Optional[float] = None,
         lstm_bias_mode: str = "split",
+        rmsnorm_eps: Optional[float] = None,
     ):
         super().__init__()
         self.vocab_size = vocab_size
@@ -213,6 +228,7 @@ class LSTMLM(nn.Module):
             forget_bias_init=forget_bias_init,
             recurrent_init=recurrent_init,
             lstm_bias_mode=lstm_bias_mode,
+            rmsnorm_eps=rmsnorm_eps,
         )
         self.drop = nn.Dropout(dropout)
         self.out_proj = nn.Linear(d_model, d_embed) if d_embed != d_model else nn.Identity()

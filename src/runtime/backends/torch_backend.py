@@ -52,10 +52,10 @@ def build_model(cfg: Dict[str, Any], model_name: str):
     tie_embeddings = bool(cfg.get("tie_embeddings", True))
     recurrent_norm = _resolve_recurrent_norm(cfg)
     recurrent_norm_place = str(cfg.get("recurrent_norm_place", cfg.get("norm_place", "all")))
-    rmsnorm_eps = float(cfg.get("rmsnorm_eps", 1e-5))
 
     if model_name == "lstm":
         lstm_layer_dropout = cfg.get("lstm_layer_dropout")
+        lstm_rmsnorm_eps = cfg.get("rmsnorm_eps")
         return LSTMLM(
             vocab_size=vocab_size,
             d_model=d_model,
@@ -71,9 +71,13 @@ def build_model(cfg: Dict[str, Any], model_name: str):
                 None if lstm_layer_dropout is None else float(lstm_layer_dropout)
             ),
             lstm_bias_mode=str(cfg.get("lstm_bias_mode", "split")),
+            rmsnorm_eps=(
+                None if lstm_rmsnorm_eps is None else float(lstm_rmsnorm_eps)
+            ),
         )
 
     if model_name == "neo":
+        rmsnorm_eps = float(cfg.get("rmsnorm_eps", 1e-5))
         cell_kwargs = {
             "activation_id": cfg.get("activation_id", "id3"),
         }

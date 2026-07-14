@@ -10,8 +10,8 @@ open a new tracking issue only when explicitly requested.
 ## Current State
 
 ```text
-branch codex/fix/lstm-effective-bias-contract from origin/main
-base 3af08ec docs(plan): reopen LSTM alignment queue
+branch codex/fix/lstm-forward-checkpoint-parity from origin/main
+base 2ca64ea Merge pull request #23 from ZFrankJ/codex/fix/lstm-effective-bias-contract
 ```
 
 MLX is the frozen scientific reference backend. Existing clean MLX result rows outside this repo remain authoritative.
@@ -155,50 +155,20 @@ LSTM is alignment-ready only when all of the following are true:
 - PR #22: https://github.com/ZFrankJ/neo-neuron/pull/22
   - Merge commit: `9b00292 Merge pull request #22 from ZFrankJ/codex/fix/lstm-optimizer-grouping-guard`
   - Aligned MLX-reference Torch LSTM optimizer grouping across backend-specific recurrent parameter names.
+- PR #23: https://github.com/ZFrankJ/neo-neuron/pull/23
+  - Merge commit: `2ca64ea Merge pull request #23 from ZFrankJ/codex/fix/lstm-effective-bias-contract`
+  - Added an explicit single-effective-bias Torch LSTM mode matching MLX trainable parameter and update semantics.
 
 ## Active PR Queue
 
 Execute exactly one packet at a time. Expected PR numbers are based on the live
-remote state after PR #22 merged. PR #23 is implemented on the branch below;
+remote state after PR #23 merged. PR #24 is implemented on the branch below;
 recheck GitHub before creating each PR because numbers can drift.
-
-### PR #23: LSTM Effective-Bias Contract
-
-- Status:
-  - implemented on `codex/fix/lstm-effective-bias-contract`; pending review and merge
-- Branch:
-  - `codex/fix/lstm-effective-bias-contract`
-- Depends on:
-  - merged PR #22
-- Goal:
-  - Give the aligned Torch LSTM one trainable effective gate bias, matching the
-    MLX parameterization and update semantics.
-- Public contract:
-  - Add `lstm_bias_mode: split | single`.
-  - Missing `lstm_bias_mode` keeps legacy Torch `split` behavior and native
-    MLX `single` behavior.
-  - Every aligned config must set `lstm_bias_mode: single` explicitly.
-- Scope:
-  - Start with a failing mapped-weight gradient test showing that current Torch
-    `bias_ih + bias_hh` doubles the effective MLX bias update.
-  - In Torch `single` mode, exactly one effective bias is trainable. Any
-    retained split-bias compatibility state must not receive optimizer updates.
-  - Keep old Torch checkpoints evaluable. Cross-backend conversion may sum
-    legacy split biases, but must warn that cross-backend optimizer resume is
-    not equivalent.
-  - Count trainable parameters consistently across MLX and Torch in single mode.
-  - Correct user-facing LSTM taxonomy so MLX native initialization is not
-    described as Torch Xavier/zero-bias behavior.
-- Exit criteria:
-  - The new gradient contract fails before implementation and passes after it.
-  - Legacy split-bias model loading remains covered.
-  - No Neo, Transformer, WT103 config, run, or result behavior changes.
-  - `make check` passes.
 
 ### PR #24: LSTM Forward And Checkpoint Parity
 
 - Status:
-  - queued after PR #23
+  - implemented on `codex/fix/lstm-forward-checkpoint-parity`; pending review and merge
 - Branch:
   - `codex/fix/lstm-forward-checkpoint-parity`
 - Goal:

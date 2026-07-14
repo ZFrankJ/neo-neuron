@@ -71,6 +71,7 @@ Specific checks:
 ```bash
 make test
 make mlx-parity
+make lstm-parity
 make mps-probe
 make cuda-probe
 ```
