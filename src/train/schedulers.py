@@ -29,8 +29,14 @@ def build_scheduler(
     warmup_steps = max(1, int(warmup_epochs * steps_per_epoch))
     base_lr = float(_cfg_get(cfg, "lr", 3e-4))
     min_lr = float(_cfg_get(cfg, "min_lr", 0.0))
+    schedule_step_offset = (
+        1
+        if str(_cfg_get(cfg, "reference_backend", "")).strip().lower() == "mlx"
+        else 0
+    )
 
     def lr_lambda(step: int) -> float:
+        step += schedule_step_offset
         if step < warmup_steps:
             return step / float(max(1, warmup_steps))
         progress = (step - warmup_steps) / float(max(1, total_steps - warmup_steps))

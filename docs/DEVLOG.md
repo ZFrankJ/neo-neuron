@@ -2,6 +2,31 @@
 
 Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLAN.md`; keep broad priorities in `docs/ROADMAP.md`.
 
+## 2026-07-14 - MLX-Reference Scheduler Timing
+
+- Decision:
+  - Shifted the Torch cosine/warmup schedule by one update only when
+    `reference_backend: mlx`, so Torch update one uses MLX schedule step one.
+  - Kept native Torch configs on the historical step-zero start.
+  - Added direct per-update learning-rate coverage and a deterministic public
+    LSTM loop using streaming batches, cosine warmup, and explicit aligned
+    bias, RMSNorm, dropout, and initialization controls.
+- Why:
+  - MLX assigns `scheduler.lr(global_step + 1)` before each optimizer update,
+    while Torch `LambdaLR` initialized the first update at step zero and only
+    advanced after the optimizer update.
+- Scope:
+  - `src/train/schedulers.py`
+  - `tests/test_scheduler_timing.py`
+  - `tests/test_lstm_training_parity.py`
+  - `Makefile`
+  - training and workflow documentation
+- Impact:
+  - Explicit MLX-reference Torch runs now match MLX per-update learning rates
+    and deterministic public-loop LSTM metrics.
+  - Historical native Torch schedules, MLX runtime semantics, WT103 configs,
+    runs, results, and `neo.csv` remain unchanged.
+
 ## 2026-07-14 - Cross-Backend LSTM Baseline Controls
 
 - Decision:

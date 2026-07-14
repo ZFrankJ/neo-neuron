@@ -10,8 +10,8 @@ open a new tracking issue only when explicitly requested.
 ## Current State
 
 ```text
-branch codex/feat/mlx-lstm-aligned-controls from origin/main
-base 807a080 Merge pull request #25 from ZFrankJ/codex/test/lstm-training-trajectory-parity
+branch codex/fix/mlx-reference-scheduler-timing from origin/main
+base df19d7f Merge pull request #26 from ZFrankJ/codex/feat/mlx-lstm-aligned-controls
 ```
 
 MLX is the frozen scientific reference backend. Existing clean MLX result rows outside this repo remain authoritative.
@@ -164,49 +164,21 @@ LSTM is alignment-ready only when all of the following are true:
 - PR #25: https://github.com/ZFrankJ/neo-neuron/pull/25
   - Merge commit: `807a080 Merge pull request #25 from ZFrankJ/codex/test/lstm-training-trajectory-parity`
   - Added deterministic LSTM gradient, optimizer, short fixed-batch trajectory, and backend-native optimizer-resume parity.
+- PR #26: https://github.com/ZFrankJ/neo-neuron/pull/26
+  - Merge commit: `df19d7f Merge pull request #26 from ZFrankJ/codex/feat/mlx-lstm-aligned-controls`
+  - Added explicit matched-dropout and standard-init LSTM controls on MLX while preserving missing-key native initialization.
 
 ## Active PR Queue
 
 Execute exactly one packet at a time. Expected PR numbers are based on the live
-remote state after PR #25 merged. Recheck GitHub before creating each PR because
+remote state after PR #26 merged. Recheck GitHub before creating each PR because
 numbers can drift.
-
-### PR #26: Cross-Backend LSTM Baseline Controls
-
-- Status:
-  - implemented on `codex/feat/mlx-lstm-aligned-controls`; pending review and merge
-- Branch:
-  - `codex/feat/mlx-lstm-aligned-controls`
-- Goal:
-  - Make the matched and strong LSTM profiles available on the MLX result
-    backend without changing historical MLX defaults.
-- Public contract:
-  - MLX and Torch both honor explicit `lstm_layer_dropout`,
-    `forget_bias_init`, and `recurrent_init`.
-  - Missing keys preserve native historical behavior on each backend.
-  - The aligned matched profile uses `lstm_layer_dropout: 0.0`.
-  - The strong profile additionally uses `forget_bias_init: 1.0` and
-    `recurrent_init: orthogonal`.
-- Scope:
-  - Remove the current MLX rejection only for implemented, tested controls.
-  - Define the explicit standard-init profile completely: Xavier input
-    matrices, selected recurrent initialization, zero non-forget biases, and
-    the configured forget-bias value.
-  - Test initialization invariants independently on both backends. Equal random
-    tensors from equal seeds are not required.
-  - Preserve missing-key MLX native uniform/random-bias initialization exactly.
-  - Do not add or alter WT103 configs in this PR.
-- Exit criteria:
-  - Neo and matched LSTM have no inter-layer dropout under the explicit matched
-    profile.
-  - Standard-init invariants hold on both backends.
-  - Historical configs construct with unchanged defaults.
-  - `make check` and `make lstm-parity` pass.
 
 ### PR #27: MLX-Reference Warmup And Public-Loop Parity
 
 - Status:
-  - queued after PR #26
+  - implemented on `codex/fix/mlx-reference-scheduler-timing`; pending review
+    and merge
 - Branch:
   - `codex/fix/mlx-reference-scheduler-timing`
 - Goal:

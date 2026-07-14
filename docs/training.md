@@ -108,6 +108,13 @@ recurrent matrices use `recurrent_weight_decay`, embeddings and projections use
 their configured decay values, and biases plus recurrent norms use zero decay.
 MLX keeps its native `lstm_layers.*` naming and unchanged runtime semantics.
 
+The same explicit `reference_backend: mlx` marker aligns Torch cosine/warmup
+timing with the MLX public loop. Update one uses schedule step one, and each
+post-update scheduler advance prepares the learning rate for the next update.
+Torch configs without that marker keep the historical native step-zero start.
+This alignment does not change random-batch selection, stochastic dropout-mask
+behavior, or the separate `tbptt_len < block_size` update contract.
+
 ## Transformer baseline taxonomy
 
 Transformer configs without `transformer_variant` are the historical
