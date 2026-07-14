@@ -117,13 +117,16 @@ CUDA parity work is prepared but not validated in this repo because no Nvidia GP
 - PR #21: https://github.com/ZFrankJ/neo-neuron/pull/21
   - Merge commit: `db821b4 Merge pull request #21 from ZFrankJ/codex/feat/gpt2-style-transformer-control`
   - Added an opt-in GPT-2-style Transformer control with aligned Torch/MLX causal checkpoint behavior.
+- PR #22: https://github.com/ZFrankJ/neo-neuron/pull/22
+  - Merge commit: `9b00292 Merge pull request #22 from ZFrankJ/codex/fix/lstm-optimizer-grouping-guard`
+  - Aligned MLX-reference Torch LSTM optimizer grouping across backend-specific recurrent parameter names.
 
 ## Active PR Queue
 
-The strict parity queue is empty. The active queue is now baseline-alignment
-planning for paper-facing results. These PRs must not run WT103, mutate
-`neo.csv`, or reinterpret old results. They prepare configs, tests, docs, and
-acceptance semantics for later approved experiment runs.
+The strict parity queue is empty. The baseline-alignment queue for
+paper-facing result readiness is complete through PR #22. No active local PR is
+currently queued here. Future result-production work must start from a separate
+approved run plan and must not mutate `neo.csv` or reinterpret old results.
 
 ### PR #18: LSTM Standard-Init Strengthening
 
@@ -240,7 +243,7 @@ acceptance semantics for later approved experiment runs.
 ### PR #22: LSTM Optimizer Grouping Parity Guard
 
 - Status:
-  - implemented on `codex/fix/lstm-optimizer-grouping-guard`; pending review and merge
+  - merged as PR #22; retained here until the next result-production plan replaces this completed queue
 
 - Branch:
   - `codex/fix/lstm-optimizer-grouping-guard`

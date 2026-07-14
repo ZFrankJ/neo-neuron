@@ -15,7 +15,7 @@ Current position:
 - recurrent evaluation now has merged compatibility-default block-reset and opt-in streaming semantics
 - config/result labeling now records exact WT2 parameter counts and makes tanh explicit for future WT103 Neo runs
 - a GPT-2-style Transformer control is merged with aligned Torch/MLX causal checkpoint behavior
-- Torch LSTM optimizer grouping now aligns backend-specific recurrent parameter names and is pending review
+- Torch LSTM optimizer grouping now aligns backend-specific recurrent parameter names
 - old result rows stay provenance-bound; do not silently reinterpret them after baseline changes
 
 Current active checkpoint:
@@ -53,13 +53,13 @@ Current implementation plan:
    - Status: done
    - Result wanted: Transformer comparisons use either a clearly limited internal control or a GPT-2-style baseline with modern enough defaults.
 9. LSTM optimizer grouping parity
-   - Status: implementation pending review
+   - Status: done
    - Result wanted: MLX-reference Torch LSTM training applies recurrent, projection, embedding, and zero-decay buckets by parameter role without changing Neo or Transformer behavior.
 
 ## Remaining Scale Estimate
 
 - 0 local parity PRs are currently queued.
-- Baseline alignment has a new local docs queue before paper-quality result production.
+- Baseline alignment is locally complete; paper-quality result production needs a separate approved run plan.
 - CUDA validation remains blocked on access to Nvidia hardware or a provisioned GPU runner.
 - Reproducers must run `NEO_RUN_CUDA_PROBE=1 python3 -m pytest -q tests/test_cuda_parity_harness.py` and confirm it does not skip before making CUDA claims.
 - Standard GitHub-hosted runners for individual repos are not an acceptable substitute for Nvidia GPU validation.
