@@ -6,7 +6,7 @@ This roadmap lists broad project priorities only. Checkpoint state belongs in `d
 
 ## 1. Backend Parity Against MLX
 
-- Status: Neo locally complete; LSTM alignment correction active; CUDA validation blocked on Nvidia hardware access
+- Status: Neo and LSTM alignment implemented locally; PR #28 review and external CUDA validation remain
 - Why now:
   - MLX has produced the trusted result line, while older PyTorch MPS runs showed numerical and memory contamination risk.
   - PyTorch is still needed as the bridge toward CUDA, but it must prove parity against MLX in controlled steps first.
@@ -43,7 +43,7 @@ This roadmap lists broad project priorities only. Checkpoint state belongs in `d
 
 ## 3. Baseline Alignment And Result Readiness
 
-- Status: active LSTM correction queue
+- Status: LSTM correction implemented; separate result-production approval pending
 - Why now:
   - Neo backend parity is locally complete, but paper-facing claims also need
     defensible baselines, explicit evaluation semantics, LSTM parity, and

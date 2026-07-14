@@ -2,6 +2,38 @@
 
 Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLAN.md`; keep broad priorities in `docs/ROADMAP.md`.
 
+## 2026-07-14 - Aligned LSTM Trial Profile And Queue Closure
+
+- Decision:
+  - Added `configs/alignment/lstm_standard_init_trial.yaml` as a small,
+    provenance-explicit Wikitext-2 readiness profile using MLX-reference
+    scheduler timing, single effective bias, `rmsnorm_eps: 1e-5`, orthogonal
+    recurrence, positive forget bias, no LSTM layer dropout, no checkpointing,
+    streaming evaluation, and a 10%-of-epoch warmup followed by cosine decay to
+    `min_lr`.
+  - Fixed the reporting label as `standard-init no-layer-dropout RMSNorm-LSTM`
+    and recorded an equal Torch/MLX trainable count of 3,546,833.
+  - Closed the local LSTM correction queue after the profile contract and all
+    four-way parity gates were represented in checked-in tests and docs.
+- Why:
+  - Result work needs one explicit, testable profile instead of reconstructing
+    alignment controls from historical backend defaults.
+  - A readiness fixture can close implementation ambiguity without authorizing
+    WT103 training or silently relabeling prior artifacts.
+- Scope:
+  - `configs/alignment/lstm_standard_init_trial.yaml`
+  - `tests/test_lstm_alignment_profile.py`
+  - `Makefile`
+  - user, training, roadmap, progress, and queue documentation
+- Impact:
+  - `legacy MLX LSTM`, `matched no-layer-dropout RMSNorm-LSTM`, and
+    `standard-init no-layer-dropout RMSNorm-LSTM` now have distinct durable
+    labels.
+  - Existing WT103 configs, run tags, historical artifacts, MLX runtime
+    semantics, production machines, and `neo.csv` remain unchanged.
+  - The next step requires a separately approved result-production and
+    variance plan.
+
 ## 2026-07-14 - MLX-Reference Scheduler Timing
 
 - Decision:

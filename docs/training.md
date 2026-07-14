@@ -32,7 +32,8 @@ Neo, and evaluation regime.
 Backend-native historical LSTM profiles are distinct and must retain their
 provenance:
 
-- `native-MLX RMSNorm-LSTM` uses MLX-native uniform recurrent initialization,
+- `legacy MLX LSTM` (the historical `native-MLX RMSNorm-LSTM`) uses MLX-native
+  uniform recurrent initialization,
   a single trainable gate-bias vector with native random initialization, and
   `dropout` as both inter-layer and output dropout.
 - `legacy Torch RMSNorm-LSTM` uses Xavier-uniform input and recurrent matrices,
@@ -41,9 +42,10 @@ provenance:
 - `matched no-layer-dropout RMSNorm-LSTM` explicitly sets
   `lstm_layer_dropout: 0.0` on either backend while retaining that backend's
   native historical initialization.
-- `standard-init RMSNorm-LSTM` is an opt-in cross-backend control using
+- `standard-init no-layer-dropout RMSNorm-LSTM` is an opt-in cross-backend
+  control using
   `forget_bias_init: 1.0`, `recurrent_init: orthogonal`, and an explicit
-  `lstm_layer_dropout` policy. Both backends use Xavier input matrices,
+  `lstm_layer_dropout: 0.0` policy. Both backends use Xavier input matrices,
   gate-wise selected recurrent initialization, zero non-forget biases, and the
   configured effective forget bias. Torch writes the forget value to its input
   bias while keeping the hidden bias zero; MLX writes it to its native single
@@ -114,6 +116,45 @@ post-update scheduler advance prepares the learning rate for the next update.
 Torch configs without that marker keep the historical native step-zero start.
 This alignment does not change random-batch selection, stochastic dropout-mask
 behavior, or the separate `tbptt_len < block_size` update contract.
+
+### Checked-in alignment trial profile
+
+`configs/alignment/lstm_standard_init_trial.yaml` is the only checked-in
+aligned trial profile. It is a one-epoch Wikitext-2 readiness fixture, not a
+paper-quality run prescription. The profile makes every alignment-relevant
+choice explicit:
+
+- `reference_backend: mlx`
+- `lstm_bias_mode: single`
+- `recurrent_norm: rmsnorm` and `rmsnorm_eps: 1e-5`
+- `forget_bias_init: 1.0` and `recurrent_init: orthogonal`
+- `lstm_layer_dropout: 0.0` with output `dropout: 0.1`
+- `use_checkpoint: false`
+- `eval_regime: streaming`
+- `cosine: true`, `warmup_epochs: 0.1`, and `min_lr: 2e-5`, so the one-epoch
+  trial warms up for 10% of its updates and then completes the cosine decay
+
+For the checked-in shape (`vocab_size: 50257`, `d_model: 128`,
+`d_embed: 64`, `n_layers: 2`), both backends have exactly the same trainable
+parameter count:
+
+| Profile | Torch trainable parameters | MLX trainable parameters | Required evaluation regime |
+| --- | ---: | ---: | --- |
+| `standard-init no-layer-dropout RMSNorm-LSTM` | 3,546,833 | 3,546,833 | `streaming` |
+
+The three paper-facing provenance labels are therefore distinct: `legacy MLX
+LSTM`, `matched no-layer-dropout RMSNorm-LSTM`, and `standard-init
+no-layer-dropout RMSNorm-LSTM`. A config snapshot and result row must retain the
+exact label, backend, trainable count, and evaluation regime; none may be
+inferred from an old filename or checkpoint.
+
+WT103 remains approval-gated. If a later result-production and variance plan
+is explicitly approved, proposed new paths are
+`configs/wt103/lstm_<size>_matched_no_layer_dropout.yaml` and
+`configs/wt103/lstm_<size>_standard_init_no_layer_dropout.yaml`, with matching
+run tags `wt103_lstm_<size>_matched_no_layer_dropout` and
+`wt103_lstm_<size>_standard_init_no_layer_dropout`. Those files and tags do not
+exist yet, and historical WT103 paths must not be repurposed.
 
 ## Transformer baseline taxonomy
 

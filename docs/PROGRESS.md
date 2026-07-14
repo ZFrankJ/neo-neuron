@@ -26,12 +26,15 @@ Current position:
 - explicit matched-dropout and standard-init controls now construct on MLX and
   Torch without changing missing-key MLX initialization
 - MLX-reference Torch warmup/cosine timing and deterministic public-loop LSTM
-  parity are implemented and pending review
+  parity are merged
+- a checked-in Wikitext-2 trial profile now freezes the standard-init,
+  no-layer-dropout, single-bias, streaming-eval contract with equal Torch/MLX
+  trainable parameter counts and a 10%-warmup cosine schedule
 - old result rows stay provenance-bound; do not silently reinterpret them after baseline changes
 
 Current active checkpoint:
 
-`LSTM four-way alignment correction queue`
+`LSTM four-way alignment correction queue (implemented; PR #28 pending review)`
 
 Current implementation plan:
 
@@ -67,7 +70,7 @@ Current implementation plan:
    - Status: done
    - Result wanted: MLX-reference Torch LSTM training applies recurrent, projection, embedding, and zero-decay buckets by parameter role without changing Neo or Transformer behavior.
 10. LSTM four-way parity and aligned baseline profile
-   - Status: in progress
+   - Status: implemented; pending PR #28 review and merge
    - Result wanted: MLX/Torch LSTM has an explicit same-weight parameter,
      forward, gradient, optimizer, trajectory, and checkpoint contract; the
      matched and standard-init profiles remove accidental LSTM-only dropout
@@ -75,9 +78,10 @@ Current implementation plan:
 
 ## Remaining Scale Estimate
 
-- PR #27 is implemented and pending review; 1 later local alignment PR remains queued.
-- Paper-quality result production remains blocked until the LSTM four-way
-  alignment exit passes and a separate run plan is approved.
+- PR #28 is the final local alignment packet; no later hidden implementation
+  PR is queued.
+- Paper-quality result production remains blocked until PR #28 is reviewed and
+  a separate result-production and variance plan is explicitly approved.
 - CUDA validation remains blocked on access to Nvidia hardware or a provisioned GPU runner.
 - Reproducers must run `NEO_RUN_CUDA_PROBE=1 python3 -m pytest -q tests/test_cuda_parity_harness.py` and confirm it does not skip before making CUDA claims.
 - Standard GitHub-hosted runners for individual repos are not an acceptable substitute for Nvidia GPU validation.
