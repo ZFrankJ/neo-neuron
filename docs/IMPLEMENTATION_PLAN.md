@@ -199,7 +199,8 @@ approved result-production and variance plan.
   - The selected fixture is
     `configs/alignment/lstm_standard_init_trial.yaml`: a one-epoch Wikitext-2
     trial with orthogonal recurrence, forget bias `1.0`,
-    `use_checkpoint: false`, and `eval_regime: streaming`.
+    `use_checkpoint: false`, `eval_regime: streaming`, and a 10%-of-epoch
+    warmup followed by cosine decay to `min_lr`.
   - Document three distinct labels: legacy MLX LSTM, matched no-layer-dropout
     LSTM, and standard-init no-layer-dropout LSTM.
   - Record exact backend parameter counts and required evaluation regime.

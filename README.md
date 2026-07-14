@@ -87,6 +87,8 @@ Wikitext-2 alignment trial as `standard-init no-layer-dropout RMSNorm-LSTM`.
 It uses MLX as the reference backend, a single effective bias, explicit
 `rmsnorm_eps: 1e-5`, orthogonal recurrence, a positive forget bias,
 `lstm_layer_dropout: 0.0`, `use_checkpoint: false`, and `streaming` evaluation.
+Its one-epoch schedule warms up for 10% of the epoch, then follows cosine decay
+to `min_lr`.
 Its Torch and MLX trainable parameter counts are both exactly **3,546,833**.
 This is a trial-readiness fixture, not a paper-quality result-production plan;
 existing WT103 configs and run tags remain unchanged.

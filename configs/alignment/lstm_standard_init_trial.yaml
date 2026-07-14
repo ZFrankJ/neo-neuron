@@ -36,7 +36,7 @@ train_regime: streaming
 stream_state: true
 eval_regime: streaming
 cosine: true
-warmup_epochs: 1
+warmup_epochs: 0.1
 min_lr: 2.0e-5
 seed: 20260714
 use_checkpoint: false

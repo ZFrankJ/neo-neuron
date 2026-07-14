@@ -29,7 +29,7 @@ Current position:
   parity are merged
 - a checked-in Wikitext-2 trial profile now freezes the standard-init,
   no-layer-dropout, single-bias, streaming-eval contract with equal Torch/MLX
-  trainable parameter counts
+  trainable parameter counts and a 10%-warmup cosine schedule
 - old result rows stay provenance-bound; do not silently reinterpret them after baseline changes
 
 Current active checkpoint:

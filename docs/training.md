@@ -131,6 +131,8 @@ choice explicit:
 - `lstm_layer_dropout: 0.0` with output `dropout: 0.1`
 - `use_checkpoint: false`
 - `eval_regime: streaming`
+- `cosine: true`, `warmup_epochs: 0.1`, and `min_lr: 2e-5`, so the one-epoch
+  trial warms up for 10% of its updates and then completes the cosine decay
 
 For the checked-in shape (`vocab_size: 50257`, `d_model: 128`,
 `d_embed: 64`, `n_layers: 2`), both backends have exactly the same trainable

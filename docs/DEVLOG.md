@@ -9,7 +9,8 @@ Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLA
     provenance-explicit Wikitext-2 readiness profile using MLX-reference
     scheduler timing, single effective bias, `rmsnorm_eps: 1e-5`, orthogonal
     recurrence, positive forget bias, no LSTM layer dropout, no checkpointing,
-    and streaming evaluation.
+    streaming evaluation, and a 10%-of-epoch warmup followed by cosine decay to
+    `min_lr`.
   - Fixed the reporting label as `standard-init no-layer-dropout RMSNorm-LSTM`
     and recorded an equal Torch/MLX trainable count of 3,546,833.
   - Closed the local LSTM correction queue after the profile contract and all
