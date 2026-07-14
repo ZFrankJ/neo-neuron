@@ -6,15 +6,15 @@ This roadmap lists broad project priorities only. Checkpoint state belongs in `d
 
 ## 1. Backend Parity Against MLX
 
-- Status: Neo and LSTM alignment implemented locally; PR #28 review and external CUDA validation remain
+- Status: Neo and LSTM alignment complete locally; external CUDA validation remains
 - Why now:
   - MLX has produced the trusted result line, while older PyTorch MPS runs showed numerical and memory contamination risk.
   - PyTorch is still needed as the bridge toward CUDA, but it must prove parity against MLX in controlled steps first.
 - Focus:
   - Preserve MLX as the frozen reference.
   - Keep PyTorch CPU as the semantic bridge.
-  - Extend the same-weight parity contract to LSTM before treating Torch LSTM as
-    an MLX reproduction path.
+  - Preserve the completed same-weight LSTM parity contract when future result
+    profiles or backends are added.
   - Keep PyTorch MPS no-checkpoint parity as the trusted local PyTorch path.
   - Keep CUDA validation gated by an explicit Nvidia GPU preflight.
 - Exit condition:
@@ -48,19 +48,25 @@ This roadmap lists broad project priorities only. Checkpoint state belongs in `d
   - Neo backend parity is locally complete, but paper-facing claims also need
     defensible baselines, explicit evaluation semantics, LSTM parity, and
     result provenance.
-  - The current LSTM control is a normalized recurrent baseline, not a vanilla LSTM baseline; that is acceptable only if named and tested as such.
-  - A four-way implementation audit found that the active MLX LSTM has
-    LSTM-only inter-layer dropout and native initialization, while Torch LSTM
-    still differs in effective-bias training and RMSNorm epsilon.
+  - The historical LSTM control is a normalized recurrent baseline, not a
+    vanilla LSTM baseline; that is acceptable only when named and tested as
+    such.
+  - The completed four-way correction keeps historical backend-native LSTM
+    profiles intact while providing explicit matched and standard-init aligned
+    profiles.
   - Neo is moving toward a tanh activation framing, so future result labels must separate cell-structure claims from older custom-activation runs.
 - Focus:
-  - Strengthen the LSTM baseline without changing old result interpretation.
-  - Prove MLX/Torch LSTM forward, gradient, optimizer, trajectory, and
-    checkpoint parity under an explicit aligned profile.
-  - Decide whether recurrent evaluation should use block-reset or streaming-state semantics, and report both if needed.
+  - Preserve the strengthened LSTM baseline without changing old result
+    interpretation.
+  - Use the proven MLX/Torch LSTM forward, gradient, optimizer, trajectory,
+    checkpoint, and public-loop contracts for future approved result work.
+  - Keep recurrent block-reset versus streaming-state evaluation explicit and
+    report the selected regime with each result.
   - Keep WT2 labels honest by using small/large names plus exact parameter counts.
-  - Upgrade the Transformer control toward a GPT-2-style internal baseline before making Transformer comparison claims.
-  - Fix optimizer grouping edge cases that could silently make Torch/MLX parity or LSTM comparisons misleading.
+  - Preserve the GPT-2-style Transformer control before making Transformer
+    comparison claims.
+  - Preserve optimizer grouping guards that prevent silent Torch/MLX parity or
+    LSTM comparison drift.
 - Exit condition:
   - The LSTM correction queue passes its parity gates, historical profiles stay
     provenance-bound, and a separate approved result-production plan selects
@@ -71,11 +77,12 @@ This roadmap lists broad project priorities only. Checkpoint state belongs in `d
 
 ## 4. Result Production And WT103 Revalidation
 
-- Status: later
+- Status: approval-gated; no active run packet
 - Why now:
   - Old PyTorch MPS WT103 rows are not trusted, and new result production should wait until baseline alignment is explicit.
 - Focus:
-  - Do not rerun WT103 or rehabilitate old PyTorch result rows until the parity ladder and baseline-alignment queue are complete.
+  - Do not rerun WT103 or rehabilitate old PyTorch result rows until a separate
+    result-production and variance plan is explicitly approved.
 - Exit condition:
   - A separate approved plan defines hardware, configs, result labels, and acceptance criteria.
 - Expanded plan:

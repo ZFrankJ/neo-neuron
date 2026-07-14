@@ -34,7 +34,7 @@ Current position:
 
 Current active checkpoint:
 
-`LSTM four-way alignment correction queue (implemented; PR #28 pending review)`
+`LSTM four-way alignment correction complete; result production approval-gated`
 
 Current implementation plan:
 
@@ -70,7 +70,7 @@ Current implementation plan:
    - Status: done
    - Result wanted: MLX-reference Torch LSTM training applies recurrent, projection, embedding, and zero-decay buckets by parameter role without changing Neo or Transformer behavior.
 10. LSTM four-way parity and aligned baseline profile
-   - Status: implemented; pending PR #28 review and merge
+   - Status: done
    - Result wanted: MLX/Torch LSTM has an explicit same-weight parameter,
      forward, gradient, optimizer, trajectory, and checkpoint contract; the
      matched and standard-init profiles remove accidental LSTM-only dropout
@@ -78,10 +78,10 @@ Current implementation plan:
 
 ## Remaining Scale Estimate
 
-- PR #28 is the final local alignment packet; no later hidden implementation
-  PR is queued.
-- Paper-quality result production remains blocked until PR #28 is reviewed and
-  a separate result-production and variance plan is explicitly approved.
+- PR #28 closed the local LSTM alignment queue; no hidden implementation packet
+  remains.
+- Paper-quality result production remains blocked until a separate
+  result-production and variance plan is explicitly approved.
 - CUDA validation remains blocked on access to Nvidia hardware or a provisioned GPU runner.
 - Reproducers must run `NEO_RUN_CUDA_PROBE=1 python3 -m pytest -q tests/test_cuda_parity_harness.py` and confirm it does not skip before making CUDA claims.
 - Standard GitHub-hosted runners for individual repos are not an acceptable substitute for Nvidia GPU validation.

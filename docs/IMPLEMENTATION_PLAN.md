@@ -4,14 +4,14 @@ Strict execution contract for Neo backend parity and baseline-alignment work.
 
 Previous tracking issue: https://github.com/ZFrankJ/neo-neuron/issues/2
 
-Issue #2 is closed. PR #28 is the final local LSTM four-way correction packet;
+Issue #2 is closed. PR #28 completed the local LSTM four-way correction queue;
 open a new tracking issue only when explicitly requested.
 
 ## Current State
 
 ```text
-branch codex/docs/lstm-aligned-trial-profile from origin/main
-base 61b56c5 Merge pull request #27 from ZFrankJ/codex/fix/mlx-reference-scheduler-timing
+branch main
+head 891550d Merge pull request #28 from ZFrankJ/codex/docs/lstm-aligned-trial-profile
 ```
 
 MLX is the frozen scientific reference backend. Existing clean MLX result rows outside this repo remain authoritative.
@@ -174,46 +174,16 @@ LSTM is alignment-ready only when all of the following are true:
 - PR #27: https://github.com/ZFrankJ/neo-neuron/pull/27
   - Merge commit: `61b56c5 Merge pull request #27 from ZFrankJ/codex/fix/mlx-reference-scheduler-timing`
   - Aligned MLX-reference Torch warmup/cosine timing and added deterministic public-loop LSTM parity.
+- PR #28: https://github.com/ZFrankJ/neo-neuron/pull/28
+  - Merge commit: `891550d Merge pull request #28 from ZFrankJ/codex/docs/lstm-aligned-trial-profile`
+  - Froze the checked-in standard-init no-layer-dropout LSTM trial profile, exact backend parameter counts, schedule, evaluation regime, and provenance labels.
 
 ## Active PR Queue
 
-PR #28 is the final local alignment packet. No later hidden implementation PR
-is queued; after review and merge, the next action requires an explicitly
-approved result-production and variance plan.
-
-### PR #28: Aligned Profile And Trial Readiness
-
-- Status:
-  - implemented on `codex/docs/lstm-aligned-trial-profile`; pending review and
-    merge; WT103 template work remains approval-gated
-- Branch:
-  - `codex/docs/lstm-aligned-trial-profile`
-- Goal:
-  - Freeze the exact profile and provenance needed for a small alignment trial,
-    then close the correction queue without starting production runs.
-- Scope:
-  - Add a lightweight checked-in alignment config or fixture containing
-    `reference_backend: mlx`, `lstm_bias_mode: single`,
-    `rmsnorm_eps: 1e-5`, `lstm_layer_dropout: 0.0`, and the selected init
-    controls.
-  - The selected fixture is
-    `configs/alignment/lstm_standard_init_trial.yaml`: a one-epoch Wikitext-2
-    trial with orthogonal recurrence, forget bias `1.0`,
-    `use_checkpoint: false`, `eval_regime: streaming`, and a 10%-of-epoch
-    warmup followed by cosine decay to `min_lr`.
-  - Document three distinct labels: legacy MLX LSTM, matched no-layer-dropout
-    LSTM, and standard-init no-layer-dropout LSTM.
-  - Record exact backend parameter counts and required evaluation regime.
-  - Update README, training docs, DEVLOG, progress, and this queue to the final
-    implemented behavior.
-  - Do not modify existing WT103 configs or run tags. Propose new WT103 paths
-    and tags, but add them only after explicit user approval.
-  - Do not run WT103, touch the main training machine, or edit `neo.csv`.
-- Exit criteria:
-  - `make check`, `make mlx-parity`, and `make lstm-parity` pass.
-  - Historical artifacts remain unambiguously labeled.
-  - The next action is a separate approved result-production and variance plan,
-    not another hidden implementation change.
+No active PR packet is queued. PR #28 closed the local LSTM correction queue.
+The next packet requires an explicitly approved result-production and variance
+plan; WT103 templates, runs, main-machine work, and `neo.csv` remain outside the
+active queue.
 
 The next CUDA step remains external validation, not normal local development.
 Before opening CUDA-result or CUDA-CI work, confirm an Nvidia CUDA environment
@@ -263,11 +233,11 @@ Do not hand these to an agent yet:
 ## Standard PR Body Template
 
 ```markdown
-LSTM four-way alignment queue.
+Neo explicitly approved work packet.
 
 ## Queue Item
 
-- PR queue item: `<PR #28 name / future explicitly approved packet>`
+- PR queue item: `<future explicitly approved packet>`
 - Depends on: `<merged PRs>`
 
 ## Summary
