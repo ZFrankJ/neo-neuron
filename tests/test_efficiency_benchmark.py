@@ -126,6 +126,7 @@ def _metadata():
                 "use_checkpoint": False,
             },
             "execution_overrides": {},
+            "metadata_inferences": {},
             "checkpoint_path": "/tmp/tiny.pt",
             "checkpoint_sha256": "checkpoint-sha",
             "checkpoint_backend": "torch",
@@ -616,11 +617,21 @@ def test_mlx_native_neo_checkpoint_with_historical_flag_is_benchmarkable(tmp_pat
     import yaml
     from src.runtime.backends import mlx_backend
 
-    cfg = _tiny_cfg("neo") | {
-        "backend": "mlx",
-        "use_checkpoint": True,
-        "run_tag": "tiny-historical-mlx-neo",
-    }
+    root = Path(__file__).resolve().parents[1]
+    cfg = yaml.safe_load((root / "configs/wt103/neo_20m.yaml").read_text(encoding="utf-8"))
+    assert "reference_backend" not in cfg
+    assert "rmsnorm_eps" not in cfg
+    cfg.update(
+        {
+            "vocab_size": 19,
+            "d_model": 4,
+            "d_embed": 4,
+            "n_layers": 1,
+            "dropout": 0.0,
+            "block_size": 4,
+            "batch_size": 2,
+        }
+    )
     config_path = tmp_path / "neo.yaml"
     checkpoint_path = tmp_path / "neo.pkl"
     config_path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
@@ -647,24 +658,55 @@ def test_mlx_native_neo_checkpoint_with_historical_flag_is_benchmarkable(tmp_pat
             timing_scope="model_only",
             batch_size=2,
             sequence_length=4,
-            warmup_iterations=1,
-            measured_iterations=1,
+            warmup_iterations=20,
+            measured_iterations=100,
             repetition_id="historical-neo",
             profile_label=cfg["run_tag"],
             output_path=tmp_path / "neo-record.json",
             seed=23,
-            dry_run=True,
+            dry_run=False,
         )
     finally:
         mx.set_default_device(original_device)
 
     assert record["identity"]["config_snapshot"]["use_checkpoint"] is True
+    assert "reference_backend" not in record["identity"]["config_snapshot"]
+    assert "rmsnorm_eps" not in record["identity"]["config_snapshot"]
+    assert "reference_backend" not in record["identity"]["checkpoint_metadata"]["config_snapshot"]
+    assert "rmsnorm_eps" not in record["identity"]["checkpoint_metadata"]["config_snapshot"]
     assert record["identity"]["effective_config_snapshot"]["use_checkpoint"] is False
+    assert record["identity"]["effective_config_snapshot"]["reference_backend"] == "mlx"
+    assert record["identity"]["effective_config_snapshot"]["rmsnorm_eps"] == pytest.approx(1e-5)
     assert record["identity"]["execution_overrides"]["use_checkpoint"]["reason"] == (
         "mlx_neo_training_flag_runtime_inert"
     )
+    assert record["identity"]["metadata_inferences"] == {
+        "reference_backend": {
+            "value": "mlx",
+            "reason": "frozen_historical_mlx_neo_semantics",
+            "config_sha256": record["identity"]["config_sha256"],
+            "checkpoint_sha256": record["identity"]["checkpoint_sha256"],
+        },
+        "rmsnorm_eps": {
+            "value": 1e-5,
+            "reason": "frozen_historical_mlx_neo_semantics",
+            "config_sha256": record["identity"]["config_sha256"],
+            "checkpoint_sha256": record["identity"]["checkpoint_sha256"],
+        },
+    }
     assert record["model"]["use_checkpoint"] is False
     assert record["model"]["weight_provenance"] == "backend_native_checkpoint"
+    assert record["evidence"] == {
+        "status": "authoritative",
+        "provisional_reasons": [],
+    }
+
+    tampered = copy.deepcopy(record)
+    tampered["identity"]["metadata_inferences"]["rmsnorm_eps"]["checkpoint_sha256"] = (
+        "not-the-checkpoint-hash"
+    )
+    with pytest.raises(ValueError, match="metadata_inferences"):
+        validate_benchmark_record(tampered)
 
 
 def test_missing_aligned_checkpoint_metadata_is_only_allowed_as_provisional_dry_run(

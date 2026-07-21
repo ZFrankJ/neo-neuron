@@ -330,6 +330,11 @@ Public contract:
   The only `use_checkpoint: true` exception is a native MLX Neo checkpoint,
   where the historically recorded flag had no MLX runtime effect; record the
   exact override to benchmark execution with `use_checkpoint: false`.
+  For the same frozen historical MLX Neo contract only, resolve omitted
+  `reference_backend` and `rmsnorm_eps` metadata to `mlx` and `1e-5` while
+  preserving both raw snapshots. Bind each inference to the config/checkpoint
+  hashes and record the frozen-semantics reason; do not relax any other missing
+  metadata gate.
 - Require equivalent logical workload definitions across Torch and MLX. A
   cross-backend comparison must record whether weights were mapped from the
   same checkpoint or loaded natively. Infer that provenance from checkpoint and
@@ -350,7 +355,8 @@ Test-first and verification contract:
   order, warm-up exclusion, raw-sample persistence, percentile aggregation,
   overwrite guard, capability encoding, metadata mismatch failures,
   backend-local RNG repeatability, formal/provisional evidence classification,
-  inferred checkpoint provenance, historical MLX Neo execution overrides, and
+  inferred checkpoint provenance, a formal fixture derived from the checked-in
+  legacy WT103 Neo config shape, historical MLX Neo execution overrides, and
   tiny deterministic fixtures and a controllable clock.
 - A required tiny Torch CPU integration test and a skip-safe tiny MLX integration
   test must emit the same schema and prove that measured work is completed at

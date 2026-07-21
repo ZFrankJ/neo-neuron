@@ -28,6 +28,10 @@ Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLA
   - Preserved historical MLX Neo `use_checkpoint: true` metadata while recording
     the runtime-inert flag and effective benchmark execution with
     `use_checkpoint: false`; added the focused MLX efficiency suite to macOS CI.
+  - Kept raw historical MLX Neo config/checkpoint snapshots intact while
+    resolving their omitted `reference_backend` and `rmsnorm_eps` fields to the
+    frozen `mlx` and `1e-5` semantics. Each inference is config/checkpoint-hash
+    bound; other missing aligned metadata still blocks formal evidence.
   - Kept formal records at a minimum of 20 warm-ups and 100 measurements;
     smaller runs require an explicit `dry_run` label and cannot be silently
     promoted.

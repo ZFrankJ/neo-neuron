@@ -184,7 +184,12 @@ execution; it proves repeatability within a backend, not identical random draws
 across Torch and MLX. Historical MLX Neo checkpoints may retain
 `use_checkpoint: true` as training metadata because that flag had no MLX runtime
 effect. Their benchmark record preserves the historical config and separately
-records the effective `use_checkpoint: false` execution override.
+records the effective `use_checkpoint: false` execution override. For these
+historical MLX Neo artifacts only, omitted `reference_backend` and
+`rmsnorm_eps` fields resolve to the frozen effective defaults `mlx` and `1e-5`.
+The raw config/checkpoint snapshots remain unchanged, and each inference records
+both source hashes and the frozen-semantics reason. Other missing aligned
+metadata remains provisional or blocks a formal record.
 `train_step` is an isolated optimizer-update microbenchmark: inputs are
 preallocated, optimizer state is fresh and then warmed, the scheduler is
 excluded, recurrent state resets each iteration, and backpropagation covers the

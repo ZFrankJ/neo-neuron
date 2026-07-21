@@ -9,6 +9,7 @@ import os
 import platform
 import subprocess
 import time
+import warnings
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -35,6 +36,10 @@ SUPPORTED_WEIGHT_PROVENANCE = {
 }
 MIN_WARMUP_ITERATIONS = 20
 MIN_MEASURED_ITERATIONS = 100
+FROZEN_HISTORICAL_MLX_NEO_DEFAULTS = {
+    "reference_backend": "mlx",
+    "rmsnorm_eps": 1e-5,
+}
 WORKLOAD_SEMANTICS = {
     "train_step": {
         "input_policy": "deterministic_preallocated",
@@ -358,6 +363,7 @@ def validate_benchmark_record(record: Mapping[str, Any]) -> None:
             "config_snapshot",
             "effective_config_snapshot",
             "execution_overrides",
+            "metadata_inferences",
             "checkpoint_path",
             "checkpoint_sha256",
             "checkpoint_backend",
@@ -456,16 +462,40 @@ def validate_benchmark_record(record: Mapping[str, Any]) -> None:
         raise ValueError("Efficiency benchmark records require use_checkpoint=false")
     identity = record["identity"]
     source_cfg = identity["config_snapshot"]
-    effective_cfg = identity["effective_config_snapshot"]
+    recorded_effective_cfg = identity["effective_config_snapshot"]
     overrides = identity["execution_overrides"]
-    if not all(isinstance(value, Mapping) for value in (source_cfg, effective_cfg, overrides)):
-        raise ValueError("Config snapshots and execution_overrides must be mappings")
+    metadata_inferences = identity["metadata_inferences"]
+    if not all(
+        isinstance(value, Mapping)
+        for value in (source_cfg, recorded_effective_cfg, overrides, metadata_inferences)
+    ):
+        raise ValueError(
+            "Config snapshots, execution_overrides, and metadata_inferences must be mappings"
+        )
+    checkpoint_metadata = identity["checkpoint_metadata"]
+    if not isinstance(checkpoint_metadata, Mapping):
+        raise ValueError("checkpoint_metadata must be a mapping")
+    checkpoint_cfg = checkpoint_metadata.get("config_snapshot", {})
+    if not isinstance(checkpoint_cfg, Mapping):
+        raise ValueError("checkpoint config_snapshot must be a mapping")
+    resolved_cfg, resolved_checkpoint_cfg, expected_inferences = (
+        _resolve_frozen_historical_mlx_neo_metadata(
+            source_cfg,
+            checkpoint_cfg,
+            model_name=str(model.get("name", "")),
+            checkpoint_backend=str(identity.get("checkpoint_backend", "")),
+            config_sha256=str(identity.get("config_sha256", "")),
+            checkpoint_sha256=str(identity.get("checkpoint_sha256", "")),
+        )
+    )
+    if dict(metadata_inferences) != expected_inferences:
+        raise ValueError("metadata_inferences do not match frozen historical semantics")
     expected_effective, expected_overrides = resolve_benchmark_execution_config(
-        source_cfg,
+        resolved_cfg,
         model_name=str(model.get("name", "")),
         checkpoint_backend=str(identity.get("checkpoint_backend", "")),
     )
-    if dict(effective_cfg) != expected_effective or dict(overrides) != expected_overrides:
+    if dict(recorded_effective_cfg) != expected_effective or dict(overrides) != expected_overrides:
         raise ValueError("Effective benchmark config does not match the recorded execution override")
     inferred_provenance = (
         "backend_native_checkpoint"
@@ -474,14 +504,10 @@ def validate_benchmark_record(record: Mapping[str, Any]) -> None:
     )
     if model.get("weight_provenance") != inferred_provenance:
         raise ValueError("weight_provenance does not match checkpoint and runtime backends")
-    checkpoint_metadata = identity["checkpoint_metadata"]
-    if not isinstance(checkpoint_metadata, Mapping):
-        raise ValueError("checkpoint_metadata must be a mapping")
-    checkpoint_cfg = checkpoint_metadata.get("config_snapshot", {})
-    if not isinstance(checkpoint_cfg, Mapping):
-        raise ValueError("checkpoint config_snapshot must be a mapping")
     required_keys = _required_aligned_metadata_keys(str(model.get("name", "")))
-    missing_aligned = [key for key in required_keys if checkpoint_cfg.get(key) in (None, "")]
+    missing_aligned = [
+        key for key in required_keys if resolved_checkpoint_cfg.get(key) in (None, "")
+    ]
     source_label = _profile_metadata_label(source_cfg, {})
     checkpoint_label = _profile_metadata_label({}, checkpoint_cfg)
     if not bool(workload["dry_run"]):
@@ -709,6 +735,40 @@ def _profile_metadata_label(
     return None
 
 
+def _resolve_frozen_historical_mlx_neo_metadata(
+    cfg: Mapping[str, Any],
+    checkpoint_cfg: Mapping[str, Any],
+    *,
+    model_name: str,
+    checkpoint_backend: str,
+    config_sha256: str,
+    checkpoint_sha256: str,
+) -> tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+    resolved_cfg = dict(cfg)
+    resolved_checkpoint_cfg = dict(checkpoint_cfg)
+    inferences: Dict[str, Any] = {}
+    is_historical_mlx_neo = (
+        model_name == "neo"
+        and checkpoint_backend == "mlx"
+        and str(cfg.get("backend", "")).strip().lower() == "mlx"
+        and bool(cfg.get("use_checkpoint", False))
+    )
+    if not is_historical_mlx_neo:
+        return resolved_cfg, resolved_checkpoint_cfg, inferences
+    for key, value in FROZEN_HISTORICAL_MLX_NEO_DEFAULTS.items():
+        if cfg.get(key) not in (None, "") or checkpoint_cfg.get(key) not in (None, ""):
+            continue
+        resolved_cfg[key] = value
+        resolved_checkpoint_cfg[key] = value
+        inferences[key] = {
+            "value": value,
+            "reason": "frozen_historical_mlx_neo_semantics",
+            "config_sha256": config_sha256,
+            "checkpoint_sha256": checkpoint_sha256,
+        }
+    return resolved_cfg, resolved_checkpoint_cfg, inferences
+
+
 def resolve_benchmark_execution_config(
     cfg: Mapping[str, Any],
     *,
@@ -835,9 +895,29 @@ def benchmark_from_paths(
     model_name = _infer_model_name(config, cfg)
     payload = load_checkpoint_payload(checkpoint, map_location="cpu")
     checkpoint_backend = infer_checkpoint_backend(payload)
-    missing_aligned = _validate_checkpoint_config(payload, cfg, model_name)
+    config_sha256 = _sha256_file(config)
+    checkpoint_sha256 = _sha256_file(checkpoint)
+    raw_checkpoint_cfg = payload.get("cfg")
+    raw_checkpoint_cfg = raw_checkpoint_cfg if isinstance(raw_checkpoint_cfg, Mapping) else {}
+    resolved_cfg, resolved_checkpoint_cfg, metadata_inferences = (
+        _resolve_frozen_historical_mlx_neo_metadata(
+            cfg,
+            raw_checkpoint_cfg,
+            model_name=model_name,
+            checkpoint_backend=checkpoint_backend,
+            config_sha256=config_sha256,
+            checkpoint_sha256=checkpoint_sha256,
+        )
+    )
+    validation_payload = dict(payload)
+    validation_payload["cfg"] = resolved_checkpoint_cfg
+    missing_aligned = _validate_checkpoint_config(
+        validation_payload,
+        resolved_cfg,
+        model_name,
+    )
     effective_cfg, execution_overrides = resolve_benchmark_execution_config(
-        cfg,
+        resolved_cfg,
         model_name=model_name,
         checkpoint_backend=checkpoint_backend,
     )
@@ -846,9 +926,7 @@ def benchmark_from_paths(
         if checkpoint_backend == backend_name
         else "mapped_same_checkpoint"
     )
-    checkpoint_cfg = payload.get("cfg")
-    checkpoint_cfg = checkpoint_cfg if isinstance(checkpoint_cfg, Mapping) else {}
-    expected_profile_label = _profile_metadata_label(cfg, checkpoint_cfg)
+    expected_profile_label = _profile_metadata_label(cfg, raw_checkpoint_cfg)
     provisional_reasons = ["dry_run"] if dry_run else []
     if missing_aligned:
         reason = "checkpoint_missing_aligned_metadata:" + ",".join(sorted(missing_aligned))
@@ -911,12 +989,19 @@ def benchmark_from_paths(
         model = backend.build_model(effective_cfg, model_name)
         if backend_name == "torch":
             model = model.to(runtime_device)
-        backend.load_checkpoint_entry(
-            checkpoint,
-            model,
-            device=runtime_device,
-            cfg=cfg,
-        )
+        with warnings.catch_warnings():
+            if metadata_inferences:
+                warnings.filterwarnings(
+                    "ignore",
+                    message="Neo checkpoint is missing aligned metadata fields.*",
+                    category=UserWarning,
+                )
+            backend.load_checkpoint_entry(
+                checkpoint,
+                model,
+                device=runtime_device,
+                cfg=resolved_cfg,
+            )
         backend.seed_all(int(seed))
         adapter = _build_adapter(backend_name, model, effective_cfg, runtime_device)
         adapter.requested_device = str(device).strip().lower()
@@ -935,12 +1020,13 @@ def benchmark_from_paths(
             "identity": {
                 "git_commit": _git_commit(root),
                 "config_path": str(config),
-                "config_sha256": _sha256_file(config),
+                "config_sha256": config_sha256,
                 "config_snapshot": dict(cfg),
                 "effective_config_snapshot": effective_cfg,
                 "execution_overrides": execution_overrides,
+                "metadata_inferences": metadata_inferences,
                 "checkpoint_path": str(checkpoint),
-                "checkpoint_sha256": _sha256_file(checkpoint),
+                "checkpoint_sha256": checkpoint_sha256,
                 "checkpoint_backend": checkpoint_backend,
                 "checkpoint_metadata": _checkpoint_metadata(payload),
             },
