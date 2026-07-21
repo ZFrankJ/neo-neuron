@@ -2,6 +2,37 @@
 
 Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLAN.md`; keep broad priorities in `docs/ROADMAP.md`.
 
+## 2026-07-21 - Unified Efficiency Benchmark Record Contract
+
+- Decision:
+  - Added one backend-neutral benchmark core and CLI with Torch and MLX
+    execution adapters for `train_step`, `sequence_eval`, and
+    `streaming_decode` workloads.
+  - Bound every measured region to explicit backend synchronization, preserved
+    every raw nanosecond sample, and made a versioned JSON record the
+    authoritative artifact.
+  - Required explicit profile and mapped-versus-backend-native checkpoint
+    provenance, content hashes, checkpoint/config compatibility, workload
+    scope, runtime identity, parameter breakdown, and telemetry capabilities.
+  - Kept formal records at a minimum of 20 warm-ups and 100 measurements;
+    smaller runs require an explicit `dry_run` label and cannot be silently
+    promoted.
+- Why:
+  - Torch eager execution and MLX lazy execution cannot be compared unless work
+    is completed at identical timing boundaries and unsupported telemetry is
+    distinguished from a measured zero.
+  - Existing THOP estimates, filenames, and backend-native checkpoints do not
+    establish wall-clock or cross-backend workload equivalence.
+- Scope:
+  - shared efficiency schema, validation, persistence, CLI, backend execution
+    adapters, deterministic contract tests, and public workflow documentation
+- Impact:
+  - Tiny dry-run contract checks are safe on a non-main development machine and
+    do not change MLX or Torch model/training semantics.
+  - Formal efficiency execution remains blocked until LSTM scaling and the
+    comparison checkpoint list are frozen; no WT103 process, paper-facing
+    benchmark record, historical config, or `neo.csv` row changed.
+
 ## 2026-07-14 - 60M-Total / 50M-Recurrent-Core Boundary Diagnostic Contract
 
 - Decision:

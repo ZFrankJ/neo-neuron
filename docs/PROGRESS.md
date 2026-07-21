@@ -113,7 +113,9 @@ Current implementation plan:
 
 ## Remaining Scale Estimate
 
-- No implementation PR is active while the corrected LSTM anchor trains.
+- One non-main-machine implementation PR is active for the unified efficiency
+  harness. It is limited to tiny dry-run contract checks; formal benchmark
+  execution remains blocked while the corrected LSTM anchor trains.
 - Deeper LSTM scaling remains conditional on the completed corrected-profile
   anchor; no Neo retraining is planned.
 - Unified Torch/MLX wall-clock and manual compute measurement is planned in

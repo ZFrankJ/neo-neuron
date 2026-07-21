@@ -146,6 +146,46 @@ for CUDA result claims. Standard GitHub-hosted runners for individual repos are
 not treated as Nvidia GPU runners here; use a real local Nvidia machine or an
 explicitly provisioned GPU runner.
 
+## Efficiency benchmark harness
+
+`scripts/benchmark_efficiency.py` provides one backend-neutral wall-clock and
+memory record for Torch or MLX without changing model or training semantics.
+It requires an explicit config, checkpoint, backend, device, workload, timing
+scope, profile label, weight provenance, repetition ID, and output path. Formal
+records require at least 20 unreported warm-up iterations and 100 measured
+iterations; `--dry-run` permits smaller contract checks and labels the JSON as
+non-formal.
+
+```bash
+python3 scripts/benchmark_efficiency.py \
+  --config <config.yaml> \
+  --checkpoint <checkpoint.pt> \
+  --backend torch \
+  --device cpu \
+  --workload sequence_eval \
+  --timing-scope model_only \
+  --batch-size 2 \
+  --sequence-length 16 \
+  --repetition-id smoke-1 \
+  --profile-label <exact-profile-label> \
+  --weight-provenance mapped_same_checkpoint \
+  --output <record.json> \
+  --dry-run --warmup-iterations 1 --measured-iterations 2
+```
+
+The authoritative artifact is versioned JSON containing every raw timing
+sample, percentile summaries, synchronization policy, RSS and supported
+backend memory telemetry, config/checkpoint hashes and metadata, exact
+trainable parameters, workload shape, runtime versions, and hardware identity.
+Existing records are never overwritten unless `--replace` is explicit.
+`train_step` uses `end_to_end_loop`; `sequence_eval` and `streaming_decode` use
+`model_only`. THOP estimates are not part of this contract.
+
+The harness may be developed and exercised with tiny dry runs on a separate
+machine, but formal Neo/LSTM efficiency measurement remains blocked until the
+scaling sequence and comparison checkpoints are frozen. Do not run benchmarks
+concurrently with production training.
+
 ## Development workflow
 
 This repo uses the local `codex-harness` workflow adapted for Neo.

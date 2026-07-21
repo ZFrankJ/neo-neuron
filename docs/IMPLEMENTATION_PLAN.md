@@ -13,8 +13,9 @@ open a new tracking issue only when explicitly requested.
 ```text
 completed packet PR 1: https://github.com/ZFrankJ/neo-neuron/pull/29
 completed packet PR 2: https://github.com/ZFrankJ/neo-neuron/pull/30
+active packet PR 3: unified Torch/MLX wall-clock and memory harness development
 active experiment: 50M-total / 40M-recurrent-core matched-no-layer-dropout LSTM anchor
-blocked follow-up: unified Torch/MLX wall-clock and manual compute measurement after LSTM scaling
+blocked follow-up: formal efficiency execution and manual compute accounting after LSTM scaling
 ```
 
 MLX is the frozen scientific reference backend. Existing clean MLX result rows outside this repo remain authoritative.
@@ -263,12 +264,14 @@ Execute exactly one packet at a time in this order.
   retrained. Historical LSTM checkpoints remain historical-profile evidence and
   must not be mixed into a corrected-profile scaling fit.
 
-### Unified Torch/MLX Wall-Clock And Memory Harness - Blocked Code Packet
+### Unified Torch/MLX Wall-Clock And Memory Harness - Active Code Packet
 
-Depends on completion of the LSTM scaling sequence and a frozen list of Neo and
-LSTM comparison checkpoints. This is the first efficiency-measurement PR; it
-must not be implemented or executed on the main training machine while scaling
-is active.
+Development was explicitly approved on 2026-07-21 on a non-main machine while
+the LSTM scaling run continues. Tiny deterministic dry runs are permitted for
+contract verification. Formal benchmark execution and paper-facing records
+still depend on completion of the scaling sequence and a frozen list of Neo and
+LSTM comparison checkpoints. This first efficiency-measurement PR must not
+touch or compete with the main training machine.
 
 Public contract:
 
@@ -450,8 +453,9 @@ Optional hardware probes remain local/manual:
 
 Do not hand these to an agent yet:
 
-- Unified Torch/MLX efficiency benchmark implementation or execution before corrected
-  LSTM scaling and checkpoint selection are complete.
+- Formal unified Torch/MLX efficiency benchmark execution before corrected LSTM
+  scaling and checkpoint selection are complete; only tiny explicitly labeled
+  dry-run contract checks are permitted during harness development.
 - Revalidating old PyTorch MPS result rows.
 - Making MPS a production result backend.
 - Re-enabling activation checkpointing for result production.
