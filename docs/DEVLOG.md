@@ -18,6 +18,9 @@ Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLA
   - Required Torch and MLX to produce the same logical operation section and
     allowed timing/compute joins only through a separate derived report keyed by
     immutable benchmark, config, checkpoint, and workload identifiers.
+  - Bound the stored workload identifier back to the logical workload payload
+    during validation, and carried benchmark dry-run status plus provisional
+    reasons into every derived timing/compute report.
 - Why:
   - Backend profilers and THOP describe framework dispatch or partial operator
     support, not one portable mathematical workload.

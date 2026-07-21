@@ -230,6 +230,9 @@ enumerated and tested.
 
 Timing and arithmetic may be joined only in the derived report when the
 benchmark record ID, config hash, checkpoint hash, and workload ID all match.
+The workload ID is recomputed from the logical operation payload rather than
+trusted as a detached label, and the derived report retains the source
+benchmark's dry-run flag, evidence status, and provisional reasons.
 Arithmetic describes the mathematical workload; latency, memory, fusion, and
 utilization remain backend/device measurements. THOP output is not an oracle.
 Formal records and paper-facing derived reports remain blocked until corrected

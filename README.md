@@ -221,8 +221,10 @@ work retain separate element-count categories. Backward dense MACs and AdamW
 parameter updates are explicitly estimates. Unknown trainable parameters,
 incomplete coverage, shape mismatches, and timing/compute identity mismatches
 fail closed. The derived report joins records only when benchmark, config,
-checkpoint, and workload identifiers match; it is not a hardware-utilization
-claim and does not use THOP as an oracle.
+checkpoint, and workload identifiers match, recomputes the workload identity
+from the logical operation payload, and preserves the source benchmark's
+provisional or authoritative evidence classification. It is not a
+hardware-utilization claim and does not use THOP as an oracle.
 
 ## Development workflow
 

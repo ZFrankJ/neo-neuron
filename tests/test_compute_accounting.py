@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import subprocess
 import sys
@@ -294,6 +295,12 @@ def _benchmark_record(tmp_path: Path) -> dict:
     )
 
 
+def _rehash_operation_record(record: dict) -> None:
+    record.pop("operation_record_id", None)
+    canonical = json.dumps(record, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    record["operation_record_id"] = hashlib.sha256(canonical).hexdigest()
+
+
 def test_compute_and_timing_join_only_through_immutable_derived_report_keys(tmp_path: Path):
     benchmark = _benchmark_record(tmp_path)
     operations = operation_record_from_benchmark(benchmark)
@@ -313,6 +320,11 @@ def test_compute_and_timing_join_only_through_immutable_derived_report_keys(tmp_
         "workload_id": operations["identity"]["workload_id"],
     }
     assert report["interpretation"]["hardware_utilization_claim"] is False
+    assert report["evidence"] == {
+        "status": "provisional",
+        "provisional_reasons": ["dry_run"],
+        "source_dry_run": True,
+    }
 
     mismatched = copy.deepcopy(operations)
     mismatched["identity"]["checkpoint_sha256"] = "other-checkpoint"
@@ -323,6 +335,18 @@ def test_compute_and_timing_join_only_through_immutable_derived_report_keys(tmp_
     tampered["logical_operations"]["forward"]["macs"] += 1
     with pytest.raises(ValueError, match="operation_record_id"):
         derive_efficiency_report(benchmark, tampered)
+
+    rebound = copy.deepcopy(operations)
+    rebound["logical_operations"]["workload"].update(
+        {
+            "sequence_length": 999,
+            "tokens": 999,
+            "tokens_per_iteration": 999,
+        }
+    )
+    _rehash_operation_record(rebound)
+    with pytest.raises(ValueError, match="workload_id"):
+        derive_efficiency_report(benchmark, rebound)
 
 
 def test_compute_record_writer_is_immutable_without_replace(tmp_path: Path):

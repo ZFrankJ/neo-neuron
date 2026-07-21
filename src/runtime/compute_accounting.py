@@ -367,6 +367,7 @@ def account_model_operations(
     place = _norm_place(cfg)
     tokens = batch_size * sequence_length
     training = workload == "train_step"
+    timing_scope = "end_to_end_loop" if training else "model_only"
     output_projection_executed = tie_embeddings and d_embed != d_model
 
     non_matmul = {
@@ -599,9 +600,11 @@ def account_model_operations(
         },
         "workload": {
             "name": workload,
+            "timing_scope": timing_scope,
             "batch_size": batch_size,
             "sequence_length": sequence_length,
             "tokens": tokens,
+            "tokens_per_iteration": tokens,
         },
         "conventions": {
             "mac_to_flop": "1 MAC = 2 FLOPs",
@@ -651,6 +654,31 @@ def _workload_identity(workload: Mapping[str, Any]) -> tuple[str, dict[str, Any]
     missing = [key for key, value in fields.items() if value is None]
     if missing:
         raise ValueError(f"Benchmark workload is missing immutable identity fields: {missing}")
+    name = str(fields["name"])
+    if name not in SUPPORTED_WORKLOADS:
+        raise ValueError(f"Unsupported workload in immutable identity: {name!r}")
+    expected_scope = "end_to_end_loop" if name == "train_step" else "model_only"
+    if fields["timing_scope"] != expected_scope:
+        raise ValueError(
+            f"Workload {name!r} requires timing_scope {expected_scope!r}, "
+            f"got {fields['timing_scope']!r}"
+        )
+    batch_size = int(fields["batch_size"])
+    sequence_length = int(fields["sequence_length"])
+    if batch_size <= 0 or sequence_length <= 0:
+        raise ValueError("Workload batch_size and sequence_length must be positive")
+    expected_tokens = batch_size * sequence_length
+    if int(fields["tokens_per_iteration"]) != expected_tokens:
+        raise ValueError("Workload tokens_per_iteration does not match its logical shape")
+    if "tokens" in workload and int(workload["tokens"]) != expected_tokens:
+        raise ValueError("Logical operation workload tokens do not match its logical shape")
+    fields = {
+        "name": name,
+        "timing_scope": expected_scope,
+        "batch_size": batch_size,
+        "sequence_length": sequence_length,
+        "tokens_per_iteration": expected_tokens,
+    }
     return _canonical_hash(fields), fields
 
 
@@ -709,6 +737,13 @@ def operation_record_from_benchmark(benchmark_record: Mapping[str, Any]) -> dict
             record = build_and_account()
         finally:
             mx.set_default_device(original_device)
+    logical_workload_id, _ = _workload_identity(
+        record["logical_operations"]["workload"]
+    )
+    if logical_workload_id != workload_id:
+        raise ValueError(
+            "Generated logical operation workload does not match benchmark workload_id"
+        )
     record["identity"] = {
         "benchmark_record_id": benchmark_id,
         "config_sha256": config_sha,
@@ -755,13 +790,23 @@ def derive_efficiency_report(
     if not operation_id:
         raise ValueError("Operation record is missing operation_record_id")
     summary = benchmark_record.get("summary")
+    benchmark_evidence = benchmark_record.get("evidence")
     logical = operation_record.get("logical_operations")
-    if not isinstance(summary, Mapping) or not isinstance(logical, Mapping):
-        raise ValueError("Timing summary or logical operation summary is missing")
+    if (
+        not isinstance(summary, Mapping)
+        or not isinstance(benchmark_evidence, Mapping)
+        or not isinstance(logical, Mapping)
+    ):
+        raise ValueError("Timing summary, evidence, or logical operation summary is missing")
     report: dict[str, Any] = {
         "schema_version": DERIVED_REPORT_SCHEMA_VERSION,
         "identity": expected | {"operation_record_id": operation_id},
         "timing_summary": dict(summary),
+        "evidence": {
+            "status": benchmark_evidence["status"],
+            "provisional_reasons": list(benchmark_evidence["provisional_reasons"]),
+            "source_dry_run": bool(workload["dry_run"]),
+        },
         "operation_summary": {
             key: logical[key]
             for key in ("forward", "backward", "optimizer")
@@ -794,6 +839,41 @@ def _validate_compute_record(record: Mapping[str, Any]) -> None:
     del content[id_key]
     if record_id != _canonical_hash(content):
         raise ValueError(f"{id_key} does not match compute record content")
+    if schema == COMPUTE_SCHEMA_VERSION:
+        identity = record.get("identity")
+        logical = record.get("logical_operations")
+        if identity is None:
+            return
+        if not isinstance(identity, Mapping) or not isinstance(logical, Mapping):
+            raise ValueError("Linked compute records require identity and logical_operations")
+        workload = logical.get("workload")
+        if not isinstance(workload, Mapping):
+            raise ValueError("Linked compute record is missing its logical workload")
+        logical_workload_id, _ = _workload_identity(workload)
+        if identity.get("workload_id") != logical_workload_id:
+            raise ValueError(
+                "Compute record identity workload_id does not match logical_operations.workload"
+            )
+        return
+
+    evidence = record.get("evidence")
+    if not isinstance(evidence, Mapping) or set(evidence) != {
+        "status",
+        "provisional_reasons",
+        "source_dry_run",
+    }:
+        raise ValueError("Derived reports require complete benchmark evidence metadata")
+    reasons = evidence.get("provisional_reasons")
+    if not isinstance(reasons, list) or any(not isinstance(value, str) for value in reasons):
+        raise ValueError("Derived report provisional_reasons must be a list of strings")
+    if evidence.get("source_dry_run") is True:
+        if evidence.get("status") != "provisional" or "dry_run" not in reasons:
+            raise ValueError("Dry-run derived reports must remain explicitly provisional")
+    elif evidence.get("source_dry_run") is False:
+        if evidence.get("status") != "authoritative" or reasons:
+            raise ValueError("Formal derived reports must remain authoritative")
+    else:
+        raise ValueError("Derived report source_dry_run must be boolean")
 
 
 def write_compute_record(
