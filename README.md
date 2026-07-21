@@ -203,6 +203,27 @@ machine, but formal Neo/LSTM efficiency measurement remains blocked until the
 scaling sequence and comparison checkpoints are frozen. Do not run benchmarks
 concurrently with production training.
 
+Manual operation accounting is a separate artifact derived from a completed
+benchmark record. It constructs the selected backend model on CPU only to audit
+its parameter tree, then applies one shared Neo/LSTM formula layer:
+
+```bash
+python3 scripts/account_compute.py \
+  --benchmark /tmp/benchmark-record.json \
+  --output /tmp/compute-record.json \
+  --report /tmp/derived-efficiency-report.json
+```
+
+The compute record reports exact shape-derived forward MACs and FLOPs under
+`1 MAC = 2 FLOPs`. Embedding lookup stays data movement, while sigmoid, tanh,
+other activations, normalization, softmax, loss, dropout, bias, and elementwise
+work retain separate element-count categories. Backward dense MACs and AdamW
+parameter updates are explicitly estimates. Unknown trainable parameters,
+incomplete coverage, shape mismatches, and timing/compute identity mismatches
+fail closed. The derived report joins records only when benchmark, config,
+checkpoint, and workload identifiers match; it is not a hardware-utilization
+claim and does not use THOP as an oracle.
+
 ## Development workflow
 
 This repo uses the local `codex-harness` workflow adapted for Neo.
@@ -217,6 +238,7 @@ Useful focused checks:
 
 ```bash
 make test
+make compute-check
 make mlx-parity
 make lstm-parity
 make mps-probe

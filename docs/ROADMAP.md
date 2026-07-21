@@ -95,10 +95,10 @@ This roadmap lists broad project priorities only. Checkpoint state belongs in `d
   - Complete the user-approved matched-no-layer-dropout 50M-total /
     40M-recurrent-core LSTM anchor under its 12-epoch schedule before selecting
     deeper corrected-profile scaling points.
-  - Permit unified Torch/MLX harness development and tiny dry-run contract
-    checks on a non-main machine, while keeping formal timing and
-    backend-neutral manual compute measurement blocked until scaling and
-    checkpoint selection are complete.
+  - Preserve the merged unified Torch/MLX harness and permit backend-neutral
+    manual compute-accounting contract checks on a non-main machine, while
+    keeping formal timing and paper-facing derived reports blocked until
+    scaling and checkpoint selection are complete.
 - Exit condition:
   - The new profiles are merged without repurposing historical paths, the
     corrected LSTM scaling profile is classified on completed runs, deeper
