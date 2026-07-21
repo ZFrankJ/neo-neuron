@@ -13,7 +13,7 @@ open a new tracking issue only when explicitly requested.
 ```text
 completed packet PR 1: https://github.com/ZFrankJ/neo-neuron/pull/29
 completed packet PR 2: https://github.com/ZFrankJ/neo-neuron/pull/30
-active packet PR 3: unified Torch/MLX wall-clock and memory harness development
+active packet PR 3: https://github.com/ZFrankJ/neo-neuron/pull/31
 active experiment: 50M-total / 40M-recurrent-core matched-no-layer-dropout LSTM anchor
 blocked follow-up: formal efficiency execution and manual compute accounting after LSTM scaling
 ```
