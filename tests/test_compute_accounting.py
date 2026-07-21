@@ -136,6 +136,37 @@ def test_tiny_lstm_train_step_separates_exact_forward_from_estimates():
     }
 
 
+def test_lstm_train_step_manifests_output_and_inter_layer_dropout():
+    cfg = _tiny_cfg("lstm") | {
+        "n_layers": 2,
+        "dropout": 0.25,
+        "lstm_layer_dropout": 0.5,
+    }
+    logical = _account_torch(cfg, workload="train_step")["logical_operations"]
+    manifest = {
+        entry["component"]: entry for entry in logical["coverage_manifest"]
+    }
+
+    assert logical["forward"]["non_matmul_operations"]["dropout_elements"] == 8
+    assert manifest["output_dropout"] == {
+        "component": "output_dropout",
+        "executed": True,
+        "parameterized": False,
+        "formula": "tokens * d_model when train_step dropout is nonzero",
+        "macs": 0,
+    }
+    assert manifest["lstm_inter_layer_dropout"] == {
+        "component": "lstm_inter_layer_dropout",
+        "executed": True,
+        "parameterized": False,
+        "formula": (
+            "tokens * d_model * (n_layers - 1) when train_step "
+            "lstm_layer_dropout is nonzero"
+        ),
+        "macs": 0,
+    }
+
+
 @pytest.mark.parametrize(
     ("activation_id", "activation_elements", "tanh_elements", "elementwise_operations"),
     [

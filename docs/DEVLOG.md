@@ -33,6 +33,8 @@ Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLA
   - Bound the stored workload identifier back to the logical workload payload
     during validation, and carried benchmark dry-run status plus provisional
     reasons into every derived timing/compute report.
+  - Manifested LSTM inter-layer dropout separately from output dropout so every
+    counted training dropout element maps back to an executed formula entry.
 - Why:
   - Backend profilers and THOP describe framework dispatch or partial operator
     support, not one portable mathematical workload.

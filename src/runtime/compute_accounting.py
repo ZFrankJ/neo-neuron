@@ -483,9 +483,13 @@ def account_model_operations(
     dropout = float(cfg.get("dropout", 0.0))
     if training and dropout > 0.0:
         non_matmul["dropout_elements"] += tokens * d_model
-    if training and model_name == "lstm":
+    lstm_inter_layer_dropout_executed = False
+    if model_name == "lstm":
         layer_dropout = float(cfg.get("lstm_layer_dropout", dropout))
-        if layer_dropout > 0.0 and n_layers > 1:
+        lstm_inter_layer_dropout_executed = (
+            training and layer_dropout > 0.0 and n_layers > 1
+        )
+        if lstm_inter_layer_dropout_executed:
             non_matmul["dropout_elements"] += tokens * d_model * (n_layers - 1)
     manifest.append(
         _manifest_entry(
@@ -495,6 +499,18 @@ def account_model_operations(
             executed=training and dropout > 0.0,
         )
     )
+    if model_name == "lstm":
+        manifest.append(
+            _manifest_entry(
+                "lstm_inter_layer_dropout",
+                (
+                    "tokens * d_model * (n_layers - 1) when train_step "
+                    "lstm_layer_dropout is nonzero"
+                ),
+                0,
+                executed=lstm_inter_layer_dropout_executed,
+            )
+        )
 
     if d_embed != d_model:
         projection_macs = tokens * d_model * d_embed if output_projection_executed else 0
