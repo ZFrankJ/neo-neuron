@@ -45,10 +45,13 @@ Current position:
   across the focused parity suite
 - the two test-covered 60M-total / 50M-recurrent-core LSTM boundary diagnostic
   profiles are complete; their presence does not start a training run
+- the unified Torch/MLX timing and memory harness plus backend-neutral manual
+  compute accounting are merged; no implementation PR is active, and formal
+  measurement waits for scaling completion and checkpoint selection
 
 Current active checkpoint:
 
-`corrected LSTM scaling active; complete and classify the 50M-total anchor`
+`waiting for corrected LSTM completion and checkpoint classification`
 
 Current implementation plan:
 
@@ -105,7 +108,7 @@ Current implementation plan:
      50M-recurrent-core matched and standard-init no-layer-dropout LSTM
      configs without editing historical paths.
 14. Corrected LSTM scaling anchor
-   - Status: in progress; epoch-4 gate passed
+   - Status: in progress externally; epoch-4 gate passed, awaiting completion
    - Result wanted: complete the user-approved 50M-total / 40M-recurrent-core
      matched-no-layer-dropout LSTM under the 12-epoch scheduler contract, then
      select and evaluate the checkpoint under streaming semantics before
@@ -113,13 +116,13 @@ Current implementation plan:
 
 ## Remaining Scale Estimate
 
-- The unified efficiency harness is merged. One non-main-machine implementation
-  PR is active for backend-neutral manual compute accounting and is limited to
-  deterministic contract checks; formal benchmark execution remains blocked
-  while the corrected LSTM anchor trains.
+- The unified efficiency harness and backend-neutral manual compute accounting
+  are merged. No code PR is active; formal benchmark execution remains blocked
+  while the corrected LSTM anchor trains and comparison checkpoints remain
+  unfrozen.
 - Deeper LSTM scaling remains conditional on the completed corrected-profile
   anchor; no Neo retraining is planned.
-- Unified Torch/MLX wall-clock and manual compute measurement is planned in
+- The formal Torch/MLX wall-clock and manual-compute matrix is specified in
   `docs/IMPLEMENTATION_PLAN.md` but remains blocked until scaling and checkpoint
   selection are complete.
 - CUDA validation remains blocked on access to Nvidia hardware or a provisioned GPU runner.

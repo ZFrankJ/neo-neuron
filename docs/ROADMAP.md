@@ -85,8 +85,8 @@ This roadmap lists broad project priorities only. Checkpoint state belongs in `d
     still have explicit configuration and regularization confounds.
 - Focus:
   - Preserve historical WT103 configs, run tags, checkpoints, and result labels.
-  - Close the remaining Neo MLX contract and parity-test gaps before adding new
-    WT103 profiles.
+  - Preserve the completed Neo MLX contract, parity-test, timing-harness, and
+    manual-accounting gates while no code PR is active.
   - Preserve the separately named 60M-total / 50M-recurrent-core
     matched-no-layer-dropout and standard-init LSTM boundary profiles with
     config-contract tests.
@@ -95,10 +95,9 @@ This roadmap lists broad project priorities only. Checkpoint state belongs in `d
   - Complete the user-approved matched-no-layer-dropout 50M-total /
     40M-recurrent-core LSTM anchor under its 12-epoch schedule before selecting
     deeper corrected-profile scaling points.
-  - Preserve the merged unified Torch/MLX harness and permit backend-neutral
-    manual compute-accounting contract checks on a non-main machine, while
-    keeping formal timing and paper-facing derived reports blocked until
-    scaling and checkpoint selection are complete.
+  - Keep formal timing and paper-facing derived reports blocked until scaling
+    and checkpoint selection are complete; only tiny contract checks are
+    permitted before that gate closes.
 - Exit condition:
   - The new profiles are merged without repurposing historical paths, the
     corrected LSTM scaling profile is classified on completed runs, deeper

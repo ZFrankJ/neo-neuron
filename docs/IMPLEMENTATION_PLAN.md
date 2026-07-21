@@ -14,9 +14,11 @@ open a new tracking issue only when explicitly requested.
 completed packet PR 1: https://github.com/ZFrankJ/neo-neuron/pull/29
 completed packet PR 2: https://github.com/ZFrankJ/neo-neuron/pull/30
 completed packet PR 3: https://github.com/ZFrankJ/neo-neuron/pull/31
-active packet PR 4: https://github.com/ZFrankJ/neo-neuron/pull/32
+completed packet PR 4: https://github.com/ZFrankJ/neo-neuron/pull/32
+active code PR queue: none
 active experiment: 50M-total / 40M-recurrent-core matched-no-layer-dropout LSTM anchor
-blocked follow-up: formal efficiency execution after LSTM scaling and checkpoint selection
+waiting gate: matched LSTM completion, streaming-validation checkpoint selection, and one streaming test evaluation
+blocked follow-up: formal efficiency matrix after the waiting gate closes
 ```
 
 MLX is the frozen scientific reference backend. Existing clean MLX result rows outside this repo remain authoritative.
@@ -57,9 +59,10 @@ unresolved depth-dependent regularization confound.
 The user-approved result sequence now starts by rebuilding the completed
 `d_model=790`, `n_layers=8` LSTM anchor under the matched-no-layer-dropout
 profile. This gives an exact historical-LSTM control and a near-equal-total-
-parameter Neo comparison before deeper LSTM points are selected. Efficiency
-measurement is planned now but must not run concurrently with, modify, or
-select checkpoints for the active scaling sequence.
+parameter Neo comparison before deeper LSTM points are selected. The timing
+harness and manual accounting implementation are complete, but formal
+measurement must not run concurrently with, modify, or select checkpoints for
+the active scaling sequence.
 
 ## Goal Exits
 
@@ -125,7 +128,7 @@ following are true:
 - Deeper LSTM scaling is authorized only while the selected profile remains
   healthy under predeclared streaming-validation gates; clean MLX Neo
   checkpoints are reevaluated rather than retrained.
-- Unified Torch/MLX efficiency benchmarking remains blocked until the LSTM scaling
+- Formal Torch/MLX efficiency execution remains blocked until the LSTM scaling
   profile and comparison checkpoints are frozen.
 
 ## Global Rules
@@ -140,13 +143,12 @@ following are true:
 - Do not start production training scripts.
 - Do not download large datasets.
 - Do not modify `neo.csv`.
-- Do not alter historical `configs/wt103/*` files. The current approval permits
-  only new profile paths named in the active queue.
+- Do not alter historical `configs/wt103/*` files. No new WT103 config path is
+  currently approved.
 - Do not reuse a historical run tag for a new LSTM bias, normalization,
   dropout, initialization, or scheduler contract.
-- Do not touch the main experiment machine from implementation PRs. The
-  diagnostic starts only after the config packet merges and the user explicitly
-  starts or authorizes it.
+- Do not touch the main experiment machine from implementation PRs. The active
+  run is externally managed; this checkout remains for coding and writing.
 - Do not write checkpoints or result artifacts outside pytest temp directories.
 - Keep the passing PyTorch parity path on `use_checkpoint: false`.
 - Keep checkpointed MPS outside scientific claims.
@@ -238,13 +240,21 @@ following are true:
   - Added test-covered 60M-total / 50M-recurrent-core matched and standard-init
     boundary diagnostic profiles without changing historical WT103 paths.
 - PR #31: https://github.com/ZFrankJ/neo-neuron/pull/31
+  - Merge commit: `c58e331 Merge pull request #31 from ZFrankJ/codex/feat/unified-efficiency-harness`
   - Added the unified Torch/MLX wall-clock and memory harness, immutable
     benchmark records, explicit workload semantics, and tiny dry-run contract
     verification without starting formal benchmark execution.
+- PR #32: https://github.com/ZFrankJ/neo-neuron/pull/32
+  - Merge commit: `b534b42 Merge pull request #32 from ZFrankJ/codex/feat/manual-compute-accounting`
+  - Added shared Neo/LSTM manual compute accounting, fail-closed parameter and
+    formula coverage, immutable derived reports, and deterministic LSTM parity
+    fixtures without starting formal benchmark execution.
 
 ## Active Execution Queue
 
-Execute exactly one packet at a time in this order.
+No code packet is active. Do not open another implementation PR from this plan
+until the matched LSTM run completes and the checkpoint-selection evidence is
+recorded. The only active work is the externally managed experiment below.
 
 ### Corrected LSTM Scaling - Active Experiment, Not A Code PR
 
@@ -269,162 +279,11 @@ Execute exactly one packet at a time in this order.
   retrained. Historical LSTM checkpoints remain historical-profile evidence and
   must not be mixed into a corrected-profile scaling fit.
 
-### Unified Torch/MLX Wall-Clock And Memory Harness - Completed Code Packet
-
-Completed in PR #31 after development was explicitly approved on 2026-07-21 on a non-main machine while
-the LSTM scaling run continues. Tiny deterministic dry runs are permitted for
-contract verification. Formal benchmark execution and paper-facing records
-still depend on completion of the scaling sequence and a frozen list of Neo and
-LSTM comparison checkpoints. This first efficiency-measurement PR must not
-touch or compete with the main training machine.
-
-Public contract:
-
-- Add one backend-neutral benchmark CLI, provisionally
-  `scripts/benchmark_efficiency.py`, and one versioned result schema without
-  changing training or model runtime semantics.
-- Support `--backend mlx|torch` and an explicit device. Resolve model
-  construction, checkpoint loading, and execution through the existing backend
-  contracts; do not duplicate model mathematics in the benchmark.
-- Keep one shared benchmark core for workload setup, warm-up, sample capture,
-  aggregation, persistence, and validation. Backend adapters own only execution,
-  synchronization, and available memory telemetry.
-- Accept an explicit config, checkpoint, backend, device, workload, batch size,
-  sequence length, warm-up count, measured-iteration count, repetition
-  identifier, and output path. Never infer a paper-facing profile from a
-  filename alone.
-- Support separately labeled `train_step`, `sequence_eval`, and
-  `streaming_decode` workloads. Define `train_step` as an isolated optimizer
-  update with fresh-then-warmed optimizer state, no scheduler, reset recurrent
-  state, and full-sequence backpropagation; reject a shorter configured TBPTT
-  contract instead of silently changing it. Model-only timing and end-to-end
-  loop timing are distinct scopes and must never be combined into one number.
-- Preallocate deterministic token inputs outside the measured region. Exclude
-  dataset download, tokenization, checkpoint loading, compilation/warm-up, and
-  result serialization from model-only timing.
-- Use `time.perf_counter_ns()` with backend synchronization immediately before
-  and after every measured region: `mx.synchronize()` for MLX, eager completion
-  for Torch CPU, `torch.mps.synchronize()` for MPS, and
-  `torch.cuda.synchronize(device)` for CUDA. Lazy or asynchronous work must
-  never cross a timing boundary.
-- Seed each backend before model construction and again before execution.
-  Record that RNG streams are backend-local; equal seeds prove within-backend
-  repeatability and do not imply identical Torch/MLX dropout masks.
-- Fail clearly when the requested backend/device or required synchronization
-  primitive is unavailable. MPS and CUDA support remains skip-safe and does not
-  weaken their existing scientific-acceptance gates.
-- Run at least 20 unreported warm-up iterations and 100 measured iterations per
-  process unless an approved dry run establishes a larger minimum for stable
-  intervals. Preserve every raw sample.
-- Reset backend peak-memory counters after warm-up and between measurements when
-  a supported API exists. Capture measured-work memory before output validation
-  can allocate temporary buffers, and retain the maximum measured backend peak.
-  Report process RSS for every backend plus backend active/peak allocation,
-  tokens per second, milliseconds per token, and milliseconds per step. An
-  unsupported memory field must be recorded as unavailable, never as zero.
-- Emit a versioned JSON record containing raw samples and summary statistics,
-  including median, quartiles, and 10th/90th percentiles. Any CSV table is a
-  derived view, not the authoritative record.
-- Record git commit, config snapshot, checkpoint identity and
-  execution-semantic metadata, exact trainable parameter count and breakdown,
-  model/profile labels, activation and norm settings, backend, device, dtype,
-  framework/Python/OS versions, hardware identifier including the processor
-  model, workload dimensions, seed, synchronization policy, telemetry
-  capability flags, and whether data handling is included.
-- Preserve historical config separately from effective benchmark execution.
-  The only `use_checkpoint: true` exception is a native MLX Neo checkpoint,
-  where the historically recorded flag had no MLX runtime effect; record the
-  exact override to benchmark execution with `use_checkpoint: false`.
-  For the same frozen historical MLX Neo contract only, resolve omitted
-  `reference_backend` and `rmsnorm_eps` metadata to `mlx` and `1e-5` while
-  preserving both raw snapshots. Bind each inference to the config/checkpoint
-  hashes and record the frozen-semantics reason; do not relax any other missing
-  metadata gate.
-- Require equivalent logical workload definitions across Torch and MLX. A
-  cross-backend comparison must record whether weights were mapped from the
-  same checkpoint or loaded natively. Infer that provenance from checkpoint and
-  execution backends rather than trusting a caller-supplied assertion.
-- Formal records require complete model-family aligned checkpoint metadata and
-  an exact profile label bound to config and checkpoint metadata. Every dry run
-  is explicitly provisional and records missing metadata or label reasons.
-- Reject metadata mismatch, unsupported backends or workloads, non-positive
-  iteration counts, non-finite outputs, and attempts to overwrite an existing
-  authoritative record without an explicit replacement flag.
-- Do not depend on THOP or another generic operation profiler. Existing THOP
-  fields retain historical provenance but are excluded from formal efficiency
-  claims.
-
-Test-first and verification contract:
-
-- First tests freeze the shared CLI/schema, adapter boundary, synchronization
-  order, warm-up exclusion, raw-sample persistence, percentile aggregation,
-  overwrite guard, capability encoding, metadata mismatch failures,
-  backend-local RNG repeatability, formal/provisional evidence classification,
-  inferred checkpoint provenance, a formal fixture derived from the checked-in
-  legacy WT103 Neo config shape, historical MLX Neo execution overrides, and
-  tiny deterministic fixtures and a controllable clock.
-- A required tiny Torch CPU integration test and a skip-safe tiny MLX integration
-  test must emit the same schema and prove that measured work is completed at
-  the timing boundary. MPS and CUDA integration tests remain opt-in and
-  skip-safe.
-- A mapped-weight tiny workload must verify that Torch and MLX benchmark the
-  same input/output shapes and semantic workload before cross-backend timing is
-  accepted. CI must not enforce hardware performance thresholds.
-- Run the focused benchmark tests, `make torch-validate`, `make mlx-parity`,
-  `make check`, and `git diff --check`. The PR itself must not run WT103 or
-  produce paper-facing benchmark records.
-
-### Manual Compute Accounting - Active Code Packet
-
-Depends on the unified timing harness contract. Keep arithmetic accounting
-independent from measured wall-clock performance so hardware utilization is not
-misreported as algorithmic compute.
-
-Public contract:
-
-- Add one backend-neutral, shape-derived operation counter for Neo and LSTM that
-  walks supported logical model components and fails closed on unknown trainable
-  modules. Do not maintain independent Torch and MLX formulas for the same
-  mathematical operation.
-- Count matrix multiply-accumulate operations exactly from tensor shapes and
-  report both MACs and FLOPs under the explicit convention `1 MAC = 2 FLOPs`.
-- Include recurrent matrices, input/output projections, tied or untied output
-  heads, and every other parameterized dense operation executed by the selected
-  workload. Treat embedding lookup as data movement rather than a dense MAC.
-- Report sigmoid, tanh, activation, normalization, softmax, loss, optimizer, and
-  other scalar/elementwise operation counts by category instead of silently
-  assigning them an arbitrary matmul-equivalent cost.
-- Label forward compute as exact under the declared formula coverage. Label
-  backward and optimizer compute as estimates unless every derivative and
-  update formula is explicitly enumerated and tested.
-- Treat audited operations as the mathematical workload, independent of kernel
-  fusion, layout, framework dispatch, or hardware utilization. Those effects
-  belong only to measured backend/device timing.
-- Emit a coverage manifest mapping every supported model component to its
-  formula and reject incomplete coverage. Equivalent Torch and MLX model
-  structures must produce identical operation records for the same workload;
-  disagreement is a contract failure. Do not use THOP output as an oracle.
-- Merge the audited operation record with timing results only through a derived
-  report keyed by immutable config/checkpoint/workload identifiers.
-
-Test-first and verification contract:
-
-- First tests use hand-computable tiny Neo and LSTM shapes, tied/untied heads,
-  supported normalization and activation settings, and deliberate unknown
-  modules to prove fail-closed coverage.
-- Construct equivalent tiny Torch and MLX models and require identical logical
-  operation counts. Cross-check parameterized operation coverage against both
-  model parameter trees; parameter count agreement alone is not accepted as
-  compute agreement.
-- Run focused compute-accounting tests, `make torch-validate`,
-  `make mlx-parity`, `make check`, and `git diff --check`.
-- `make efficiency-check` runs the focused Torch/MLX harness integrations and is
-  required in the macOS MLX GitHub job.
-
 ### Formal Efficiency Matrix - Blocked Experiment, Not A Code PR
 
-Run only after corrected LSTM scaling, both code packets, and their verification
-are complete:
+The implementation prerequisites are complete in PR #31 and PR #32. Run this
+matrix only after corrected LSTM scaling completes and the Neo/LSTM comparison
+checkpoint list is frozen:
 
 - Freeze near-equal-total-parameter Neo/LSTM checkpoint pairs before measuring.
   Parameter-and-token parity remains the primary architecture comparison;
@@ -485,8 +344,9 @@ Optional hardware probes remain local/manual:
 Do not hand these to an agent yet:
 
 - Formal unified Torch/MLX efficiency benchmark execution before corrected LSTM
-  scaling and checkpoint selection are complete; only tiny explicitly labeled
-  dry-run contract checks are permitted during harness development.
+  scaling and checkpoint selection are complete. The harness and accounting
+  code are merged; only tiny explicitly labeled dry-run contract checks are
+  permitted while this gate remains open.
 - Revalidating old PyTorch MPS result rows.
 - Making MPS a production result backend.
 - Re-enabling activation checkpointing for result production.
