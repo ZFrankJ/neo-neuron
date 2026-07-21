@@ -34,8 +34,9 @@ Current position:
 - a four-path code and config audit confirmed that clean MLX Neo and LSTM runs
   remain usable under their historical labels, while plain Torch backend
   overrides of the WT103 configs are not aligned experiments
-- WT103 revalidation planning and new-profile config preparation are now
-  approved, but no new training process has been authorized or started
+- WT103 revalidation planning and new-profile config preparation are complete;
+  the user-approved 50M-total / 40M-recurrent-core corrected LSTM anchor is
+  actively training after passing its epoch-4 operational gate at `79.92`
 - clean MLX Neo checkpoints do not require retraining for fields that were
   already effective on MLX; streaming checkpoint reevaluation remains the
   authoritative path
@@ -47,7 +48,7 @@ Current position:
 
 Current active checkpoint:
 
-`60M-total / 50M-recurrent-core boundary diagnostic gate next; no run started`
+`corrected LSTM scaling active; complete and classify the 50M-total anchor`
 
 Current implementation plan:
 
@@ -103,18 +104,21 @@ Current implementation plan:
    - Result wanted: add separately named, test-covered 60M-total /
      50M-recurrent-core matched and standard-init no-layer-dropout LSTM
      configs without editing historical paths.
-14. 60M-total / 50M-recurrent-core boundary diagnostic
-   - Status: next; no run started
-   - Result wanted: train with a 12-epoch scheduler contract, inspect at epoch 4,
-     and continue, switch profile, or stop according to the predeclared gate.
+14. Corrected LSTM scaling anchor
+   - Status: in progress; epoch-4 gate passed
+   - Result wanted: complete the user-approved 50M-total / 40M-recurrent-core
+     matched-no-layer-dropout LSTM under the 12-epoch scheduler contract, then
+     select and evaluate the checkpoint under streaming semantics before
+     predeclaring the next deeper point.
 
 ## Remaining Scale Estimate
 
-- No implementation PR remains before the boundary diagnostic.
-- The diagnostic run is not a code PR and must be explicitly started or
-  authorized; no run has started.
-- A full LSTM scaling rebuild remains conditional on meaningful 60M-total /
-  50M-recurrent-core recovery; no Neo retraining is planned.
+- No implementation PR is active while the corrected LSTM anchor trains.
+- Deeper LSTM scaling remains conditional on the completed corrected-profile
+  anchor; no Neo retraining is planned.
+- Unified Torch/MLX wall-clock and manual compute measurement is planned in
+  `docs/IMPLEMENTATION_PLAN.md` but remains blocked until scaling and checkpoint
+  selection are complete.
 - CUDA validation remains blocked on access to Nvidia hardware or a provisioned GPU runner.
 - Reproducers must run `NEO_RUN_CUDA_PROBE=1 python3 -m pytest -q tests/test_cuda_parity_harness.py` and confirm it does not skip before making CUDA claims.
 - Standard GitHub-hosted runners for individual repos are not an acceptable substitute for Nvidia GPU validation.

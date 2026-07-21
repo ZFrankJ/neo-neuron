@@ -77,7 +77,7 @@ This roadmap lists broad project priorities only. Checkpoint state belongs in `d
 
 ## 4. Result Production And WT103 Revalidation
 
-- Status: boundary diagnostic profiles complete; experiment gate next; no run started
+- Status: corrected LSTM scaling active; 50M-total anchor passed its epoch-4 gate
 - Why now:
   - Old PyTorch MPS WT103 rows are not trusted, and new result production should wait until baseline alignment is explicit.
   - The four-path audit found that the historical MLX results remain valid for
@@ -92,14 +92,16 @@ This roadmap lists broad project priorities only. Checkpoint state belongs in `d
     config-contract tests.
   - Do not retrain clean MLX Neo checkpoints when the new explicit fields do not
     change their training mathematics; use streaming reevaluation instead.
-  - Run only the matched-no-layer-dropout 60M-total / 50M-recurrent-core LSTM
-    first, with a 12-epoch schedule and an epoch-4 validation gate before any
-    broader scaling work.
+  - Complete the user-approved matched-no-layer-dropout 50M-total /
+    40M-recurrent-core LSTM anchor under its 12-epoch schedule before selecting
+    deeper corrected-profile scaling points.
+  - Keep unified Torch/MLX timing and backend-neutral manual compute measurement
+    blocked until scaling and checkpoint selection are complete.
 - Exit condition:
   - The new profiles are merged without repurposing historical paths, the
-    60M-total / 50M-recurrent-core boundary diagnostic is classified at the
-    epoch-4 gate, and broader LSTM retraining is either justified by recovery or
-    explicitly rejected.
+    corrected LSTM scaling profile is classified on completed runs, deeper
+    retraining is either justified or explicitly rejected, and selected clean
+    Neo checkpoints remain provenance-bound.
 - Expanded plan:
   - `docs/PROGRESS.md`
   - `docs/IMPLEMENTATION_PLAN.md`
