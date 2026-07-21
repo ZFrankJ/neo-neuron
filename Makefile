@@ -1,4 +1,4 @@
-.PHONY: check test docs-check mlx-parity lstm-parity mps-probe cuda-probe torch-validate help
+.PHONY: check test docs-check efficiency-check mlx-parity lstm-parity mps-probe cuda-probe torch-validate help
 
 PYTHON ?= python3
 
@@ -20,6 +20,9 @@ docs-check:
 	@test -f docs/DOCUMENTATION_STRUCTURE.md
 	@test -f docs/CONTEXT_BOOTSTRAP.md
 
+efficiency-check:
+	$(PYTHON) -m pytest -q tests/test_efficiency_benchmark.py
+
 mlx-parity:
 	$(PYTHON) -m pytest -q tests/test_mlx_reference_parity.py
 
@@ -40,6 +43,7 @@ help:
 	@echo "  check       - docs contract plus full pytest suite"
 	@echo "  test        - full pytest suite"
 	@echo "  docs-check  - required harness docs/workflow files exist"
+	@echo "  efficiency-check - Torch/MLX efficiency harness contract and integration tests"
 	@echo "  mlx-parity  - MLX reference parity tests"
 	@echo "  lstm-parity - deterministic MLX/Torch LSTM inference and training parity"
 	@echo "  mps-probe   - opt-in tiny PyTorch MPS no-checkpoint probe"

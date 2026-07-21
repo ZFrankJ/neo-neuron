@@ -1,0 +1,1068 @@
+"""Backend-neutral wall-clock and memory benchmark contract."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import math
+import os
+import platform
+import subprocess
+import time
+import warnings
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Callable, Dict, Iterable, Mapping, Protocol, Sequence
+
+import numpy as np
+
+from .backend import get_backend
+from .checkpoint_compat import (
+    REQUIRED_ALIGNED_LSTM_CFG_KEYS,
+    REQUIRED_ALIGNED_NEO_CFG_KEYS,
+    infer_checkpoint_backend,
+    load_checkpoint_payload,
+    validate_checkpoint_metadata,
+)
+
+
+SCHEMA_VERSION = "neo_efficiency_benchmark_v1"
+SUPPORTED_WORKLOADS = {"train_step", "sequence_eval", "streaming_decode"}
+SUPPORTED_TIMING_SCOPES = {"model_only", "end_to_end_loop"}
+SUPPORTED_WEIGHT_PROVENANCE = {
+    "mapped_same_checkpoint",
+    "backend_native_checkpoint",
+}
+MIN_WARMUP_ITERATIONS = 20
+MIN_MEASURED_ITERATIONS = 100
+FROZEN_HISTORICAL_MLX_NEO_DEFAULTS = {
+    "reference_backend": "mlx",
+    "rmsnorm_eps": 1e-5,
+}
+WORKLOAD_SEMANTICS = {
+    "train_step": {
+        "input_policy": "deterministic_preallocated",
+        "optimizer_state_policy": "fresh_then_warmed",
+        "rng_policy": "backend_local_seeded_before_model_construction_and_execution",
+        "scheduler_included": False,
+        "state_policy": "reset_each_iteration",
+        "tbptt_policy": "full_sequence",
+    },
+    "sequence_eval": {
+        "input_policy": "deterministic_preallocated",
+        "rng_policy": "backend_local_seeded_before_model_construction_and_execution",
+        "state_policy": "reset_each_iteration",
+    },
+    "streaming_decode": {
+        "input_policy": "deterministic_preallocated",
+        "rng_policy": "backend_local_seeded_before_model_construction_and_execution",
+        "state_policy": "reset_for_each_sequence",
+    },
+}
+
+
+@dataclass(frozen=True)
+class BenchmarkObservation:
+    output_shape: Sequence[int]
+    finite: bool
+    scalar: float
+
+
+@dataclass(frozen=True)
+class BenchmarkSpec:
+    workload: str
+    timing_scope: str
+    batch_size: int
+    sequence_length: int
+    warmup_iterations: int
+    measured_iterations: int
+    repetition_id: str
+    seed: int
+    dry_run: bool = False
+
+    def __post_init__(self) -> None:
+        if self.workload not in SUPPORTED_WORKLOADS:
+            raise ValueError(
+                f"Unsupported workload '{self.workload}'. Expected one of: "
+                f"{sorted(SUPPORTED_WORKLOADS)}"
+            )
+        if self.timing_scope not in SUPPORTED_TIMING_SCOPES:
+            raise ValueError(
+                f"Unsupported timing_scope '{self.timing_scope}'. Expected one of: "
+                f"{sorted(SUPPORTED_TIMING_SCOPES)}"
+            )
+        expected_scope = (
+            "end_to_end_loop" if self.workload == "train_step" else "model_only"
+        )
+        if self.timing_scope != expected_scope:
+            raise ValueError(
+                f"workload '{self.workload}' requires timing_scope '{expected_scope}', "
+                f"got '{self.timing_scope}'"
+            )
+        for name in (
+            "batch_size",
+            "sequence_length",
+            "measured_iterations",
+        ):
+            if int(getattr(self, name)) <= 0:
+                raise ValueError(f"{name} must be positive")
+        if int(self.warmup_iterations) < 0:
+            raise ValueError("warmup_iterations must be non-negative")
+        if not str(self.repetition_id).strip():
+            raise ValueError("repetition_id must be non-empty")
+        if not self.dry_run and self.warmup_iterations < MIN_WARMUP_ITERATIONS:
+            raise ValueError(
+                f"Formal records require at least {MIN_WARMUP_ITERATIONS} warm-up iterations"
+            )
+        if not self.dry_run and self.measured_iterations < MIN_MEASURED_ITERATIONS:
+            raise ValueError(
+                f"Formal records require at least {MIN_MEASURED_ITERATIONS} measured iterations"
+            )
+
+
+class EfficiencyAdapter(Protocol):
+    backend: str
+    device: str
+    dtype: str
+    framework_version: str
+    hardware_identifier: str
+    synchronization_policy: str
+    telemetry_capabilities: Mapping[str, bool]
+
+    def prepare(self, tokens: np.ndarray, targets: np.ndarray) -> None: ...
+
+    def reset_peak_memory(self) -> None: ...
+
+    def synchronize(self) -> None: ...
+
+    def run(self, workload: str) -> Any: ...
+
+    def memory_snapshot(self) -> Mapping[str, int | None]: ...
+
+
+def _percentile(values: Sequence[int], percentile: float) -> float:
+    ordered = sorted(float(value) for value in values)
+    if len(ordered) == 1:
+        return ordered[0]
+    position = (len(ordered) - 1) * percentile
+    lower = int(math.floor(position))
+    upper = int(math.ceil(position))
+    if lower == upper:
+        return ordered[lower]
+    fraction = position - lower
+    return ordered[lower] + fraction * (ordered[upper] - ordered[lower])
+
+
+def _summary(samples_ns: Sequence[int], tokens_per_iteration: int) -> Dict[str, float]:
+    median_ns = _percentile(samples_ns, 0.5)
+    return {
+        "min_ns": float(min(samples_ns)),
+        "median_ns": median_ns,
+        "q1_ns": _percentile(samples_ns, 0.25),
+        "q3_ns": _percentile(samples_ns, 0.75),
+        "p10_ns": _percentile(samples_ns, 0.10),
+        "p90_ns": _percentile(samples_ns, 0.90),
+        "max_ns": float(max(samples_ns)),
+        "tokens_per_second": float(tokens_per_iteration * 1_000_000_000 / median_ns),
+        "milliseconds_per_token": float(median_ns / 1_000_000 / tokens_per_iteration),
+        "milliseconds_per_step": float(median_ns / 1_000_000),
+    }
+
+
+def _finalize_observation(adapter: EfficiencyAdapter, pending: Any) -> BenchmarkObservation:
+    finalize = getattr(adapter, "finalize_observation", None)
+    observation = finalize(pending) if callable(finalize) else pending
+    if not isinstance(observation, BenchmarkObservation):
+        raise TypeError("Benchmark adapter must return BenchmarkObservation")
+    return observation
+
+
+def _deterministic_inputs(spec: BenchmarkSpec, vocab_size: int) -> tuple[np.ndarray, np.ndarray]:
+    if vocab_size <= 1:
+        raise ValueError("vocab_size must be greater than one")
+    size = spec.sequence_length * spec.batch_size
+    values = (
+        np.arange(size, dtype=np.int64).reshape(spec.sequence_length, spec.batch_size)
+        * 17
+        + int(spec.seed)
+    ) % vocab_size
+    tokens = np.ascontiguousarray(values.astype(np.int32))
+    targets = np.ascontiguousarray(((values + 1) % vocab_size).astype(np.int32))
+    return tokens, targets
+
+
+def hardware_identifier(accelerator: str | None = None) -> str:
+    """Return a stable, host-independent platform and processor model label."""
+
+    system = platform.system() or "unknown"
+    machine = platform.machine() or "unknown"
+    details: list[str] = []
+    if system == "Darwin":
+        for key in ("machdep.cpu.brand_string", "hw.model"):
+            try:
+                value = subprocess.run(
+                    ["sysctl", "-n", key],
+                    check=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    text=True,
+                    timeout=2,
+                ).stdout.strip()
+            except (OSError, subprocess.SubprocessError):
+                value = ""
+            if value and value not in details:
+                details.append(value)
+    elif system == "Linux":
+        try:
+            cpuinfo = Path("/proc/cpuinfo").read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            cpuinfo = ""
+        for line in cpuinfo.splitlines():
+            if line.lower().startswith("model name") and ":" in line:
+                value = line.split(":", 1)[1].strip()
+                if value:
+                    details.append(value)
+                break
+    if not details:
+        processor = platform.processor().strip()
+        if processor and processor != machine:
+            details.append(processor)
+    if accelerator and accelerator.strip() and accelerator.strip() not in details:
+        details.append(accelerator.strip())
+    return " | ".join([system, machine, *details])
+
+
+def run_benchmark(
+    adapter: EfficiencyAdapter,
+    spec: BenchmarkSpec,
+    metadata: Mapping[str, Any],
+    *,
+    clock_ns: Callable[[], int] = time.perf_counter_ns,
+) -> Dict[str, Any]:
+    identity = dict(metadata.get("identity", {}))
+    model = dict(metadata.get("model", {}))
+    evidence = dict(metadata.get("evidence", {}))
+    vocab_size = int(identity.get("config_snapshot", {}).get("vocab_size", 0))
+    tokens, targets = _deterministic_inputs(spec, vocab_size)
+    configure = getattr(adapter, "configure", None)
+    if callable(configure):
+        configure(spec.workload)
+    adapter.prepare(tokens, targets)
+
+    last_observation: BenchmarkObservation | None = None
+    for _ in range(spec.warmup_iterations):
+        pending = adapter.run(spec.workload)
+        adapter.synchronize()
+        last_observation = _finalize_observation(adapter, pending)
+        if not last_observation.finite:
+            raise ValueError("Benchmark produced non-finite output during warm-up")
+
+    adapter.reset_peak_memory()
+    samples_ns = []
+    memory: Dict[str, int | None] = {}
+    peak_bytes: int | None = None
+    for index in range(spec.measured_iterations):
+        adapter.synchronize()
+        started = int(clock_ns())
+        pending = adapter.run(spec.workload)
+        adapter.synchronize()
+        finished = int(clock_ns())
+        elapsed = finished - started
+        if elapsed <= 0:
+            raise ValueError(f"Measured duration must be positive, got {elapsed} ns")
+        samples_ns.append(elapsed)
+        snapshot = dict(adapter.memory_snapshot())
+        memory.update(snapshot)
+        measured_peak = snapshot.get("backend_peak_bytes")
+        if measured_peak is not None:
+            peak_bytes = max(peak_bytes or 0, int(measured_peak))
+            memory["backend_peak_bytes"] = peak_bytes
+        last_observation = _finalize_observation(adapter, pending)
+        if not last_observation.finite:
+            raise ValueError("Benchmark produced non-finite output")
+        if index + 1 < spec.measured_iterations:
+            adapter.reset_peak_memory()
+
+    assert last_observation is not None
+    tokens_per_iteration = spec.batch_size * spec.sequence_length
+    record: Dict[str, Any] = {
+        "schema_version": SCHEMA_VERSION,
+        "created_at_utc": datetime.now(timezone.utc).isoformat(),
+        "identity": identity,
+        "model": model,
+        "evidence": evidence,
+        "runtime": {
+            "backend": str(adapter.backend),
+            "device": str(adapter.device),
+            "requested_device": str(getattr(adapter, "requested_device", adapter.device)),
+            "dtype": str(adapter.dtype),
+            "framework_version": str(adapter.framework_version),
+            "python_version": platform.python_version(),
+            "os": platform.platform(),
+            "hardware_identifier": str(adapter.hardware_identifier),
+            "synchronization_policy": str(adapter.synchronization_policy),
+        },
+        "workload": {
+            "name": spec.workload,
+            "timing_scope": spec.timing_scope,
+            "batch_size": spec.batch_size,
+            "sequence_length": spec.sequence_length,
+            "logical_shape": [spec.sequence_length, spec.batch_size],
+            "warmup_iterations": spec.warmup_iterations,
+            "measured_iterations": spec.measured_iterations,
+            "repetition_id": spec.repetition_id,
+            "seed": spec.seed,
+            "tokens_per_iteration": tokens_per_iteration,
+            "data_handling_included": False,
+            "semantics": dict(WORKLOAD_SEMANTICS[spec.workload]),
+            "dry_run": spec.dry_run,
+        },
+        "telemetry_capabilities": dict(adapter.telemetry_capabilities),
+        "memory": memory,
+        "raw_samples_ns": samples_ns,
+        "summary": _summary(samples_ns, tokens_per_iteration),
+        "output": {
+            "shape": [int(value) for value in last_observation.output_shape],
+            "finite": bool(last_observation.finite),
+            "last_scalar": float(last_observation.scalar),
+        },
+    }
+    validate_benchmark_record(record)
+    canonical = json.dumps(record, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    record["record_id"] = hashlib.sha256(canonical).hexdigest()
+    return record
+
+
+def _walk_finite(value: Any, path: str = "record") -> None:
+    if isinstance(value, bool) or value is None or isinstance(value, (str, int)):
+        return
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError(f"Non-finite numeric value at {path}")
+        return
+    if isinstance(value, Mapping):
+        for key, child in value.items():
+            _walk_finite(child, f"{path}.{key}")
+        return
+    if isinstance(value, (list, tuple)):
+        for index, child in enumerate(value):
+            _walk_finite(child, f"{path}[{index}]")
+        return
+    raise TypeError(f"Unsupported record value at {path}: {type(value).__name__}")
+
+
+def validate_benchmark_record(record: Mapping[str, Any]) -> None:
+    if record.get("schema_version") != SCHEMA_VERSION:
+        raise ValueError(f"Unsupported schema_version: {record.get('schema_version')!r}")
+    required_mapping_fields = {
+        "identity": {
+            "git_commit",
+            "config_path",
+            "config_sha256",
+            "config_snapshot",
+            "effective_config_snapshot",
+            "execution_overrides",
+            "metadata_inferences",
+            "checkpoint_path",
+            "checkpoint_sha256",
+            "checkpoint_backend",
+            "checkpoint_metadata",
+        },
+        "model": {
+            "name",
+            "profile_label",
+            "weight_provenance",
+            "trainable_parameters",
+            "parameter_breakdown",
+            "use_checkpoint",
+        },
+        "runtime": {
+            "backend",
+            "device",
+            "requested_device",
+            "dtype",
+            "framework_version",
+            "python_version",
+            "os",
+            "hardware_identifier",
+            "synchronization_policy",
+        },
+        "summary": {
+            "min_ns",
+            "median_ns",
+            "q1_ns",
+            "q3_ns",
+            "p10_ns",
+            "p90_ns",
+            "max_ns",
+            "tokens_per_second",
+            "milliseconds_per_token",
+            "milliseconds_per_step",
+        },
+    }
+    for section, required in required_mapping_fields.items():
+        value = record.get(section)
+        if not isinstance(value, Mapping):
+            raise ValueError(f"Record is missing {section} metadata")
+        missing = sorted(required - set(value))
+        if missing:
+            raise ValueError(f"Record {section} metadata is missing fields: {missing}")
+    evidence = record.get("evidence")
+    if not isinstance(evidence, Mapping):
+        raise ValueError("Record is missing evidence metadata")
+    if set(evidence) != {"status", "provisional_reasons"}:
+        raise ValueError("Record evidence metadata has unsupported fields")
+    reasons = evidence.get("provisional_reasons")
+    if not isinstance(reasons, list) or any(not isinstance(value, str) for value in reasons):
+        raise ValueError("provisional_reasons must be a list of strings")
+    workload = record.get("workload")
+    if not isinstance(workload, Mapping):
+        raise ValueError("Record is missing workload metadata")
+    BenchmarkSpec(
+        workload=str(workload.get("name", "")),
+        timing_scope=str(workload.get("timing_scope", "")),
+        batch_size=int(workload.get("batch_size", 0)),
+        sequence_length=int(workload.get("sequence_length", 0)),
+        warmup_iterations=int(workload.get("warmup_iterations", -1)),
+        measured_iterations=int(workload.get("measured_iterations", 0)),
+        repetition_id=str(workload.get("repetition_id", "")),
+        seed=int(workload.get("seed", 0)),
+        dry_run=bool(workload.get("dry_run", False)),
+    )
+    if bool(workload["dry_run"]):
+        if evidence.get("status") != "provisional" or "dry_run" not in reasons:
+            raise ValueError("Dry-run records must be explicitly provisional")
+    elif evidence.get("status") != "authoritative" or reasons:
+        raise ValueError("Formal records must be authoritative and have no provisional reasons")
+    samples = record.get("raw_samples_ns")
+    if not isinstance(samples, list) or not samples:
+        raise ValueError("raw_samples_ns must be a non-empty list")
+    if len(samples) != int(workload.get("measured_iterations", -1)):
+        raise ValueError("raw_samples_ns length does not match measured_iterations")
+    if any(not isinstance(value, int) or value <= 0 for value in samples):
+        raise ValueError("raw_samples_ns must contain positive integer durations")
+    if workload.get("data_handling_included") is not False:
+        raise ValueError("Benchmark records must exclude data handling from measured regions")
+    expected_semantics = WORKLOAD_SEMANTICS[str(workload["name"])]
+    if workload.get("semantics") != expected_semantics:
+        raise ValueError("Benchmark workload semantics do not match the workload contract")
+    expected_tokens = int(workload["batch_size"]) * int(workload["sequence_length"])
+    if workload.get("tokens_per_iteration") != expected_tokens:
+        raise ValueError("tokens_per_iteration does not match the logical workload shape")
+    expected_summary = _summary(samples, expected_tokens)
+    summary = record["summary"]
+    for key, expected in expected_summary.items():
+        if not math.isclose(float(summary[key]), expected, rel_tol=1e-12, abs_tol=1e-12):
+            raise ValueError(f"Summary field '{key}' does not match raw samples")
+    model = record["model"]
+    if model.get("weight_provenance") not in SUPPORTED_WEIGHT_PROVENANCE:
+        raise ValueError("Record has unsupported weight_provenance")
+    if model.get("use_checkpoint") is not False:
+        raise ValueError("Efficiency benchmark records require use_checkpoint=false")
+    identity = record["identity"]
+    source_cfg = identity["config_snapshot"]
+    recorded_effective_cfg = identity["effective_config_snapshot"]
+    overrides = identity["execution_overrides"]
+    metadata_inferences = identity["metadata_inferences"]
+    if not all(
+        isinstance(value, Mapping)
+        for value in (source_cfg, recorded_effective_cfg, overrides, metadata_inferences)
+    ):
+        raise ValueError(
+            "Config snapshots, execution_overrides, and metadata_inferences must be mappings"
+        )
+    checkpoint_metadata = identity["checkpoint_metadata"]
+    if not isinstance(checkpoint_metadata, Mapping):
+        raise ValueError("checkpoint_metadata must be a mapping")
+    checkpoint_cfg = checkpoint_metadata.get("config_snapshot", {})
+    if not isinstance(checkpoint_cfg, Mapping):
+        raise ValueError("checkpoint config_snapshot must be a mapping")
+    resolved_cfg, resolved_checkpoint_cfg, expected_inferences = (
+        _resolve_frozen_historical_mlx_neo_metadata(
+            source_cfg,
+            checkpoint_cfg,
+            model_name=str(model.get("name", "")),
+            checkpoint_backend=str(identity.get("checkpoint_backend", "")),
+            config_sha256=str(identity.get("config_sha256", "")),
+            checkpoint_sha256=str(identity.get("checkpoint_sha256", "")),
+        )
+    )
+    if dict(metadata_inferences) != expected_inferences:
+        raise ValueError("metadata_inferences do not match frozen historical semantics")
+    expected_effective, expected_overrides = resolve_benchmark_execution_config(
+        resolved_cfg,
+        model_name=str(model.get("name", "")),
+        checkpoint_backend=str(identity.get("checkpoint_backend", "")),
+    )
+    if dict(recorded_effective_cfg) != expected_effective or dict(overrides) != expected_overrides:
+        raise ValueError("Effective benchmark config does not match the recorded execution override")
+    inferred_provenance = (
+        "backend_native_checkpoint"
+        if identity["checkpoint_backend"] == record["runtime"]["backend"]
+        else "mapped_same_checkpoint"
+    )
+    if model.get("weight_provenance") != inferred_provenance:
+        raise ValueError("weight_provenance does not match checkpoint and runtime backends")
+    required_keys = _required_aligned_metadata_keys(str(model.get("name", "")))
+    missing_aligned = [
+        key for key in required_keys if resolved_checkpoint_cfg.get(key) in (None, "")
+    ]
+    source_label = _profile_metadata_label(source_cfg, {})
+    checkpoint_label = _profile_metadata_label({}, checkpoint_cfg)
+    if not bool(workload["dry_run"]):
+        if missing_aligned:
+            raise ValueError(
+                f"Formal benchmark checkpoint is missing aligned metadata: {missing_aligned}"
+            )
+        if (
+            source_label is None
+            or checkpoint_label is None
+            or source_label != checkpoint_label
+            or model.get("profile_label") != source_label
+        ):
+            raise ValueError("Formal benchmark profile_label does not match config metadata")
+    output = record.get("output")
+    if not isinstance(output, Mapping) or output.get("finite") is not True:
+        raise ValueError("Benchmark output is non-finite")
+    expected_shape_prefix = [
+        int(workload.get("sequence_length", -1)),
+        int(workload.get("batch_size", -1)),
+    ]
+    output_shape = output.get("shape")
+    if not isinstance(output_shape, list) or output_shape[:2] != expected_shape_prefix:
+        raise ValueError(
+            f"Output shape {output_shape!r} does not match logical workload "
+            f"prefix {expected_shape_prefix!r}"
+        )
+    capabilities = record.get("telemetry_capabilities")
+    memory = record.get("memory")
+    if not isinstance(capabilities, Mapping) or not isinstance(memory, Mapping):
+        raise ValueError("Record is missing telemetry capability or memory metadata")
+    capability_to_field = {
+        "process_rss": "process_rss_bytes",
+        "backend_active_memory": "backend_active_bytes",
+        "backend_peak_memory": "backend_peak_bytes",
+    }
+    for capability, field in capability_to_field.items():
+        available = capabilities.get(capability)
+        value = memory.get(field)
+        if not isinstance(available, bool):
+            raise ValueError(f"Telemetry capability '{capability}' must be boolean")
+        if available and (not isinstance(value, int) or value < 0):
+            raise ValueError(f"Capability '{capability}' requires memory field '{field}'")
+        if not available and value is not None:
+            raise ValueError(f"Unavailable capability '{capability}' must record '{field}' as null")
+    _walk_finite(record)
+    record_id = record.get("record_id")
+    if record_id is not None:
+        if not isinstance(record_id, str) or len(record_id) != 64:
+            raise ValueError("record_id must be a SHA-256 hex digest")
+        content = dict(record)
+        del content["record_id"]
+        expected = hashlib.sha256(
+            json.dumps(content, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        if record_id != expected:
+            raise ValueError("record_id does not match benchmark record content")
+
+
+def write_benchmark_record(
+    path: str | Path,
+    record: Mapping[str, Any],
+    *,
+    replace: bool = False,
+) -> None:
+    validate_benchmark_record(record)
+    output = Path(path).expanduser().resolve()
+    if output.exists() and not replace:
+        raise FileExistsError(
+            f"Authoritative benchmark record already exists: {output}. "
+            "Pass replace=True or --replace to replace it explicitly."
+        )
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temporary = output.with_name(f".{output.name}.{os.getpid()}.tmp")
+    temporary.write_text(
+        json.dumps(record, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(output)
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _git_commit(root: Path) -> str:
+    try:
+        return subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=root,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).stdout.strip()
+    except Exception:
+        return "unknown"
+
+
+def _load_yaml(path: Path) -> Dict[str, Any]:
+    try:
+        import yaml
+    except Exception as exc:  # pragma: no cover - dependency guard
+        raise RuntimeError("Benchmarking requires pyyaml") from exc
+    with path.open("r", encoding="utf-8") as handle:
+        value = yaml.safe_load(handle) or {}
+    if not isinstance(value, dict):
+        raise ValueError(f"Config at {path} must be a mapping")
+    return value
+
+
+def _infer_model_name(path: Path, cfg: Mapping[str, Any]) -> str:
+    if cfg.get("model_name"):
+        model_name = str(cfg["model_name"]).strip().lower()
+    elif "n_heads" in cfg and "ff_mult" in cfg:
+        model_name = "transformer"
+    elif "cell_type" in cfg:
+        model_name = "neo"
+    else:
+        model_name = "lstm"
+    if model_name not in {"neo", "lstm", "transformer"}:
+        raise ValueError(f"Unsupported model_name '{model_name}' in {path}")
+    return model_name
+
+
+_CHECKPOINT_CONTRACT_KEYS = (
+    "model_name",
+    "vocab_size",
+    "d_model",
+    "d_embed",
+    "n_layers",
+    "n_heads",
+    "ff_mult",
+    "dropout",
+    "tie_embeddings",
+    "activation_id",
+    "activation_sparsity_eps",
+    "cell_type",
+    "recurrent_norm",
+    "recurrent_norm_place",
+    "output_norm",
+    "norm_place",
+    "rmsnorm_eps",
+    "lstm_bias_mode",
+    "lstm_layer_dropout",
+    "transformer_variant",
+    "reference_backend",
+    "use_checkpoint",
+    "use_compile",
+    "lr",
+    "betas",
+    "adam_eps",
+    "grad_clip",
+    "weight_decay",
+    "weight_decay_policy",
+    "embed_weight_decay",
+    "recurrent_weight_decay",
+    "proj_weight_decay",
+    "transformer_weight_decay",
+    "cosine",
+    "epochs",
+    "warmup_epochs",
+    "min_lr",
+    "train_regime",
+    "stream_state",
+    "tbptt_len",
+    "block_size",
+    "forget_bias_init",
+    "recurrent_init",
+    "profile_label",
+    "run_tag",
+)
+
+
+def _required_aligned_metadata_keys(model_name: str) -> tuple[str, ...]:
+    if model_name == "neo":
+        return REQUIRED_ALIGNED_NEO_CFG_KEYS
+    if model_name == "lstm":
+        return REQUIRED_ALIGNED_LSTM_CFG_KEYS
+    return ()
+
+
+def _validate_checkpoint_config(
+    payload: Mapping[str, Any],
+    cfg: Mapping[str, Any],
+    model_name: str,
+) -> list[str]:
+    checkpoint_cfg = payload.get("cfg")
+    missing_aligned = validate_checkpoint_metadata(
+        dict(payload),
+        expected_cfg=dict(cfg),
+        model_name=model_name,
+    )
+    if not isinstance(checkpoint_cfg, Mapping):
+        return ["config_snapshot", *missing_aligned]
+    conflicts = []
+    for key in _CHECKPOINT_CONTRACT_KEYS:
+        if key not in checkpoint_cfg or key not in cfg:
+            continue
+        left = checkpoint_cfg[key]
+        right = cfg[key]
+        if key == "rmsnorm_eps":
+            matches = math.isclose(float(left), float(right), rel_tol=0.0, abs_tol=1e-12)
+        else:
+            matches = left == right
+        if not matches:
+            conflicts.append(f"{key}: checkpoint={left!r}, config={right!r}")
+    if conflicts:
+        raise ValueError("Checkpoint metadata mismatch: " + "; ".join(conflicts))
+    return list(missing_aligned)
+
+
+def _profile_metadata_label(
+    cfg: Mapping[str, Any],
+    checkpoint_cfg: Mapping[str, Any],
+) -> str | None:
+    for key in ("profile_label", "run_tag"):
+        value = cfg.get(key, checkpoint_cfg.get(key))
+        if value not in (None, ""):
+            return str(value)
+    return None
+
+
+def _resolve_frozen_historical_mlx_neo_metadata(
+    cfg: Mapping[str, Any],
+    checkpoint_cfg: Mapping[str, Any],
+    *,
+    model_name: str,
+    checkpoint_backend: str,
+    config_sha256: str,
+    checkpoint_sha256: str,
+) -> tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+    resolved_cfg = dict(cfg)
+    resolved_checkpoint_cfg = dict(checkpoint_cfg)
+    inferences: Dict[str, Any] = {}
+    is_historical_mlx_neo = (
+        model_name == "neo"
+        and checkpoint_backend == "mlx"
+        and str(cfg.get("backend", "")).strip().lower() == "mlx"
+        and bool(cfg.get("use_checkpoint", False))
+    )
+    if not is_historical_mlx_neo:
+        return resolved_cfg, resolved_checkpoint_cfg, inferences
+    for key, value in FROZEN_HISTORICAL_MLX_NEO_DEFAULTS.items():
+        if cfg.get(key) not in (None, "") or checkpoint_cfg.get(key) not in (None, ""):
+            continue
+        resolved_cfg[key] = value
+        resolved_checkpoint_cfg[key] = value
+        inferences[key] = {
+            "value": value,
+            "reason": "frozen_historical_mlx_neo_semantics",
+            "config_sha256": config_sha256,
+            "checkpoint_sha256": checkpoint_sha256,
+        }
+    return resolved_cfg, resolved_checkpoint_cfg, inferences
+
+
+def resolve_benchmark_execution_config(
+    cfg: Mapping[str, Any],
+    *,
+    model_name: str,
+    checkpoint_backend: str,
+) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    """Resolve benchmark-only execution settings without rewriting training history."""
+
+    effective = dict(cfg)
+    overrides: Dict[str, Any] = {}
+    if not bool(effective.get("use_checkpoint", False)):
+        effective["use_checkpoint"] = False
+        return effective, overrides
+    declared_backend = str(
+        effective.get("backend", effective.get("reference_backend", ""))
+    ).strip().lower()
+    if model_name == "neo" and checkpoint_backend == "mlx" and declared_backend == "mlx":
+        effective["use_checkpoint"] = False
+        overrides["use_checkpoint"] = {
+            "training_value": True,
+            "benchmark_value": False,
+            "reason": "mlx_neo_training_flag_runtime_inert",
+        }
+        return effective, overrides
+    raise ValueError(
+        "Efficiency benchmark execution requires use_checkpoint=false; only historical "
+        "MLX Neo checkpoints may record the runtime-inert training flag as an override"
+    )
+
+
+def _checkpoint_metadata(payload: Mapping[str, Any]) -> Dict[str, Any]:
+    return {
+        key: payload[key]
+        for key in ("format", "backend", "epoch", "global_step", "best_val")
+        if key in payload
+    } | {"config_snapshot": dict(payload.get("cfg", {}))}
+
+
+def _logical_parameter_breakdown(
+    entries: Iterable[tuple[str, int, bool]],
+    model_name: str,
+) -> Dict[str, int]:
+    breakdown = {
+        "embeddings": 0,
+        "recurrent_or_transformer": 0,
+        "projections_and_head": 0,
+        "other": 0,
+    }
+    for name, size, trainable in entries:
+        if not trainable:
+            continue
+        if name.startswith("emb.") or ".emb." in name or "pos_emb." in name:
+            key = "embeddings"
+        elif (
+            (model_name == "neo" and "recurrent." in name)
+            or (model_name == "lstm" and (name.startswith("lstm.") or name.startswith("lstm_layers.")))
+            or (model_name == "transformer" and (name.startswith("blocks.") or name.startswith("encoder.")))
+            or name.startswith("pre_norms.")
+            or name.startswith("stack_norm.")
+        ):
+            key = "recurrent_or_transformer"
+        elif name.startswith(("in_proj.", "out_proj.", "head.")) or name == "output_bias":
+            key = "projections_and_head"
+        else:
+            key = "other"
+        breakdown[key] += int(size)
+    return breakdown
+
+
+def _build_adapter(backend_name: str, model: Any, cfg: Mapping[str, Any], device: Any):
+    if backend_name == "torch":
+        from .backends.torch_efficiency import TorchEfficiencyAdapter
+
+        return TorchEfficiencyAdapter(model, cfg, device)
+    if backend_name == "mlx":
+        from .backends.mlx_efficiency import MlxEfficiencyAdapter
+
+        return MlxEfficiencyAdapter(model, cfg, device)
+    raise ValueError(f"Unsupported benchmark backend '{backend_name}'")
+
+
+def benchmark_from_paths(
+    *,
+    config_path: str | Path,
+    checkpoint_path: str | Path,
+    backend_name: str,
+    device: str,
+    workload: str,
+    timing_scope: str,
+    batch_size: int,
+    sequence_length: int,
+    warmup_iterations: int,
+    measured_iterations: int,
+    repetition_id: str,
+    profile_label: str,
+    output_path: str | Path,
+    seed: int,
+    dry_run: bool = False,
+    replace: bool = False,
+) -> Dict[str, Any]:
+    config = Path(config_path).expanduser().resolve()
+    checkpoint = Path(checkpoint_path).expanduser().resolve()
+    output = Path(output_path).expanduser().resolve()
+    if not config.is_file():
+        raise FileNotFoundError(f"Config not found: {config}")
+    if not checkpoint.is_file():
+        raise FileNotFoundError(f"Checkpoint not found: {checkpoint}")
+    if output in {config, checkpoint}:
+        raise ValueError("Benchmark output path must differ from config and checkpoint paths")
+    if output.exists() and not replace:
+        raise FileExistsError(
+            f"Authoritative benchmark record already exists: {output}. "
+            "Pass replace=True or --replace to replace it explicitly."
+        )
+    backend_name = str(backend_name).strip().lower()
+    if backend_name not in {"torch", "mlx"}:
+        raise ValueError("backend must be 'torch' or 'mlx'")
+    if not str(device).strip() or str(device).strip().lower() == "auto":
+        raise ValueError("Benchmark device must be explicit; 'auto' is not accepted")
+    if not str(profile_label).strip():
+        raise ValueError("profile_label must be non-empty")
+
+    cfg = _load_yaml(config)
+    model_name = _infer_model_name(config, cfg)
+    payload = load_checkpoint_payload(checkpoint, map_location="cpu")
+    checkpoint_backend = infer_checkpoint_backend(payload)
+    config_sha256 = _sha256_file(config)
+    checkpoint_sha256 = _sha256_file(checkpoint)
+    raw_checkpoint_cfg = payload.get("cfg")
+    raw_checkpoint_cfg = raw_checkpoint_cfg if isinstance(raw_checkpoint_cfg, Mapping) else {}
+    resolved_cfg, resolved_checkpoint_cfg, metadata_inferences = (
+        _resolve_frozen_historical_mlx_neo_metadata(
+            cfg,
+            raw_checkpoint_cfg,
+            model_name=model_name,
+            checkpoint_backend=checkpoint_backend,
+            config_sha256=config_sha256,
+            checkpoint_sha256=checkpoint_sha256,
+        )
+    )
+    validation_payload = dict(payload)
+    validation_payload["cfg"] = resolved_checkpoint_cfg
+    missing_aligned = _validate_checkpoint_config(
+        validation_payload,
+        resolved_cfg,
+        model_name,
+    )
+    effective_cfg, execution_overrides = resolve_benchmark_execution_config(
+        resolved_cfg,
+        model_name=model_name,
+        checkpoint_backend=checkpoint_backend,
+    )
+    inferred_provenance = (
+        "backend_native_checkpoint"
+        if checkpoint_backend == backend_name
+        else "mapped_same_checkpoint"
+    )
+    expected_profile_label = _profile_metadata_label(cfg, raw_checkpoint_cfg)
+    provisional_reasons = ["dry_run"] if dry_run else []
+    if missing_aligned:
+        reason = "checkpoint_missing_aligned_metadata:" + ",".join(sorted(missing_aligned))
+        if not dry_run:
+            raise ValueError(
+                f"Formal benchmark checkpoint is missing aligned metadata: {missing_aligned}"
+            )
+        provisional_reasons.append(reason)
+    if expected_profile_label is None:
+        if not dry_run:
+            raise ValueError("Formal benchmark requires profile_label or run_tag in config metadata")
+        provisional_reasons.append("profile_label_missing_from_metadata")
+    elif str(profile_label) != expected_profile_label:
+        if not dry_run:
+            raise ValueError(
+                "Formal benchmark profile_label must match config profile_label or run_tag: "
+                f"expected={expected_profile_label!r}, got={profile_label!r}"
+            )
+        provisional_reasons.append(
+            f"profile_label_mismatch:expected={expected_profile_label!r},got={profile_label!r}"
+        )
+    spec = BenchmarkSpec(
+        workload=workload,
+        timing_scope=timing_scope,
+        batch_size=int(batch_size),
+        sequence_length=int(sequence_length),
+        warmup_iterations=int(warmup_iterations),
+        measured_iterations=int(measured_iterations),
+        repetition_id=str(repetition_id),
+        seed=int(seed),
+        dry_run=bool(dry_run),
+    )
+    tbptt_len = int(effective_cfg.get("tbptt_len", 0))
+    if workload == "train_step" and 0 < tbptt_len < int(sequence_length):
+        raise ValueError(
+            "The isolated train_step benchmark requires full-sequence backpropagation; "
+            f"config tbptt_len={tbptt_len} is shorter than sequence_length={sequence_length}"
+        )
+    backend = get_backend(backend_name)
+    requested_device = str(device).strip().lower()
+    if backend_name == "torch":
+        import torch
+
+        device_type = requested_device.split(":", 1)[0]
+        if device_type not in {"cpu", "mps", "cuda"}:
+            raise ValueError(
+                f"Unsupported Torch benchmark device '{requested_device}'. Use cpu|mps|cuda."
+            )
+        if device_type == "mps" and not torch.backends.mps.is_available():
+            raise RuntimeError("MPS benchmark requested but torch.backends.mps.is_available() is false")
+        if device_type == "cuda" and not torch.cuda.is_available():
+            raise RuntimeError("CUDA benchmark requested but torch.cuda.is_available() is false")
+    elif requested_device not in {"cpu", "gpu", "mps"}:
+        raise ValueError(
+            f"Unsupported MLX benchmark device '{requested_device}'. Use cpu|gpu|mps."
+        )
+    def execute_on_requested_device() -> Dict[str, Any]:
+        runtime_device = backend.get_runtime_device(device)
+        backend.seed_all(int(seed))
+        model = backend.build_model(effective_cfg, model_name)
+        if backend_name == "torch":
+            model = model.to(runtime_device)
+        with warnings.catch_warnings():
+            if metadata_inferences:
+                warnings.filterwarnings(
+                    "ignore",
+                    message="Neo checkpoint is missing aligned metadata fields.*",
+                    category=UserWarning,
+                )
+            backend.load_checkpoint_entry(
+                checkpoint,
+                model,
+                device=runtime_device,
+                cfg=resolved_cfg,
+            )
+        backend.seed_all(int(seed))
+        adapter = _build_adapter(backend_name, model, effective_cfg, runtime_device)
+        adapter.requested_device = str(device).strip().lower()
+        parameter_entries = adapter.parameter_entries()
+        parameter_breakdown = _logical_parameter_breakdown(parameter_entries, model_name)
+        trainable_parameters = sum(parameter_breakdown.values())
+        expected_parameters = int(backend.count_params(model))
+        if trainable_parameters != expected_parameters:
+            raise ValueError(
+                "Parameter breakdown does not match backend trainable count: "
+                f"breakdown={trainable_parameters}, backend={expected_parameters}"
+            )
+
+        root = Path(__file__).resolve().parents[2]
+        metadata = {
+            "identity": {
+                "git_commit": _git_commit(root),
+                "config_path": str(config),
+                "config_sha256": config_sha256,
+                "config_snapshot": dict(cfg),
+                "effective_config_snapshot": effective_cfg,
+                "execution_overrides": execution_overrides,
+                "metadata_inferences": metadata_inferences,
+                "checkpoint_path": str(checkpoint),
+                "checkpoint_sha256": checkpoint_sha256,
+                "checkpoint_backend": checkpoint_backend,
+                "checkpoint_metadata": _checkpoint_metadata(payload),
+            },
+            "model": {
+                "name": model_name,
+                "profile_label": str(profile_label),
+                "weight_provenance": inferred_provenance,
+                "trainable_parameters": trainable_parameters,
+                "parameter_breakdown": parameter_breakdown,
+                "activation_id": effective_cfg.get("activation_id"),
+                "recurrent_norm": effective_cfg.get(
+                    "recurrent_norm",
+                    effective_cfg.get("output_norm"),
+                ),
+                "recurrent_norm_place": effective_cfg.get(
+                    "recurrent_norm_place",
+                    effective_cfg.get("norm_place"),
+                ),
+                "use_checkpoint": bool(effective_cfg.get("use_checkpoint", False)),
+            },
+            "evidence": {
+                "status": "provisional" if dry_run else "authoritative",
+                "provisional_reasons": provisional_reasons,
+            },
+        }
+        record = run_benchmark(adapter, spec, metadata)
+        write_benchmark_record(output, record, replace=replace)
+        return record
+
+    if backend_name != "mlx":
+        return execute_on_requested_device()
+
+    import mlx.core as mx
+
+    original_device = mx.default_device()
+    try:
+        return execute_on_requested_device()
+    finally:
+        mx.set_default_device(original_device)

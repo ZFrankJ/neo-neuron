@@ -2,6 +2,55 @@
 
 Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLAN.md`; keep broad priorities in `docs/ROADMAP.md`.
 
+## 2026-07-21 - Unified Efficiency Benchmark Record Contract
+
+- Decision:
+  - Added one backend-neutral benchmark core and CLI with Torch and MLX
+    execution adapters for `train_step`, `sequence_eval`, and
+    `streaming_decode` workloads.
+  - Bound every measured region to explicit backend synchronization, preserved
+    every raw nanosecond sample, and made a versioned JSON record the
+    authoritative artifact.
+  - Required a metadata-bound profile and inferred mapped-versus-backend-native
+    checkpoint provenance, content hashes, checkpoint/config compatibility,
+    workload scope, runtime identity, parameter breakdown, and telemetry
+    capabilities.
+  - Defined `train_step` as an isolated full-sequence optimizer update with no
+    scheduler and reset recurrent state, and persisted those semantics in every
+    record instead of implying the public dataset-driven training trajectory.
+  - Captured memory before output validation, retained the maximum per-step
+    backend peak, expanded checkpoint checks across model/training semantics,
+    and recorded the processor model rather than only the machine architecture.
+  - Inferred native-versus-mapped checkpoint provenance, seeded each backend
+    before construction and execution, and made dry-run evidence explicitly
+    provisional while formal records require complete aligned metadata and an
+    exact metadata-bound profile label.
+  - Preserved historical MLX Neo `use_checkpoint: true` metadata while recording
+    the runtime-inert flag and effective benchmark execution with
+    `use_checkpoint: false`; added the focused MLX efficiency suite to macOS CI.
+  - Kept raw historical MLX Neo config/checkpoint snapshots intact while
+    resolving their omitted `reference_backend` and `rmsnorm_eps` fields to the
+    frozen `mlx` and `1e-5` semantics. Each inference is config/checkpoint-hash
+    bound; other missing aligned metadata still blocks formal evidence.
+  - Kept formal records at a minimum of 20 warm-ups and 100 measurements;
+    smaller runs require an explicit `dry_run` label and cannot be silently
+    promoted.
+- Why:
+  - Torch eager execution and MLX lazy execution cannot be compared unless work
+    is completed at identical timing boundaries and unsupported telemetry is
+    distinguished from a measured zero.
+  - Existing THOP estimates, filenames, and backend-native checkpoints do not
+    establish wall-clock or cross-backend workload equivalence.
+- Scope:
+  - shared efficiency schema, validation, persistence, CLI, backend execution
+    adapters, deterministic contract tests, and public workflow documentation
+- Impact:
+  - Tiny dry-run contract checks are safe on a non-main development machine and
+    do not change MLX or Torch model/training semantics.
+  - Formal efficiency execution remains blocked until LSTM scaling and the
+    comparison checkpoint list are frozen; no WT103 process, paper-facing
+    benchmark record, historical config, or `neo.csv` row changed.
+
 ## 2026-07-14 - 60M-Total / 50M-Recurrent-Core Boundary Diagnostic Contract
 
 - Decision:

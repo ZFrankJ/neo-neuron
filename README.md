@@ -146,6 +146,63 @@ for CUDA result claims. Standard GitHub-hosted runners for individual repos are
 not treated as Nvidia GPU runners here; use a real local Nvidia machine or an
 explicitly provisioned GPU runner.
 
+## Efficiency benchmark harness
+
+`scripts/benchmark_efficiency.py` provides one backend-neutral wall-clock and
+memory record for Torch or MLX without changing model or training semantics.
+It requires an explicit config, checkpoint, backend, device, workload, timing
+scope, profile label, repetition ID, and output path. Checkpoint provenance is
+inferred from the checkpoint and execution backends rather than supplied by the
+caller. Formal records require complete aligned checkpoint metadata, a profile
+label matching config/checkpoint metadata, at least 20 unreported warm-up
+iterations, and 100 measured iterations. Every `--dry-run` record is explicitly
+provisional.
+
+```bash
+python3 scripts/benchmark_efficiency.py \
+  --config /path/to/config.yaml \
+  --checkpoint /path/to/checkpoint.pt \
+  --backend torch \
+  --device cpu \
+  --workload sequence_eval \
+  --timing-scope model_only \
+  --batch-size 2 \
+  --sequence-length 16 \
+  --repetition-id smoke-1 \
+  --profile-label exact-config-profile-or-run-tag \
+  --output /tmp/benchmark-record.json \
+  --dry-run --warmup-iterations 1 --measured-iterations 2
+```
+
+The authoritative artifact is versioned JSON containing every raw timing
+sample, percentile summaries, synchronization policy, RSS and supported
+backend memory telemetry, config/checkpoint hashes and metadata, exact
+trainable parameters, workload shape, runtime versions, and hardware identity.
+Existing records are never overwritten unless `--replace` is explicit.
+The seed initializes backend-local RNG before both model construction and
+execution; it proves repeatability within a backend, not identical random draws
+across Torch and MLX. Historical MLX Neo checkpoints may retain
+`use_checkpoint: true` as training metadata because that flag had no MLX runtime
+effect. Their benchmark record preserves the historical config and separately
+records the effective `use_checkpoint: false` execution override. For these
+historical MLX Neo artifacts only, omitted `reference_backend` and
+`rmsnorm_eps` fields resolve to the frozen effective defaults `mlx` and `1e-5`.
+The raw config/checkpoint snapshots remain unchanged, and each inference records
+both source hashes and the frozen-semantics reason. Other missing aligned
+metadata remains provisional or blocks a formal record.
+`train_step` is an isolated optimizer-update microbenchmark: inputs are
+preallocated, optimizer state is fresh and then warmed, the scheduler is
+excluded, recurrent state resets each iteration, and backpropagation covers the
+full sequence. A config requesting shorter TBPTT is rejected. It is not a
+measurement of the public dataset-driven training trajectory. `train_step`
+uses `end_to_end_loop`; `sequence_eval` and `streaming_decode` use `model_only`.
+THOP estimates are not part of this contract.
+
+The harness may be developed and exercised with tiny dry runs on a separate
+machine, but formal Neo/LSTM efficiency measurement remains blocked until the
+scaling sequence and comparison checkpoints are frozen. Do not run benchmarks
+concurrently with production training.
+
 ## Development workflow
 
 This repo uses the local `codex-harness` workflow adapted for Neo.

@@ -13,8 +13,9 @@ open a new tracking issue only when explicitly requested.
 ```text
 completed packet PR 1: https://github.com/ZFrankJ/neo-neuron/pull/29
 completed packet PR 2: https://github.com/ZFrankJ/neo-neuron/pull/30
+active packet PR 3: https://github.com/ZFrankJ/neo-neuron/pull/31
 active experiment: 50M-total / 40M-recurrent-core matched-no-layer-dropout LSTM anchor
-blocked follow-up: unified Torch/MLX wall-clock and manual compute measurement after LSTM scaling
+blocked follow-up: formal efficiency execution and manual compute accounting after LSTM scaling
 ```
 
 MLX is the frozen scientific reference backend. Existing clean MLX result rows outside this repo remain authoritative.
@@ -263,12 +264,14 @@ Execute exactly one packet at a time in this order.
   retrained. Historical LSTM checkpoints remain historical-profile evidence and
   must not be mixed into a corrected-profile scaling fit.
 
-### Unified Torch/MLX Wall-Clock And Memory Harness - Blocked Code Packet
+### Unified Torch/MLX Wall-Clock And Memory Harness - Active Code Packet
 
-Depends on completion of the LSTM scaling sequence and a frozen list of Neo and
-LSTM comparison checkpoints. This is the first efficiency-measurement PR; it
-must not be implemented or executed on the main training machine while scaling
-is active.
+Development was explicitly approved on 2026-07-21 on a non-main machine while
+the LSTM scaling run continues. Tiny deterministic dry runs are permitted for
+contract verification. Formal benchmark execution and paper-facing records
+still depend on completion of the scaling sequence and a frozen list of Neo and
+LSTM comparison checkpoints. This first efficiency-measurement PR must not
+touch or compete with the main training machine.
 
 Public contract:
 
@@ -286,8 +289,11 @@ Public contract:
   identifier, and output path. Never infer a paper-facing profile from a
   filename alone.
 - Support separately labeled `train_step`, `sequence_eval`, and
-  `streaming_decode` workloads. Model-only timing and end-to-end loop timing are
-  distinct scopes and must never be combined into one number.
+  `streaming_decode` workloads. Define `train_step` as an isolated optimizer
+  update with fresh-then-warmed optimizer state, no scheduler, reset recurrent
+  state, and full-sequence backpropagation; reject a shorter configured TBPTT
+  contract instead of silently changing it. Model-only timing and end-to-end
+  loop timing are distinct scopes and must never be combined into one number.
 - Preallocate deterministic token inputs outside the measured region. Exclude
   dataset download, tokenization, checkpoint loading, compilation/warm-up, and
   result serialization from model-only timing.
@@ -296,28 +302,46 @@ Public contract:
   for Torch CPU, `torch.mps.synchronize()` for MPS, and
   `torch.cuda.synchronize(device)` for CUDA. Lazy or asynchronous work must
   never cross a timing boundary.
+- Seed each backend before model construction and again before execution.
+  Record that RNG streams are backend-local; equal seeds prove within-backend
+  repeatability and do not imply identical Torch/MLX dropout masks.
 - Fail clearly when the requested backend/device or required synchronization
   primitive is unavailable. MPS and CUDA support remains skip-safe and does not
   weaken their existing scientific-acceptance gates.
 - Run at least 20 unreported warm-up iterations and 100 measured iterations per
   process unless an approved dry run establishes a larger minimum for stable
   intervals. Preserve every raw sample.
-- Reset backend peak-memory counters after warm-up when a supported API exists.
+- Reset backend peak-memory counters after warm-up and between measurements when
+  a supported API exists. Capture measured-work memory before output validation
+  can allocate temporary buffers, and retain the maximum measured backend peak.
   Report process RSS for every backend plus backend active/peak allocation,
   tokens per second, milliseconds per token, and milliseconds per step. An
   unsupported memory field must be recorded as unavailable, never as zero.
 - Emit a versioned JSON record containing raw samples and summary statistics,
   including median, quartiles, and 10th/90th percentiles. Any CSV table is a
   derived view, not the authoritative record.
-- Record git commit, config snapshot, checkpoint identity and metadata, exact
-  trainable parameter count and breakdown, model/profile labels, activation and
-  norm settings, backend, device, dtype, framework/Python/OS versions, hardware
-  identifier, workload dimensions, seed, synchronization policy, telemetry
+- Record git commit, config snapshot, checkpoint identity and
+  execution-semantic metadata, exact trainable parameter count and breakdown,
+  model/profile labels, activation and norm settings, backend, device, dtype,
+  framework/Python/OS versions, hardware identifier including the processor
+  model, workload dimensions, seed, synchronization policy, telemetry
   capability flags, and whether data handling is included.
+- Preserve historical config separately from effective benchmark execution.
+  The only `use_checkpoint: true` exception is a native MLX Neo checkpoint,
+  where the historically recorded flag had no MLX runtime effect; record the
+  exact override to benchmark execution with `use_checkpoint: false`.
+  For the same frozen historical MLX Neo contract only, resolve omitted
+  `reference_backend` and `rmsnorm_eps` metadata to `mlx` and `1e-5` while
+  preserving both raw snapshots. Bind each inference to the config/checkpoint
+  hashes and record the frozen-semantics reason; do not relax any other missing
+  metadata gate.
 - Require equivalent logical workload definitions across Torch and MLX. A
   cross-backend comparison must record whether weights were mapped from the
-  same checkpoint or were loaded from separately trained backend-native runs;
-  those cases must never share one label.
+  same checkpoint or loaded natively. Infer that provenance from checkpoint and
+  execution backends rather than trusting a caller-supplied assertion.
+- Formal records require complete model-family aligned checkpoint metadata and
+  an exact profile label bound to config and checkpoint metadata. Every dry run
+  is explicitly provisional and records missing metadata or label reasons.
 - Reject metadata mismatch, unsupported backends or workloads, non-positive
   iteration counts, non-finite outputs, and attempts to overwrite an existing
   authoritative record without an explicit replacement flag.
@@ -329,7 +353,10 @@ Test-first and verification contract:
 
 - First tests freeze the shared CLI/schema, adapter boundary, synchronization
   order, warm-up exclusion, raw-sample persistence, percentile aggregation,
-  overwrite guard, capability encoding, and metadata mismatch failures using
+  overwrite guard, capability encoding, metadata mismatch failures,
+  backend-local RNG repeatability, formal/provisional evidence classification,
+  inferred checkpoint provenance, a formal fixture derived from the checked-in
+  legacy WT103 Neo config shape, historical MLX Neo execution overrides, and
   tiny deterministic fixtures and a controllable clock.
 - A required tiny Torch CPU integration test and a skip-safe tiny MLX integration
   test must emit the same schema and prove that measured work is completed at
@@ -386,6 +413,8 @@ Test-first and verification contract:
   compute agreement.
 - Run focused compute-accounting tests, `make torch-validate`,
   `make mlx-parity`, `make check`, and `git diff --check`.
+- `make efficiency-check` runs the focused Torch/MLX harness integrations and is
+  required in the macOS MLX GitHub job.
 
 ### Formal Efficiency Matrix - Blocked Experiment, Not A Code PR
 
@@ -450,8 +479,9 @@ Optional hardware probes remain local/manual:
 
 Do not hand these to an agent yet:
 
-- Unified Torch/MLX efficiency benchmark implementation or execution before corrected
-  LSTM scaling and checkpoint selection are complete.
+- Formal unified Torch/MLX efficiency benchmark execution before corrected LSTM
+  scaling and checkpoint selection are complete; only tiny explicitly labeled
+  dry-run contract checks are permitted during harness development.
 - Revalidating old PyTorch MPS result rows.
 - Making MPS a production result backend.
 - Re-enabling activation checkpointing for result production.
