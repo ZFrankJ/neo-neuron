@@ -2,6 +2,18 @@
 
 Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLAN.md`; keep broad priorities in `docs/ROADMAP.md`.
 
+## 2026-07-21 - Deterministic LSTM Forward Parity Initialization
+
+- Decision:
+  - Seed Torch and optional MLX model initialization before every LSTM forward-parity test, matching the established deterministic training-parity harness.
+- Why:
+  - Unseeded MLX reference weights could occasionally amplify normal backend rounding beyond the strict forward tolerance, making the macOS parity gate depend on random initialization.
+- Scope:
+  - `tests/test_lstm_forward_parity.py`
+- Impact:
+  - LSTM forward and checkpoint parity cases now replay the same model initialization on every run.
+  - Runtime semantics and parity tolerances are unchanged.
+
 ## 2026-07-21 - Manual Compute Accounting Contract
 
 - Decision:

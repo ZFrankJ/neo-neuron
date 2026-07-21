@@ -17,6 +17,19 @@ from src.runtime.checkpoint_compat import (
 )
 
 
+MODEL_SEED = 20260714
+
+
+@pytest.fixture(autouse=True)
+def _seed_model_initialization():
+    torch.manual_seed(MODEL_SEED)
+    try:
+        import mlx.core as mx
+    except ImportError:
+        return
+    mx.random.seed(MODEL_SEED)
+
+
 def _cfg(**overrides):
     cfg = {
         "model_name": "lstm",
