@@ -13,6 +13,7 @@ from src.runtime.efficiency import (
     BenchmarkObservation,
     BenchmarkSpec,
     benchmark_from_paths,
+    hardware_identifier,
     run_benchmark,
     validate_benchmark_record,
     write_benchmark_record,
@@ -63,6 +64,10 @@ class _FakeAdapter:
             scalar=float(self._runs),
         )
 
+    def finalize_observation(self, pending):
+        self.events.append("finalize")
+        return pending
+
     def memory_snapshot(self):
         self.events.append("memory")
         return {
@@ -70,6 +75,35 @@ class _FakeAdapter:
             "backend_active_bytes": None,
             "backend_peak_bytes": None,
         }
+
+
+class _PeakFakeAdapter(_FakeAdapter):
+    telemetry_capabilities = {
+        "process_rss": True,
+        "backend_active_memory": True,
+        "backend_peak_memory": True,
+    }
+
+    def __init__(self):
+        super().__init__()
+        self._memory_values = iter(
+            [
+                {
+                    "process_rss_bytes": 1001,
+                    "backend_active_bytes": 11,
+                    "backend_peak_bytes": 200,
+                },
+                {
+                    "process_rss_bytes": 1002,
+                    "backend_active_bytes": 12,
+                    "backend_peak_bytes": 100,
+                },
+            ]
+        )
+
+    def memory_snapshot(self):
+        self.events.append("memory")
+        return next(self._memory_values)
 
 
 def _metadata():
@@ -148,15 +182,36 @@ def test_shared_core_excludes_warmup_and_synchronizes_each_measured_region():
         ("prepare", (4, 2), (4, 2)),
         ("run", "sequence_eval"),
         "sync",
+        "finalize",
         "reset_peak",
         "sync",
         ("run", "sequence_eval"),
         "sync",
+        "memory",
+        "finalize",
+        "reset_peak",
         "sync",
         ("run", "sequence_eval"),
         "sync",
         "memory",
+        "finalize",
     ]
+
+
+def test_shared_core_keeps_peak_from_measured_work_before_output_validation():
+    adapter = _PeakFakeAdapter()
+    record = run_benchmark(
+        adapter,
+        _spec(warmup_iterations=0),
+        _metadata(),
+        clock_ns=_Clock([100, 110, 200, 230]),
+    )
+
+    assert record["memory"] == {
+        "process_rss_bytes": 1002,
+        "backend_active_bytes": 12,
+        "backend_peak_bytes": 200,
+    }
 
 
 @pytest.mark.parametrize(
@@ -225,8 +280,11 @@ def _tiny_cfg(model_name: str = "lstm"):
         "recurrent_norm_place": "all",
         "rmsnorm_eps": 1e-5,
         "lstm_bias_mode": "single",
+        "lstm_layer_dropout": 0.0,
         "reference_backend": "mlx",
         "use_checkpoint": False,
+        "cosine": False,
+        "grad_clip": 1.0,
         "lr": 1e-3,
         "weight_decay": 0.0,
     }
@@ -243,11 +301,17 @@ def _tiny_cfg(model_name: str = "lstm"):
     return cfg
 
 
-def _write_tiny_fixture(tmp_path: Path, *, model_name: str = "lstm"):
+def _write_tiny_fixture(
+    tmp_path: Path,
+    *,
+    model_name: str = "lstm",
+    overrides: dict | None = None,
+):
     import yaml
 
     tmp_path.mkdir(parents=True, exist_ok=True)
     cfg = _tiny_cfg(model_name)
+    cfg.update(overrides or {})
     config_path = tmp_path / "tiny.yaml"
     config_path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
     checkpoint_path = tmp_path / "tiny.pt"
@@ -300,7 +364,13 @@ def _run_tiny_backend(
 
 
 def test_tiny_torch_cpu_integration_emits_valid_versioned_record(tmp_path: Path):
-    record = _run_tiny_backend(tmp_path, "torch", "cpu")
+    record = _run_tiny_backend(
+        tmp_path,
+        "torch",
+        "cpu",
+        workload="train_step",
+        timing_scope="end_to_end_loop",
+    )
 
     assert record["runtime"]["backend"] == "torch"
     assert record["runtime"]["device"] == "cpu"
@@ -309,6 +379,13 @@ def test_tiny_torch_cpu_integration_emits_valid_versioned_record(tmp_path: Path)
     assert record["output"]["shape"] == [4, 2, 19]
     assert len(record["raw_samples_ns"]) == 2
     assert record["memory"]["process_rss_bytes"] > 0
+    assert record["workload"]["semantics"] == {
+        "input_policy": "deterministic_preallocated",
+        "optimizer_state_policy": "fresh_then_warmed",
+        "scheduler_included": False,
+        "state_policy": "reset_each_iteration",
+        "tbptt_policy": "full_sequence",
+    }
     validate_benchmark_record(record)
 
 
@@ -333,14 +410,24 @@ def test_tiny_torch_cpu_supports_each_workload(tmp_path: Path, workload, timing_
     assert record["output"]["finite"] is True
 
 
-def test_checkpoint_metadata_mismatch_fails_before_execution(tmp_path: Path):
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("d_model", 5),
+        ("dropout", 0.25),
+        ("lstm_layer_dropout", 0.25),
+        ("reference_backend", "torch"),
+        ("grad_clip", 0.5),
+    ],
+)
+def test_checkpoint_metadata_mismatch_fails_before_execution(tmp_path: Path, key, value):
     import yaml
 
     cfg, config_path, checkpoint_path = _write_tiny_fixture(tmp_path)
-    cfg["d_model"] = 5
+    cfg[key] = value
     config_path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
 
-    with pytest.raises(ValueError, match="Checkpoint metadata mismatch.*d_model"):
+    with pytest.raises(ValueError, match=rf"Checkpoint metadata mismatch.*{key}"):
         benchmark_from_paths(
             config_path=config_path,
             checkpoint_path=checkpoint_path,
@@ -354,6 +441,33 @@ def test_checkpoint_metadata_mismatch_fails_before_execution(tmp_path: Path):
             measured_iterations=1,
             repetition_id="mismatch",
             profile_label="tiny-mismatch",
+            weight_provenance="mapped_same_checkpoint",
+            output_path=tmp_path / "must-not-exist.json",
+            seed=17,
+            dry_run=True,
+        )
+
+
+def test_train_step_rejects_shorter_tbptt_contract(tmp_path: Path):
+    _, config_path, checkpoint_path = _write_tiny_fixture(
+        tmp_path,
+        overrides={"tbptt_len": 2},
+    )
+
+    with pytest.raises(ValueError, match="tbptt_len"):
+        benchmark_from_paths(
+            config_path=config_path,
+            checkpoint_path=checkpoint_path,
+            backend_name="torch",
+            device="cpu",
+            workload="train_step",
+            timing_scope="end_to_end_loop",
+            batch_size=2,
+            sequence_length=4,
+            warmup_iterations=1,
+            measured_iterations=1,
+            repetition_id="tbptt-mismatch",
+            profile_label="tiny-tbptt",
             weight_provenance="mapped_same_checkpoint",
             output_path=tmp_path / "must-not-exist.json",
             seed=17,
@@ -409,6 +523,35 @@ def test_public_cli_writes_the_same_versioned_schema(tmp_path: Path):
     assert record["schema_version"] == SCHEMA_VERSION
     assert record["workload"]["repetition_id"] == "cli-rep-1"
     assert record["record_id"] in completed.stdout
+
+
+def test_hardware_identifier_records_platform_model(monkeypatch):
+    monkeypatch.setattr("src.runtime.efficiency.platform.system", lambda: "Darwin")
+    monkeypatch.setattr("src.runtime.efficiency.platform.machine", lambda: "arm64")
+
+    class _Completed:
+        def __init__(self, stdout):
+            self.stdout = stdout
+
+    values = {
+        "machdep.cpu.brand_string": "Apple M4 Pro\n",
+        "hw.model": "Mac16,7\n",
+    }
+
+    def fake_run(command, **kwargs):
+        return _Completed(values[command[-1]])
+
+    monkeypatch.setattr("src.runtime.efficiency.subprocess.run", fake_run)
+
+    assert hardware_identifier() == "Darwin | arm64 | Apple M4 Pro | Mac16,7"
+
+
+def test_readme_benchmark_example_uses_shell_safe_paths():
+    readme = (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
+    benchmark_example = readme.split("## Efficiency benchmark harness", 1)[1].split("```", 2)[1]
+    assert "<config.yaml>" not in benchmark_example
+    assert "<checkpoint.pt>" not in benchmark_example
+    assert "<record.json>" not in benchmark_example
 
 
 def test_tiny_mapped_torch_and_mlx_integrations_share_logical_schema(tmp_path: Path):

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import platform
 from typing import Any, Mapping
 
 import numpy as np
@@ -11,7 +10,7 @@ import torch
 import torch.nn.functional as F
 
 from ...train.optim import build_optimizer
-from ..efficiency import BenchmarkObservation
+from ..efficiency import BenchmarkObservation, hardware_identifier
 
 
 class TorchEfficiencyAdapter:
@@ -31,9 +30,10 @@ class TorchEfficiencyAdapter:
             raise ValueError(f"Unsupported Torch benchmark device '{self.torch_device.type}'")
         parameter = next((value for value in model.parameters() if value.requires_grad), None)
         self.dtype = str(parameter.dtype).replace("torch.", "") if parameter is not None else "unknown"
-        self.hardware_identifier = f"{platform.machine()} | {platform.processor() or 'unknown'}"
+        accelerator = None
         if self.torch_device.type == "cuda":
-            self.hardware_identifier += f" | {torch.cuda.get_device_name(self.torch_device)}"
+            accelerator = torch.cuda.get_device_name(self.torch_device)
+        self.hardware_identifier = hardware_identifier(accelerator)
         self.synchronization_policy = {
             "cpu": "torch eager CPU completion",
             "mps": "torch.mps.synchronize()",

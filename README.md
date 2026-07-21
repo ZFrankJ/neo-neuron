@@ -158,8 +158,8 @@ non-formal.
 
 ```bash
 python3 scripts/benchmark_efficiency.py \
-  --config <config.yaml> \
-  --checkpoint <checkpoint.pt> \
+  --config /path/to/config.yaml \
+  --checkpoint /path/to/checkpoint.pt \
   --backend torch \
   --device cpu \
   --workload sequence_eval \
@@ -167,9 +167,9 @@ python3 scripts/benchmark_efficiency.py \
   --batch-size 2 \
   --sequence-length 16 \
   --repetition-id smoke-1 \
-  --profile-label <exact-profile-label> \
+  --profile-label exact-profile-label \
   --weight-provenance mapped_same_checkpoint \
-  --output <record.json> \
+  --output /tmp/benchmark-record.json \
   --dry-run --warmup-iterations 1 --measured-iterations 2
 ```
 
@@ -178,8 +178,13 @@ sample, percentile summaries, synchronization policy, RSS and supported
 backend memory telemetry, config/checkpoint hashes and metadata, exact
 trainable parameters, workload shape, runtime versions, and hardware identity.
 Existing records are never overwritten unless `--replace` is explicit.
-`train_step` uses `end_to_end_loop`; `sequence_eval` and `streaming_decode` use
-`model_only`. THOP estimates are not part of this contract.
+`train_step` is an isolated optimizer-update microbenchmark: inputs are
+preallocated, optimizer state is fresh and then warmed, the scheduler is
+excluded, recurrent state resets each iteration, and backpropagation covers the
+full sequence. A config requesting shorter TBPTT is rejected. It is not a
+measurement of the public dataset-driven training trajectory. `train_step`
+uses `end_to_end_loop`; `sequence_eval` and `streaming_decode` use `model_only`.
+THOP estimates are not part of this contract.
 
 The harness may be developed and exercised with tiny dry runs on a separate
 machine, but formal Neo/LSTM efficiency measurement remains blocked until the

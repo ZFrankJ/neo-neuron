@@ -289,8 +289,11 @@ Public contract:
   identifier, and output path. Never infer a paper-facing profile from a
   filename alone.
 - Support separately labeled `train_step`, `sequence_eval`, and
-  `streaming_decode` workloads. Model-only timing and end-to-end loop timing are
-  distinct scopes and must never be combined into one number.
+  `streaming_decode` workloads. Define `train_step` as an isolated optimizer
+  update with fresh-then-warmed optimizer state, no scheduler, reset recurrent
+  state, and full-sequence backpropagation; reject a shorter configured TBPTT
+  contract instead of silently changing it. Model-only timing and end-to-end
+  loop timing are distinct scopes and must never be combined into one number.
 - Preallocate deterministic token inputs outside the measured region. Exclude
   dataset download, tokenization, checkpoint loading, compilation/warm-up, and
   result serialization from model-only timing.
@@ -305,17 +308,20 @@ Public contract:
 - Run at least 20 unreported warm-up iterations and 100 measured iterations per
   process unless an approved dry run establishes a larger minimum for stable
   intervals. Preserve every raw sample.
-- Reset backend peak-memory counters after warm-up when a supported API exists.
+- Reset backend peak-memory counters after warm-up and between measurements when
+  a supported API exists. Capture measured-work memory before output validation
+  can allocate temporary buffers, and retain the maximum measured backend peak.
   Report process RSS for every backend plus backend active/peak allocation,
   tokens per second, milliseconds per token, and milliseconds per step. An
   unsupported memory field must be recorded as unavailable, never as zero.
 - Emit a versioned JSON record containing raw samples and summary statistics,
   including median, quartiles, and 10th/90th percentiles. Any CSV table is a
   derived view, not the authoritative record.
-- Record git commit, config snapshot, checkpoint identity and metadata, exact
-  trainable parameter count and breakdown, model/profile labels, activation and
-  norm settings, backend, device, dtype, framework/Python/OS versions, hardware
-  identifier, workload dimensions, seed, synchronization policy, telemetry
+- Record git commit, config snapshot, checkpoint identity and
+  execution-semantic metadata, exact trainable parameter count and breakdown,
+  model/profile labels, activation and norm settings, backend, device, dtype,
+  framework/Python/OS versions, hardware identifier including the processor
+  model, workload dimensions, seed, synchronization policy, telemetry
   capability flags, and whether data handling is included.
 - Require equivalent logical workload definitions across Torch and MLX. A
   cross-backend comparison must record whether weights were mapped from the

@@ -29,6 +29,23 @@ SUPPORTED_WEIGHT_PROVENANCE = {
 }
 MIN_WARMUP_ITERATIONS = 20
 MIN_MEASURED_ITERATIONS = 100
+WORKLOAD_SEMANTICS = {
+    "train_step": {
+        "input_policy": "deterministic_preallocated",
+        "optimizer_state_policy": "fresh_then_warmed",
+        "scheduler_included": False,
+        "state_policy": "reset_each_iteration",
+        "tbptt_policy": "full_sequence",
+    },
+    "sequence_eval": {
+        "input_policy": "deterministic_preallocated",
+        "state_policy": "reset_each_iteration",
+    },
+    "streaming_decode": {
+        "input_policy": "deterministic_preallocated",
+        "state_policy": "reset_for_each_sequence",
+    },
+}
 
 
 @dataclass(frozen=True)
@@ -161,6 +178,47 @@ def _deterministic_inputs(spec: BenchmarkSpec, vocab_size: int) -> tuple[np.ndar
     return tokens, targets
 
 
+def hardware_identifier(accelerator: str | None = None) -> str:
+    """Return a stable, host-independent platform and processor model label."""
+
+    system = platform.system() or "unknown"
+    machine = platform.machine() or "unknown"
+    details: list[str] = []
+    if system == "Darwin":
+        for key in ("machdep.cpu.brand_string", "hw.model"):
+            try:
+                value = subprocess.run(
+                    ["sysctl", "-n", key],
+                    check=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    text=True,
+                    timeout=2,
+                ).stdout.strip()
+            except (OSError, subprocess.SubprocessError):
+                value = ""
+            if value and value not in details:
+                details.append(value)
+    elif system == "Linux":
+        try:
+            cpuinfo = Path("/proc/cpuinfo").read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            cpuinfo = ""
+        for line in cpuinfo.splitlines():
+            if line.lower().startswith("model name") and ":" in line:
+                value = line.split(":", 1)[1].strip()
+                if value:
+                    details.append(value)
+                break
+    if not details:
+        processor = platform.processor().strip()
+        if processor and processor != machine:
+            details.append(processor)
+    if accelerator and accelerator.strip() and accelerator.strip() not in details:
+        details.append(accelerator.strip())
+    return " | ".join([system, machine, *details])
+
+
 def run_benchmark(
     adapter: EfficiencyAdapter,
     spec: BenchmarkSpec,
@@ -187,7 +245,9 @@ def run_benchmark(
 
     adapter.reset_peak_memory()
     samples_ns = []
-    for _ in range(spec.measured_iterations):
+    memory: Dict[str, int | None] = {}
+    peak_bytes: int | None = None
+    for index in range(spec.measured_iterations):
         adapter.synchronize()
         started = int(clock_ns())
         pending = adapter.run(spec.workload)
@@ -197,11 +257,18 @@ def run_benchmark(
         if elapsed <= 0:
             raise ValueError(f"Measured duration must be positive, got {elapsed} ns")
         samples_ns.append(elapsed)
+        snapshot = dict(adapter.memory_snapshot())
+        memory.update(snapshot)
+        measured_peak = snapshot.get("backend_peak_bytes")
+        if measured_peak is not None:
+            peak_bytes = max(peak_bytes or 0, int(measured_peak))
+            memory["backend_peak_bytes"] = peak_bytes
         last_observation = _finalize_observation(adapter, pending)
         if not last_observation.finite:
             raise ValueError("Benchmark produced non-finite output")
+        if index + 1 < spec.measured_iterations:
+            adapter.reset_peak_memory()
 
-    memory = dict(adapter.memory_snapshot())
     assert last_observation is not None
     tokens_per_iteration = spec.batch_size * spec.sequence_length
     record: Dict[str, Any] = {
@@ -232,6 +299,7 @@ def run_benchmark(
             "seed": spec.seed,
             "tokens_per_iteration": tokens_per_iteration,
             "data_handling_included": False,
+            "semantics": dict(WORKLOAD_SEMANTICS[spec.workload]),
             "dry_run": spec.dry_run,
         },
         "telemetry_capabilities": dict(adapter.telemetry_capabilities),
@@ -344,6 +412,9 @@ def validate_benchmark_record(record: Mapping[str, Any]) -> None:
         raise ValueError("raw_samples_ns must contain positive integer durations")
     if workload.get("data_handling_included") is not False:
         raise ValueError("Benchmark records must exclude data handling from measured regions")
+    expected_semantics = WORKLOAD_SEMANTICS[str(workload["name"])]
+    if workload.get("semantics") != expected_semantics:
+        raise ValueError("Benchmark workload semantics do not match the workload contract")
     expected_tokens = int(workload["batch_size"]) * int(workload["sequence_length"])
     if workload.get("tokens_per_iteration") != expected_tokens:
         raise ValueError("tokens_per_iteration does not match the logical workload shape")
@@ -480,14 +551,42 @@ _CHECKPOINT_CONTRACT_KEYS = (
     "n_layers",
     "n_heads",
     "ff_mult",
+    "dropout",
     "tie_embeddings",
     "activation_id",
+    "activation_sparsity_eps",
+    "cell_type",
     "recurrent_norm",
     "recurrent_norm_place",
+    "output_norm",
+    "norm_place",
     "rmsnorm_eps",
     "lstm_bias_mode",
+    "lstm_layer_dropout",
     "transformer_variant",
+    "reference_backend",
     "use_checkpoint",
+    "use_compile",
+    "lr",
+    "betas",
+    "adam_eps",
+    "grad_clip",
+    "weight_decay",
+    "weight_decay_policy",
+    "embed_weight_decay",
+    "recurrent_weight_decay",
+    "proj_weight_decay",
+    "transformer_weight_decay",
+    "cosine",
+    "epochs",
+    "warmup_epochs",
+    "min_lr",
+    "train_regime",
+    "stream_state",
+    "tbptt_len",
+    "block_size",
+    "forget_bias_init",
+    "recurrent_init",
 )
 
 
@@ -612,6 +711,12 @@ def benchmark_from_paths(
     cfg = _load_yaml(config)
     if bool(cfg.get("use_checkpoint", False)):
         raise ValueError("Efficiency benchmark requires use_checkpoint=false")
+    tbptt_len = int(cfg.get("tbptt_len", 0))
+    if workload == "train_step" and 0 < tbptt_len < int(sequence_length):
+        raise ValueError(
+            "The isolated train_step benchmark requires full-sequence backpropagation; "
+            f"config tbptt_len={tbptt_len} is shorter than sequence_length={sequence_length}"
+        )
     model_name = _infer_model_name(config, cfg)
     payload = load_checkpoint_payload(checkpoint, map_location="cpu")
     _validate_checkpoint_config(payload, cfg)

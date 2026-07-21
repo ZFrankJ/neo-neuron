@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-import platform
 from typing import Any, Mapping
 
 import numpy as np
@@ -18,7 +17,7 @@ try:
 except Exception as exc:  # pragma: no cover - optional dependency
     raise RuntimeError("MLX benchmark requested but 'mlx' is not installed") from exc
 
-from ..efficiency import BenchmarkObservation
+from ..efficiency import BenchmarkObservation, hardware_identifier
 from .mlx_backend import (
     _apply_decoupled_weight_decay,
     _build_weight_decay_lookup,
@@ -38,7 +37,7 @@ class MlxEfficiencyAdapter:
             raise ValueError(f"Unsupported MLX benchmark device '{self.device}'")
         parameters = list(tree_flatten(model.parameters()))
         self.dtype = str(parameters[0][1].dtype) if parameters else "unknown"
-        self.hardware_identifier = f"{platform.machine()} | {platform.processor() or 'Apple Silicon'}"
+        self.hardware_identifier = hardware_identifier()
         self.synchronization_policy = "mx.eval(pending); mx.synchronize()"
         self.telemetry_capabilities = {
             "process_rss": True,
