@@ -11,15 +11,23 @@ Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLA
   - Bound every measured region to explicit backend synchronization, preserved
     every raw nanosecond sample, and made a versioned JSON record the
     authoritative artifact.
-  - Required explicit profile and mapped-versus-backend-native checkpoint
-    provenance, content hashes, checkpoint/config compatibility, workload
-    scope, runtime identity, parameter breakdown, and telemetry capabilities.
+  - Required a metadata-bound profile and inferred mapped-versus-backend-native
+    checkpoint provenance, content hashes, checkpoint/config compatibility,
+    workload scope, runtime identity, parameter breakdown, and telemetry
+    capabilities.
   - Defined `train_step` as an isolated full-sequence optimizer update with no
     scheduler and reset recurrent state, and persisted those semantics in every
     record instead of implying the public dataset-driven training trajectory.
   - Captured memory before output validation, retained the maximum per-step
     backend peak, expanded checkpoint checks across model/training semantics,
     and recorded the processor model rather than only the machine architecture.
+  - Inferred native-versus-mapped checkpoint provenance, seeded each backend
+    before construction and execution, and made dry-run evidence explicitly
+    provisional while formal records require complete aligned metadata and an
+    exact metadata-bound profile label.
+  - Preserved historical MLX Neo `use_checkpoint: true` metadata while recording
+    the runtime-inert flag and effective benchmark execution with
+    `use_checkpoint: false`; added the focused MLX efficiency suite to macOS CI.
   - Kept formal records at a minimum of 20 warm-ups and 100 measurements;
     smaller runs require an explicit `dry_run` label and cannot be silently
     promoted.

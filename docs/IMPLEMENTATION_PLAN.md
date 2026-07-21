@@ -302,6 +302,9 @@ Public contract:
   for Torch CPU, `torch.mps.synchronize()` for MPS, and
   `torch.cuda.synchronize(device)` for CUDA. Lazy or asynchronous work must
   never cross a timing boundary.
+- Seed each backend before model construction and again before execution.
+  Record that RNG streams are backend-local; equal seeds prove within-backend
+  repeatability and do not imply identical Torch/MLX dropout masks.
 - Fail clearly when the requested backend/device or required synchronization
   primitive is unavailable. MPS and CUDA support remains skip-safe and does not
   weaken their existing scientific-acceptance gates.
@@ -323,10 +326,17 @@ Public contract:
   framework/Python/OS versions, hardware identifier including the processor
   model, workload dimensions, seed, synchronization policy, telemetry
   capability flags, and whether data handling is included.
+- Preserve historical config separately from effective benchmark execution.
+  The only `use_checkpoint: true` exception is a native MLX Neo checkpoint,
+  where the historically recorded flag had no MLX runtime effect; record the
+  exact override to benchmark execution with `use_checkpoint: false`.
 - Require equivalent logical workload definitions across Torch and MLX. A
   cross-backend comparison must record whether weights were mapped from the
-  same checkpoint or were loaded from separately trained backend-native runs;
-  those cases must never share one label.
+  same checkpoint or loaded natively. Infer that provenance from checkpoint and
+  execution backends rather than trusting a caller-supplied assertion.
+- Formal records require complete model-family aligned checkpoint metadata and
+  an exact profile label bound to config and checkpoint metadata. Every dry run
+  is explicitly provisional and records missing metadata or label reasons.
 - Reject metadata mismatch, unsupported backends or workloads, non-positive
   iteration counts, non-finite outputs, and attempts to overwrite an existing
   authoritative record without an explicit replacement flag.
@@ -338,7 +348,9 @@ Test-first and verification contract:
 
 - First tests freeze the shared CLI/schema, adapter boundary, synchronization
   order, warm-up exclusion, raw-sample persistence, percentile aggregation,
-  overwrite guard, capability encoding, and metadata mismatch failures using
+  overwrite guard, capability encoding, metadata mismatch failures,
+  backend-local RNG repeatability, formal/provisional evidence classification,
+  inferred checkpoint provenance, historical MLX Neo execution overrides, and
   tiny deterministic fixtures and a controllable clock.
 - A required tiny Torch CPU integration test and a skip-safe tiny MLX integration
   test must emit the same schema and prove that measured work is completed at
@@ -395,6 +407,8 @@ Test-first and verification contract:
   compute agreement.
 - Run focused compute-accounting tests, `make torch-validate`,
   `make mlx-parity`, `make check`, and `git diff --check`.
+- `make efficiency-check` runs the focused Torch/MLX harness integrations and is
+  required in the macOS MLX GitHub job.
 
 ### Formal Efficiency Matrix - Blocked Experiment, Not A Code PR
 

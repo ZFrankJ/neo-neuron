@@ -7,13 +7,16 @@ import sys
 from pathlib import Path
 
 import pytest
+import torch
 
+from src.runtime.checkpoint_compat import load_checkpoint_payload
 from src.runtime.efficiency import (
     SCHEMA_VERSION,
     BenchmarkObservation,
     BenchmarkSpec,
     benchmark_from_paths,
     hardware_identifier,
+    resolve_benchmark_execution_config,
     run_benchmark,
     validate_benchmark_record,
     write_benchmark_record,
@@ -117,21 +120,35 @@ def _metadata():
                 "vocab_size": 17,
                 "use_checkpoint": False,
             },
+            "effective_config_snapshot": {
+                "model_name": "lstm",
+                "vocab_size": 17,
+                "use_checkpoint": False,
+            },
+            "execution_overrides": {},
             "checkpoint_path": "/tmp/tiny.pt",
             "checkpoint_sha256": "checkpoint-sha",
             "checkpoint_backend": "torch",
-            "checkpoint_metadata": {"epoch": 1, "global_step": 2},
+            "checkpoint_metadata": {
+                "epoch": 1,
+                "global_step": 2,
+                "config_snapshot": {},
+            },
         },
         "model": {
             "name": "lstm",
             "profile_label": "tiny-test",
-            "weight_provenance": "mapped_same_checkpoint",
+            "weight_provenance": "backend_native_checkpoint",
             "trainable_parameters": 42,
             "parameter_breakdown": {"recurrent": 20, "other": 22},
             "activation_id": None,
             "recurrent_norm": "rmsnorm",
             "recurrent_norm_place": "all",
             "use_checkpoint": False,
+        },
+        "evidence": {
+            "status": "provisional",
+            "provisional_reasons": ["dry_run"],
         },
     }
 
@@ -249,6 +266,11 @@ def test_record_validation_rejects_capability_and_non_finite_mismatches():
     with pytest.raises(ValueError, match="non-finite"):
         validate_benchmark_record(non_finite)
 
+    false_provenance = copy.deepcopy(record)
+    false_provenance["model"]["weight_provenance"] = "mapped_same_checkpoint"
+    with pytest.raises(ValueError, match="weight_provenance"):
+        validate_benchmark_record(false_provenance)
+
 
 def test_authoritative_record_requires_explicit_replace(tmp_path: Path):
     record = run_benchmark(
@@ -283,6 +305,7 @@ def _tiny_cfg(model_name: str = "lstm"):
         "lstm_layer_dropout": 0.0,
         "reference_backend": "mlx",
         "use_checkpoint": False,
+        "run_tag": "tiny-mapped-lstm",
         "cosine": False,
         "grad_clip": 1.0,
         "lr": 1e-3,
@@ -354,7 +377,6 @@ def _run_tiny_backend(
         measured_iterations=2,
         repetition_id=f"{backend}-rep-1",
         profile_label="tiny-mapped-lstm",
-        weight_provenance="mapped_same_checkpoint",
         output_path=output,
         seed=17,
         dry_run=True,
@@ -379,9 +401,15 @@ def test_tiny_torch_cpu_integration_emits_valid_versioned_record(tmp_path: Path)
     assert record["output"]["shape"] == [4, 2, 19]
     assert len(record["raw_samples_ns"]) == 2
     assert record["memory"]["process_rss_bytes"] > 0
+    assert record["model"]["weight_provenance"] == "backend_native_checkpoint"
+    assert record["evidence"] == {
+        "status": "provisional",
+        "provisional_reasons": ["dry_run"],
+    }
     assert record["workload"]["semantics"] == {
         "input_policy": "deterministic_preallocated",
         "optimizer_state_policy": "fresh_then_warmed",
+        "rng_policy": "backend_local_seeded_before_model_construction_and_execution",
         "scheduler_included": False,
         "state_policy": "reset_each_iteration",
         "tbptt_policy": "full_sequence",
@@ -441,7 +469,6 @@ def test_checkpoint_metadata_mismatch_fails_before_execution(tmp_path: Path, key
             measured_iterations=1,
             repetition_id="mismatch",
             profile_label="tiny-mismatch",
-            weight_provenance="mapped_same_checkpoint",
             output_path=tmp_path / "must-not-exist.json",
             seed=17,
             dry_run=True,
@@ -468,7 +495,6 @@ def test_train_step_rejects_shorter_tbptt_contract(tmp_path: Path):
             measured_iterations=1,
             repetition_id="tbptt-mismatch",
             profile_label="tiny-tbptt",
-            weight_provenance="mapped_same_checkpoint",
             output_path=tmp_path / "must-not-exist.json",
             seed=17,
             dry_run=True,
@@ -506,8 +532,6 @@ def test_public_cli_writes_the_same_versioned_schema(tmp_path: Path):
             "cli-rep-1",
             "--profile-label",
             "tiny-cli",
-            "--weight-provenance",
-            "mapped_same_checkpoint",
             "--seed",
             "17",
             "--output",
@@ -522,6 +546,8 @@ def test_public_cli_writes_the_same_versioned_schema(tmp_path: Path):
     record = json.loads(output.read_text(encoding="utf-8"))
     assert record["schema_version"] == SCHEMA_VERSION
     assert record["workload"]["repetition_id"] == "cli-rep-1"
+    assert record["model"]["weight_provenance"] == "backend_native_checkpoint"
+    assert record["evidence"]["status"] == "provisional"
     assert record["record_id"] in completed.stdout
 
 
@@ -552,6 +578,257 @@ def test_readme_benchmark_example_uses_shell_safe_paths():
     assert "<config.yaml>" not in benchmark_example
     assert "<checkpoint.pt>" not in benchmark_example
     assert "<record.json>" not in benchmark_example
+
+
+def test_historical_mlx_neo_checkpoint_flag_becomes_recorded_execution_override():
+    cfg = _tiny_cfg("neo") | {"backend": "mlx", "use_checkpoint": True}
+
+    effective, overrides = resolve_benchmark_execution_config(
+        cfg,
+        model_name="neo",
+        checkpoint_backend="mlx",
+    )
+
+    assert cfg["use_checkpoint"] is True
+    assert effective["use_checkpoint"] is False
+    assert overrides == {
+        "use_checkpoint": {
+            "training_value": True,
+            "benchmark_value": False,
+            "reason": "mlx_neo_training_flag_runtime_inert",
+        }
+    }
+
+
+def test_non_mlx_checkpoint_flag_cannot_be_reinterpreted_for_benchmarking():
+    cfg = _tiny_cfg("neo") | {"backend": "torch", "use_checkpoint": True}
+
+    with pytest.raises(ValueError, match="use_checkpoint=false"):
+        resolve_benchmark_execution_config(
+            cfg,
+            model_name="neo",
+            checkpoint_backend="torch",
+        )
+
+
+def test_mlx_native_neo_checkpoint_with_historical_flag_is_benchmarkable(tmp_path: Path):
+    mx = pytest.importorskip("mlx.core")
+    import yaml
+    from src.runtime.backends import mlx_backend
+
+    cfg = _tiny_cfg("neo") | {
+        "backend": "mlx",
+        "use_checkpoint": True,
+        "run_tag": "tiny-historical-mlx-neo",
+    }
+    config_path = tmp_path / "neo.yaml"
+    checkpoint_path = tmp_path / "neo.pkl"
+    config_path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    original_device = mx.default_device()
+    try:
+        device = mlx_backend.get_runtime_device("cpu")
+        mlx_backend.seed_all(23)
+        model = mlx_backend.build_model(cfg, "neo")
+        mlx_backend.save_checkpoint_entry(
+            checkpoint_path,
+            model,
+            None,
+            None,
+            epoch=1,
+            global_step=2,
+            cfg=cfg,
+        )
+        record = benchmark_from_paths(
+            config_path=config_path,
+            checkpoint_path=checkpoint_path,
+            backend_name="mlx",
+            device=device,
+            workload="sequence_eval",
+            timing_scope="model_only",
+            batch_size=2,
+            sequence_length=4,
+            warmup_iterations=1,
+            measured_iterations=1,
+            repetition_id="historical-neo",
+            profile_label=cfg["run_tag"],
+            output_path=tmp_path / "neo-record.json",
+            seed=23,
+            dry_run=True,
+        )
+    finally:
+        mx.set_default_device(original_device)
+
+    assert record["identity"]["config_snapshot"]["use_checkpoint"] is True
+    assert record["identity"]["effective_config_snapshot"]["use_checkpoint"] is False
+    assert record["identity"]["execution_overrides"]["use_checkpoint"]["reason"] == (
+        "mlx_neo_training_flag_runtime_inert"
+    )
+    assert record["model"]["use_checkpoint"] is False
+    assert record["model"]["weight_provenance"] == "backend_native_checkpoint"
+
+
+def test_missing_aligned_checkpoint_metadata_is_only_allowed_as_provisional_dry_run(
+    tmp_path: Path,
+):
+    cfg, config_path, checkpoint_path = _write_tiny_fixture(tmp_path / "fixture")
+    payload = load_checkpoint_payload(checkpoint_path)
+    payload["cfg"].pop("lstm_bias_mode")
+    payload["cfg"].pop("rmsnorm_eps")
+    torch.save(payload, checkpoint_path)
+
+    with pytest.raises(ValueError, match="Formal benchmark.*missing aligned metadata"):
+        benchmark_from_paths(
+            config_path=config_path,
+            checkpoint_path=checkpoint_path,
+            backend_name="torch",
+            device="cpu",
+            workload="sequence_eval",
+            timing_scope="model_only",
+            batch_size=2,
+            sequence_length=4,
+            warmup_iterations=20,
+            measured_iterations=100,
+            repetition_id="formal-missing-metadata",
+            profile_label=cfg["run_tag"],
+            output_path=tmp_path / "formal-must-not-exist.json",
+            seed=17,
+            dry_run=False,
+        )
+
+    record = benchmark_from_paths(
+        config_path=config_path,
+        checkpoint_path=checkpoint_path,
+        backend_name="torch",
+        device="cpu",
+        workload="sequence_eval",
+        timing_scope="model_only",
+        batch_size=2,
+        sequence_length=4,
+        warmup_iterations=1,
+        measured_iterations=1,
+        repetition_id="provisional-missing-metadata",
+        profile_label=cfg["run_tag"],
+        output_path=tmp_path / "provisional.json",
+        seed=17,
+        dry_run=True,
+    )
+    assert record["evidence"]["status"] == "provisional"
+    assert any("lstm_bias_mode" in reason for reason in record["evidence"]["provisional_reasons"])
+
+
+def test_formal_record_rejects_profile_label_not_bound_to_config(tmp_path: Path):
+    _, config_path, checkpoint_path = _write_tiny_fixture(tmp_path)
+
+    with pytest.raises(ValueError, match="profile_label.*run_tag"):
+        benchmark_from_paths(
+            config_path=config_path,
+            checkpoint_path=checkpoint_path,
+            backend_name="torch",
+            device="cpu",
+            workload="sequence_eval",
+            timing_scope="model_only",
+            batch_size=2,
+            sequence_length=4,
+            warmup_iterations=20,
+            measured_iterations=100,
+            repetition_id="false-label",
+            profile_label="not-the-config-profile",
+            output_path=tmp_path / "must-not-exist.json",
+            seed=17,
+            dry_run=False,
+        )
+
+
+def test_complete_formal_record_is_authoritative(tmp_path: Path):
+    cfg, config_path, checkpoint_path = _write_tiny_fixture(tmp_path)
+    record = benchmark_from_paths(
+        config_path=config_path,
+        checkpoint_path=checkpoint_path,
+        backend_name="torch",
+        device="cpu",
+        workload="sequence_eval",
+        timing_scope="model_only",
+        batch_size=2,
+        sequence_length=4,
+        warmup_iterations=20,
+        measured_iterations=100,
+        repetition_id="formal-complete",
+        profile_label=cfg["run_tag"],
+        output_path=tmp_path / "formal.json",
+        seed=17,
+        dry_run=False,
+    )
+
+    assert record["evidence"] == {
+        "status": "authoritative",
+        "provisional_reasons": [],
+    }
+    assert record["model"]["weight_provenance"] == "backend_native_checkpoint"
+
+
+def test_torch_train_step_seed_is_backend_local_and_repeatable(tmp_path: Path):
+    _, config_path, checkpoint_path = _write_tiny_fixture(
+        tmp_path / "fixture",
+        overrides={"dropout": 0.25},
+    )
+    first = _run_tiny_backend(
+        tmp_path / "first",
+        "torch",
+        "cpu",
+        config_path=config_path,
+        checkpoint_path=checkpoint_path,
+        workload="train_step",
+        timing_scope="end_to_end_loop",
+    )
+    second = _run_tiny_backend(
+        tmp_path / "second",
+        "torch",
+        "cpu",
+        config_path=config_path,
+        checkpoint_path=checkpoint_path,
+        workload="train_step",
+        timing_scope="end_to_end_loop",
+    )
+
+    assert first["output"]["last_scalar"] == second["output"]["last_scalar"]
+
+
+def test_mlx_train_step_seed_is_backend_local_and_repeatable(tmp_path: Path):
+    pytest.importorskip("mlx.core")
+    _, config_path, checkpoint_path = _write_tiny_fixture(
+        tmp_path / "fixture",
+        overrides={"dropout": 0.25},
+    )
+    first = _run_tiny_backend(
+        tmp_path / "first",
+        "mlx",
+        "cpu",
+        config_path=config_path,
+        checkpoint_path=checkpoint_path,
+        workload="train_step",
+        timing_scope="end_to_end_loop",
+    )
+    second = _run_tiny_backend(
+        tmp_path / "second",
+        "mlx",
+        "cpu",
+        config_path=config_path,
+        checkpoint_path=checkpoint_path,
+        workload="train_step",
+        timing_scope="end_to_end_loop",
+    )
+
+    assert first["output"]["last_scalar"] == second["output"]["last_scalar"]
+
+
+def test_macos_ci_runs_efficiency_check_target():
+    root = Path(__file__).resolve().parents[1]
+    makefile = (root / "Makefile").read_text(encoding="utf-8")
+    workflow = (root / ".github/workflows/tests.yml").read_text(encoding="utf-8")
+
+    assert "efficiency-check:" in makefile
+    assert "tests/test_efficiency_benchmark.py" in makefile
+    assert "make efficiency-check" in workflow
 
 
 def test_tiny_mapped_torch_and_mlx_integrations_share_logical_schema(tmp_path: Path):

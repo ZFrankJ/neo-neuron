@@ -151,10 +151,12 @@ explicitly provisioned GPU runner.
 `scripts/benchmark_efficiency.py` provides one backend-neutral wall-clock and
 memory record for Torch or MLX without changing model or training semantics.
 It requires an explicit config, checkpoint, backend, device, workload, timing
-scope, profile label, weight provenance, repetition ID, and output path. Formal
-records require at least 20 unreported warm-up iterations and 100 measured
-iterations; `--dry-run` permits smaller contract checks and labels the JSON as
-non-formal.
+scope, profile label, repetition ID, and output path. Checkpoint provenance is
+inferred from the checkpoint and execution backends rather than supplied by the
+caller. Formal records require complete aligned checkpoint metadata, a profile
+label matching config/checkpoint metadata, at least 20 unreported warm-up
+iterations, and 100 measured iterations. Every `--dry-run` record is explicitly
+provisional.
 
 ```bash
 python3 scripts/benchmark_efficiency.py \
@@ -167,8 +169,7 @@ python3 scripts/benchmark_efficiency.py \
   --batch-size 2 \
   --sequence-length 16 \
   --repetition-id smoke-1 \
-  --profile-label exact-profile-label \
-  --weight-provenance mapped_same_checkpoint \
+  --profile-label exact-config-profile-or-run-tag \
   --output /tmp/benchmark-record.json \
   --dry-run --warmup-iterations 1 --measured-iterations 2
 ```
@@ -178,6 +179,12 @@ sample, percentile summaries, synchronization policy, RSS and supported
 backend memory telemetry, config/checkpoint hashes and metadata, exact
 trainable parameters, workload shape, runtime versions, and hardware identity.
 Existing records are never overwritten unless `--replace` is explicit.
+The seed initializes backend-local RNG before both model construction and
+execution; it proves repeatability within a backend, not identical random draws
+across Torch and MLX. Historical MLX Neo checkpoints may retain
+`use_checkpoint: true` as training metadata because that flag had no MLX runtime
+effect. Their benchmark record preserves the historical config and separately
+records the effective `use_checkpoint: false` execution override.
 `train_step` is an isolated optimizer-update microbenchmark: inputs are
 preallocated, optimizer state is fresh and then warmed, the scheduler is
 excluded, recurrent state resets each iteration, and backpropagation covers the

@@ -36,17 +36,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--measured-iterations", type=int, default=100)
     parser.add_argument("--repetition-id", required=True)
     parser.add_argument("--profile-label", required=True)
-    parser.add_argument(
-        "--weight-provenance",
-        choices=("mapped_same_checkpoint", "backend_native_checkpoint"),
-        required=True,
-    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output", required=True)
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Allow fewer than 20 warm-ups and 100 measured iterations; record stays labeled dry-run",
+        help=(
+            "Allow fewer than 20 warm-ups and 100 measured iterations; "
+            "record is explicitly provisional"
+        ),
     )
     parser.add_argument(
         "--replace",
@@ -71,7 +69,6 @@ def main(argv: list[str] | None = None) -> None:
         measured_iterations=args.measured_iterations,
         repetition_id=args.repetition_id,
         profile_label=args.profile_label,
-        weight_provenance=args.weight_provenance,
         output_path=args.output,
         seed=args.seed,
         dry_run=args.dry_run,

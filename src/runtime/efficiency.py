@@ -17,7 +17,13 @@ from typing import Any, Callable, Dict, Iterable, Mapping, Protocol, Sequence
 import numpy as np
 
 from .backend import get_backend
-from .checkpoint_compat import infer_checkpoint_backend, load_checkpoint_payload
+from .checkpoint_compat import (
+    REQUIRED_ALIGNED_LSTM_CFG_KEYS,
+    REQUIRED_ALIGNED_NEO_CFG_KEYS,
+    infer_checkpoint_backend,
+    load_checkpoint_payload,
+    validate_checkpoint_metadata,
+)
 
 
 SCHEMA_VERSION = "neo_efficiency_benchmark_v1"
@@ -33,16 +39,19 @@ WORKLOAD_SEMANTICS = {
     "train_step": {
         "input_policy": "deterministic_preallocated",
         "optimizer_state_policy": "fresh_then_warmed",
+        "rng_policy": "backend_local_seeded_before_model_construction_and_execution",
         "scheduler_included": False,
         "state_policy": "reset_each_iteration",
         "tbptt_policy": "full_sequence",
     },
     "sequence_eval": {
         "input_policy": "deterministic_preallocated",
+        "rng_policy": "backend_local_seeded_before_model_construction_and_execution",
         "state_policy": "reset_each_iteration",
     },
     "streaming_decode": {
         "input_policy": "deterministic_preallocated",
+        "rng_policy": "backend_local_seeded_before_model_construction_and_execution",
         "state_policy": "reset_for_each_sequence",
     },
 }
@@ -228,6 +237,7 @@ def run_benchmark(
 ) -> Dict[str, Any]:
     identity = dict(metadata.get("identity", {}))
     model = dict(metadata.get("model", {}))
+    evidence = dict(metadata.get("evidence", {}))
     vocab_size = int(identity.get("config_snapshot", {}).get("vocab_size", 0))
     tokens, targets = _deterministic_inputs(spec, vocab_size)
     configure = getattr(adapter, "configure", None)
@@ -276,6 +286,7 @@ def run_benchmark(
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "identity": identity,
         "model": model,
+        "evidence": evidence,
         "runtime": {
             "backend": str(adapter.backend),
             "device": str(adapter.device),
@@ -345,6 +356,8 @@ def validate_benchmark_record(record: Mapping[str, Any]) -> None:
             "config_path",
             "config_sha256",
             "config_snapshot",
+            "effective_config_snapshot",
+            "execution_overrides",
             "checkpoint_path",
             "checkpoint_sha256",
             "checkpoint_backend",
@@ -389,6 +402,14 @@ def validate_benchmark_record(record: Mapping[str, Any]) -> None:
         missing = sorted(required - set(value))
         if missing:
             raise ValueError(f"Record {section} metadata is missing fields: {missing}")
+    evidence = record.get("evidence")
+    if not isinstance(evidence, Mapping):
+        raise ValueError("Record is missing evidence metadata")
+    if set(evidence) != {"status", "provisional_reasons"}:
+        raise ValueError("Record evidence metadata has unsupported fields")
+    reasons = evidence.get("provisional_reasons")
+    if not isinstance(reasons, list) or any(not isinstance(value, str) for value in reasons):
+        raise ValueError("provisional_reasons must be a list of strings")
     workload = record.get("workload")
     if not isinstance(workload, Mapping):
         raise ValueError("Record is missing workload metadata")
@@ -403,6 +424,11 @@ def validate_benchmark_record(record: Mapping[str, Any]) -> None:
         seed=int(workload.get("seed", 0)),
         dry_run=bool(workload.get("dry_run", False)),
     )
+    if bool(workload["dry_run"]):
+        if evidence.get("status") != "provisional" or "dry_run" not in reasons:
+            raise ValueError("Dry-run records must be explicitly provisional")
+    elif evidence.get("status") != "authoritative" or reasons:
+        raise ValueError("Formal records must be authoritative and have no provisional reasons")
     samples = record.get("raw_samples_ns")
     if not isinstance(samples, list) or not samples:
         raise ValueError("raw_samples_ns must be a non-empty list")
@@ -428,6 +454,48 @@ def validate_benchmark_record(record: Mapping[str, Any]) -> None:
         raise ValueError("Record has unsupported weight_provenance")
     if model.get("use_checkpoint") is not False:
         raise ValueError("Efficiency benchmark records require use_checkpoint=false")
+    identity = record["identity"]
+    source_cfg = identity["config_snapshot"]
+    effective_cfg = identity["effective_config_snapshot"]
+    overrides = identity["execution_overrides"]
+    if not all(isinstance(value, Mapping) for value in (source_cfg, effective_cfg, overrides)):
+        raise ValueError("Config snapshots and execution_overrides must be mappings")
+    expected_effective, expected_overrides = resolve_benchmark_execution_config(
+        source_cfg,
+        model_name=str(model.get("name", "")),
+        checkpoint_backend=str(identity.get("checkpoint_backend", "")),
+    )
+    if dict(effective_cfg) != expected_effective or dict(overrides) != expected_overrides:
+        raise ValueError("Effective benchmark config does not match the recorded execution override")
+    inferred_provenance = (
+        "backend_native_checkpoint"
+        if identity["checkpoint_backend"] == record["runtime"]["backend"]
+        else "mapped_same_checkpoint"
+    )
+    if model.get("weight_provenance") != inferred_provenance:
+        raise ValueError("weight_provenance does not match checkpoint and runtime backends")
+    checkpoint_metadata = identity["checkpoint_metadata"]
+    if not isinstance(checkpoint_metadata, Mapping):
+        raise ValueError("checkpoint_metadata must be a mapping")
+    checkpoint_cfg = checkpoint_metadata.get("config_snapshot", {})
+    if not isinstance(checkpoint_cfg, Mapping):
+        raise ValueError("checkpoint config_snapshot must be a mapping")
+    required_keys = _required_aligned_metadata_keys(str(model.get("name", "")))
+    missing_aligned = [key for key in required_keys if checkpoint_cfg.get(key) in (None, "")]
+    source_label = _profile_metadata_label(source_cfg, {})
+    checkpoint_label = _profile_metadata_label({}, checkpoint_cfg)
+    if not bool(workload["dry_run"]):
+        if missing_aligned:
+            raise ValueError(
+                f"Formal benchmark checkpoint is missing aligned metadata: {missing_aligned}"
+            )
+        if (
+            source_label is None
+            or checkpoint_label is None
+            or source_label != checkpoint_label
+            or model.get("profile_label") != source_label
+        ):
+            raise ValueError("Formal benchmark profile_label does not match config metadata")
     output = record.get("output")
     if not isinstance(output, Mapping) or output.get("finite") is not True:
         raise ValueError("Benchmark output is non-finite")
@@ -587,13 +655,32 @@ _CHECKPOINT_CONTRACT_KEYS = (
     "block_size",
     "forget_bias_init",
     "recurrent_init",
+    "profile_label",
+    "run_tag",
 )
 
 
-def _validate_checkpoint_config(payload: Mapping[str, Any], cfg: Mapping[str, Any]) -> None:
+def _required_aligned_metadata_keys(model_name: str) -> tuple[str, ...]:
+    if model_name == "neo":
+        return REQUIRED_ALIGNED_NEO_CFG_KEYS
+    if model_name == "lstm":
+        return REQUIRED_ALIGNED_LSTM_CFG_KEYS
+    return ()
+
+
+def _validate_checkpoint_config(
+    payload: Mapping[str, Any],
+    cfg: Mapping[str, Any],
+    model_name: str,
+) -> list[str]:
     checkpoint_cfg = payload.get("cfg")
+    missing_aligned = validate_checkpoint_metadata(
+        dict(payload),
+        expected_cfg=dict(cfg),
+        model_name=model_name,
+    )
     if not isinstance(checkpoint_cfg, Mapping):
-        raise ValueError("Checkpoint is missing config metadata required for benchmarking")
+        return ["config_snapshot", *missing_aligned]
     conflicts = []
     for key in _CHECKPOINT_CONTRACT_KEYS:
         if key not in checkpoint_cfg or key not in cfg:
@@ -608,6 +695,48 @@ def _validate_checkpoint_config(payload: Mapping[str, Any], cfg: Mapping[str, An
             conflicts.append(f"{key}: checkpoint={left!r}, config={right!r}")
     if conflicts:
         raise ValueError("Checkpoint metadata mismatch: " + "; ".join(conflicts))
+    return list(missing_aligned)
+
+
+def _profile_metadata_label(
+    cfg: Mapping[str, Any],
+    checkpoint_cfg: Mapping[str, Any],
+) -> str | None:
+    for key in ("profile_label", "run_tag"):
+        value = cfg.get(key, checkpoint_cfg.get(key))
+        if value not in (None, ""):
+            return str(value)
+    return None
+
+
+def resolve_benchmark_execution_config(
+    cfg: Mapping[str, Any],
+    *,
+    model_name: str,
+    checkpoint_backend: str,
+) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    """Resolve benchmark-only execution settings without rewriting training history."""
+
+    effective = dict(cfg)
+    overrides: Dict[str, Any] = {}
+    if not bool(effective.get("use_checkpoint", False)):
+        effective["use_checkpoint"] = False
+        return effective, overrides
+    declared_backend = str(
+        effective.get("backend", effective.get("reference_backend", ""))
+    ).strip().lower()
+    if model_name == "neo" and checkpoint_backend == "mlx" and declared_backend == "mlx":
+        effective["use_checkpoint"] = False
+        overrides["use_checkpoint"] = {
+            "training_value": True,
+            "benchmark_value": False,
+            "reason": "mlx_neo_training_flag_runtime_inert",
+        }
+        return effective, overrides
+    raise ValueError(
+        "Efficiency benchmark execution requires use_checkpoint=false; only historical "
+        "MLX Neo checkpoints may record the runtime-inert training flag as an override"
+    )
 
 
 def _checkpoint_metadata(payload: Mapping[str, Any]) -> Dict[str, Any]:
@@ -675,7 +804,6 @@ def benchmark_from_paths(
     measured_iterations: int,
     repetition_id: str,
     profile_label: str,
-    weight_provenance: str,
     output_path: str | Path,
     seed: int,
     dry_run: bool = False,
@@ -700,33 +828,65 @@ def benchmark_from_paths(
         raise ValueError("backend must be 'torch' or 'mlx'")
     if not str(device).strip() or str(device).strip().lower() == "auto":
         raise ValueError("Benchmark device must be explicit; 'auto' is not accepted")
-    if weight_provenance not in SUPPORTED_WEIGHT_PROVENANCE:
-        raise ValueError(
-            f"Unsupported weight_provenance '{weight_provenance}'. Expected one of: "
-            f"{sorted(SUPPORTED_WEIGHT_PROVENANCE)}"
-        )
     if not str(profile_label).strip():
         raise ValueError("profile_label must be non-empty")
 
     cfg = _load_yaml(config)
-    if bool(cfg.get("use_checkpoint", False)):
-        raise ValueError("Efficiency benchmark requires use_checkpoint=false")
-    tbptt_len = int(cfg.get("tbptt_len", 0))
+    model_name = _infer_model_name(config, cfg)
+    payload = load_checkpoint_payload(checkpoint, map_location="cpu")
+    checkpoint_backend = infer_checkpoint_backend(payload)
+    missing_aligned = _validate_checkpoint_config(payload, cfg, model_name)
+    effective_cfg, execution_overrides = resolve_benchmark_execution_config(
+        cfg,
+        model_name=model_name,
+        checkpoint_backend=checkpoint_backend,
+    )
+    inferred_provenance = (
+        "backend_native_checkpoint"
+        if checkpoint_backend == backend_name
+        else "mapped_same_checkpoint"
+    )
+    checkpoint_cfg = payload.get("cfg")
+    checkpoint_cfg = checkpoint_cfg if isinstance(checkpoint_cfg, Mapping) else {}
+    expected_profile_label = _profile_metadata_label(cfg, checkpoint_cfg)
+    provisional_reasons = ["dry_run"] if dry_run else []
+    if missing_aligned:
+        reason = "checkpoint_missing_aligned_metadata:" + ",".join(sorted(missing_aligned))
+        if not dry_run:
+            raise ValueError(
+                f"Formal benchmark checkpoint is missing aligned metadata: {missing_aligned}"
+            )
+        provisional_reasons.append(reason)
+    if expected_profile_label is None:
+        if not dry_run:
+            raise ValueError("Formal benchmark requires profile_label or run_tag in config metadata")
+        provisional_reasons.append("profile_label_missing_from_metadata")
+    elif str(profile_label) != expected_profile_label:
+        if not dry_run:
+            raise ValueError(
+                "Formal benchmark profile_label must match config profile_label or run_tag: "
+                f"expected={expected_profile_label!r}, got={profile_label!r}"
+            )
+        provisional_reasons.append(
+            f"profile_label_mismatch:expected={expected_profile_label!r},got={profile_label!r}"
+        )
+    spec = BenchmarkSpec(
+        workload=workload,
+        timing_scope=timing_scope,
+        batch_size=int(batch_size),
+        sequence_length=int(sequence_length),
+        warmup_iterations=int(warmup_iterations),
+        measured_iterations=int(measured_iterations),
+        repetition_id=str(repetition_id),
+        seed=int(seed),
+        dry_run=bool(dry_run),
+    )
+    tbptt_len = int(effective_cfg.get("tbptt_len", 0))
     if workload == "train_step" and 0 < tbptt_len < int(sequence_length):
         raise ValueError(
             "The isolated train_step benchmark requires full-sequence backpropagation; "
             f"config tbptt_len={tbptt_len} is shorter than sequence_length={sequence_length}"
         )
-    model_name = _infer_model_name(config, cfg)
-    payload = load_checkpoint_payload(checkpoint, map_location="cpu")
-    _validate_checkpoint_config(payload, cfg)
-    checkpoint_backend = infer_checkpoint_backend(payload)
-    if weight_provenance == "backend_native_checkpoint" and checkpoint_backend != backend_name:
-        raise ValueError(
-            "backend_native_checkpoint provenance requires checkpoint backend to match "
-            f"benchmark backend: checkpoint={checkpoint_backend}, benchmark={backend_name}"
-        )
-
     backend = get_backend(backend_name)
     requested_device = str(device).strip().lower()
     if backend_name == "torch":
@@ -747,7 +907,8 @@ def benchmark_from_paths(
         )
     def execute_on_requested_device() -> Dict[str, Any]:
         runtime_device = backend.get_runtime_device(device)
-        model = backend.build_model(cfg, model_name)
+        backend.seed_all(int(seed))
+        model = backend.build_model(effective_cfg, model_name)
         if backend_name == "torch":
             model = model.to(runtime_device)
         backend.load_checkpoint_entry(
@@ -756,7 +917,8 @@ def benchmark_from_paths(
             device=runtime_device,
             cfg=cfg,
         )
-        adapter = _build_adapter(backend_name, model, cfg, runtime_device)
+        backend.seed_all(int(seed))
+        adapter = _build_adapter(backend_name, model, effective_cfg, runtime_device)
         adapter.requested_device = str(device).strip().lower()
         parameter_entries = adapter.parameter_entries()
         parameter_breakdown = _logical_parameter_breakdown(parameter_entries, model_name)
@@ -774,7 +936,9 @@ def benchmark_from_paths(
                 "git_commit": _git_commit(root),
                 "config_path": str(config),
                 "config_sha256": _sha256_file(config),
-                "config_snapshot": cfg,
+                "config_snapshot": dict(cfg),
+                "effective_config_snapshot": effective_cfg,
+                "execution_overrides": execution_overrides,
                 "checkpoint_path": str(checkpoint),
                 "checkpoint_sha256": _sha256_file(checkpoint),
                 "checkpoint_backend": checkpoint_backend,
@@ -783,29 +947,25 @@ def benchmark_from_paths(
             "model": {
                 "name": model_name,
                 "profile_label": str(profile_label),
-                "weight_provenance": weight_provenance,
+                "weight_provenance": inferred_provenance,
                 "trainable_parameters": trainable_parameters,
                 "parameter_breakdown": parameter_breakdown,
-                "activation_id": cfg.get("activation_id"),
-                "recurrent_norm": cfg.get("recurrent_norm", cfg.get("output_norm")),
-                "recurrent_norm_place": cfg.get(
-                    "recurrent_norm_place",
-                    cfg.get("norm_place"),
+                "activation_id": effective_cfg.get("activation_id"),
+                "recurrent_norm": effective_cfg.get(
+                    "recurrent_norm",
+                    effective_cfg.get("output_norm"),
                 ),
-                "use_checkpoint": bool(cfg.get("use_checkpoint", False)),
+                "recurrent_norm_place": effective_cfg.get(
+                    "recurrent_norm_place",
+                    effective_cfg.get("norm_place"),
+                ),
+                "use_checkpoint": bool(effective_cfg.get("use_checkpoint", False)),
+            },
+            "evidence": {
+                "status": "provisional" if dry_run else "authoritative",
+                "provisional_reasons": provisional_reasons,
             },
         }
-        spec = BenchmarkSpec(
-            workload=workload,
-            timing_scope=timing_scope,
-            batch_size=int(batch_size),
-            sequence_length=int(sequence_length),
-            warmup_iterations=int(warmup_iterations),
-            measured_iterations=int(measured_iterations),
-            repetition_id=str(repetition_id),
-            seed=int(seed),
-            dry_run=bool(dry_run),
-        )
         record = run_benchmark(adapter, spec, metadata)
         write_benchmark_record(output, record, replace=replace)
         return record
