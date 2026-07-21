@@ -14,7 +14,7 @@ open a new tracking issue only when explicitly requested.
 completed packet PR 1: https://github.com/ZFrankJ/neo-neuron/pull/29
 completed packet PR 2: https://github.com/ZFrankJ/neo-neuron/pull/30
 completed packet PR 3: https://github.com/ZFrankJ/neo-neuron/pull/31
-active packet PR 4: manual compute accounting on codex/feat/manual-compute-accounting
+active packet PR 4: https://github.com/ZFrankJ/neo-neuron/pull/32
 active experiment: 50M-total / 40M-recurrent-core matched-no-layer-dropout LSTM anchor
 blocked follow-up: formal efficiency execution after LSTM scaling and checkpoint selection
 ```
