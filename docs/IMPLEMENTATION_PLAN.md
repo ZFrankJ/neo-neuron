@@ -13,9 +13,10 @@ open a new tracking issue only when explicitly requested.
 ```text
 completed packet PR 1: https://github.com/ZFrankJ/neo-neuron/pull/29
 completed packet PR 2: https://github.com/ZFrankJ/neo-neuron/pull/30
-active packet PR 3: https://github.com/ZFrankJ/neo-neuron/pull/31
+completed packet PR 3: https://github.com/ZFrankJ/neo-neuron/pull/31
+active packet PR 4: https://github.com/ZFrankJ/neo-neuron/pull/32
 active experiment: 50M-total / 40M-recurrent-core matched-no-layer-dropout LSTM anchor
-blocked follow-up: formal efficiency execution and manual compute accounting after LSTM scaling
+blocked follow-up: formal efficiency execution after LSTM scaling and checkpoint selection
 ```
 
 MLX is the frozen scientific reference backend. Existing clean MLX result rows outside this repo remain authoritative.
@@ -236,6 +237,10 @@ following are true:
 - PR #30: https://github.com/ZFrankJ/neo-neuron/pull/30
   - Added test-covered 60M-total / 50M-recurrent-core matched and standard-init
     boundary diagnostic profiles without changing historical WT103 paths.
+- PR #31: https://github.com/ZFrankJ/neo-neuron/pull/31
+  - Added the unified Torch/MLX wall-clock and memory harness, immutable
+    benchmark records, explicit workload semantics, and tiny dry-run contract
+    verification without starting formal benchmark execution.
 
 ## Active Execution Queue
 
@@ -264,9 +269,9 @@ Execute exactly one packet at a time in this order.
   retrained. Historical LSTM checkpoints remain historical-profile evidence and
   must not be mixed into a corrected-profile scaling fit.
 
-### Unified Torch/MLX Wall-Clock And Memory Harness - Active Code Packet
+### Unified Torch/MLX Wall-Clock And Memory Harness - Completed Code Packet
 
-Development was explicitly approved on 2026-07-21 on a non-main machine while
+Completed in PR #31 after development was explicitly approved on 2026-07-21 on a non-main machine while
 the LSTM scaling run continues. Tiny deterministic dry runs are permitted for
 contract verification. Formal benchmark execution and paper-facing records
 still depend on completion of the scaling sequence and a frozen list of Neo and
@@ -369,7 +374,7 @@ Test-first and verification contract:
   `make check`, and `git diff --check`. The PR itself must not run WT103 or
   produce paper-facing benchmark records.
 
-### Manual Compute Accounting - Blocked Code Packet
+### Manual Compute Accounting - Active Code Packet
 
 Depends on the unified timing harness contract. Keep arithmetic accounting
 independent from measured wall-clock performance so hardware utilization is not

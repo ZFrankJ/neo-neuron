@@ -210,3 +210,30 @@ Set `eval_regime: streaming` in a config or override it for a standalone run
 with `scripts/eval.py --eval-regime streaming`. The CLI prints the selected
 regime before perplexity. Future result tables must state the regime; do not
 reinterpret historical rows that did not opt into streaming evaluation.
+
+## Manual compute accounting
+
+Manual compute records are derived from versioned efficiency benchmark records
+with `scripts/account_compute.py`; they do not modify the benchmark artifact.
+The audit supports Neo and LSTM only, walks the selected backend parameter tree,
+and applies one shared logical formula set. An unknown trainable parameter,
+missing expected parameter, or incompatible shape invalidates the record.
+
+Forward dense work is exact under the emitted coverage manifest and uses
+`1 MAC = 2 FLOPs`. Embedding lookup is recorded as data movement. Non-matmul
+categories count tensor elements evaluated by sigmoid, tanh, another declared
+activation, normalization, softmax, loss, dropout, bias addition, or other
+elementwise formulas; these are not assigned arbitrary matmul-equivalent
+costs. Backward dense MACs and optimizer parameter work remain labeled
+estimates until their primitive derivative and update operations are separately
+enumerated and tested.
+
+Timing and arithmetic may be joined only in the derived report when the
+benchmark record ID, config hash, checkpoint hash, and workload ID all match.
+The workload ID is recomputed from the logical operation payload rather than
+trusted as a detached label, and the derived report retains the source
+benchmark's dry-run flag, evidence status, and provisional reasons.
+Arithmetic describes the mathematical workload; latency, memory, fusion, and
+utilization remain backend/device measurements. THOP output is not an oracle.
+Formal records and paper-facing derived reports remain blocked until corrected
+LSTM scaling and checkpoint selection are complete.

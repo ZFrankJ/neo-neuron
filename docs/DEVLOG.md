@@ -2,6 +2,53 @@
 
 Durable technical memory for Neo. Keep active queues in `docs/IMPLEMENTATION_PLAN.md`; keep broad priorities in `docs/ROADMAP.md`.
 
+## 2026-07-21 - Deterministic LSTM Forward Parity Initialization
+
+- Decision:
+  - Seed Torch and optional MLX model initialization before every LSTM forward-parity test, matching the established deterministic training-parity harness.
+- Why:
+  - Unseeded MLX reference weights could occasionally amplify normal backend rounding beyond the strict forward tolerance, making the macOS parity gate depend on random initialization.
+- Scope:
+  - `tests/test_lstm_forward_parity.py`
+- Impact:
+  - LSTM forward and checkpoint parity cases now replay the same model initialization on every run.
+  - Runtime semantics and parity tolerances are unchanged.
+
+## 2026-07-21 - Manual Compute Accounting Contract
+
+- Decision:
+  - Added one shared shape-derived operation-accounting layer for Neo and LSTM;
+    backend handling is limited to exposing and normalizing parameter trees.
+  - Counted every covered dense operation as exact forward MACs and FLOPs under
+    `1 MAC = 2 FLOPs`, with embedding lookup retained as data movement.
+  - Kept sigmoid, tanh, other activation, normalization, softmax, loss,
+    dropout, bias, and elementwise counts in explicit element categories rather
+    than inventing matmul-equivalent costs.
+  - Labeled backward dense work and AdamW parameter work as estimates, emitted a
+    component/formula coverage manifest, and failed closed on unknown trainable
+    parameters, missing coverage, or incompatible parameter shapes.
+  - Required Torch and MLX to produce the same logical operation section and
+    allowed timing/compute joins only through a separate derived report keyed by
+    immutable benchmark, config, checkpoint, and workload identifiers.
+  - Bound the stored workload identifier back to the logical workload payload
+    during validation, and carried benchmark dry-run status plus provisional
+    reasons into every derived timing/compute report.
+  - Manifested LSTM inter-layer dropout separately from output dropout so every
+    counted training dropout element maps back to an executed formula entry.
+- Why:
+  - Backend profilers and THOP describe framework dispatch or partial operator
+    support, not one portable mathematical workload.
+  - Algorithmic operation counts must remain distinct from backend/device
+    timing, fusion, memory behavior, and hardware utilization.
+- Scope:
+  - manual compute schema and CLI, parameter coverage audit, derived report,
+    deterministic tests, focused Make target, and public workflow documentation
+- Impact:
+  - Tiny accounting contract checks are safe on the development machine and do
+    not execute WT103, load production checkpoints, or change runtime semantics.
+  - Formal efficiency execution remains blocked until scaling and comparison
+    checkpoint selection are complete.
+
 ## 2026-07-21 - Unified Efficiency Benchmark Record Contract
 
 - Decision:
